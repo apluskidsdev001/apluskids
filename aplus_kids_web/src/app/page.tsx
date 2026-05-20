@@ -1,8 +1,13 @@
+import KidsZonePage from "./kids-zone/page";
+
 export default function HomePage() {
   return (
-    <main>
+    <><main>
       <h1>Home</h1>
       <h2>pakaua</h2>
     </main>
+    
+    <KidsZonePage/>
+    </>
   );
 }
