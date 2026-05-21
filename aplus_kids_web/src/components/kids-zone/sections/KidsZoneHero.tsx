@@ -4,19 +4,19 @@ export default function KidsZoneHero() {
       <div className="mx-auto mt-12 grid max-w-[1120px] items-center gap-10 md:mt-14 md:grid-cols-[0.95fr_1.05fr]">
         <div>
           <h1 className="font-bold leading-[1.08] text-black">
-            <span className="block text-[70px] md:text-[46px] lg:text-[50px]">
+            <span className="block text-[45px] md:text-[55px] lg:text-[70px]">
               Welcome to
             </span>
 
-            <span className="mt-4 block whitespace-nowrap text-[72px] leading-none md:text-[88px] lg:text-[96px]">
+            <span className="mt-4 block whitespace-nowrap text-[66px] leading-none md:text-[88px] lg:text-[110px]">
               <span className="text-[#13A8DF]">Kids</span>{" "}
               <span className="text-[#F04B23]">Zone</span>
             </span>
           </h1>
 
-          <p className="mt-6 max-w-[520px] text-[23px] font-medium leading-[1.45] text-black md:text-[17px]">
-            A safe and happy place for kids to celebrate, compete, explore and
-            create amazing memories
+          <p className="mt-6 max-w-[420px] text-[23px] font-medium leading-[1.35] text-black md:text-[17px]">
+            A safe and happy place for kids to celebrate, compete, 
+            explore and create amazing memories
           </p>
         </div>
        
