@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import TaskBar from "@/components/taskBar/TaskBar";
 import "./globals.css";
 
 const fredoka = localFont({
@@ -35,6 +36,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <body className={`${fredoka.className} min-h-full flex flex-col`}>
+        <TaskBar />
         {children}
       </body>
     </html>
