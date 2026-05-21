@@ -9,7 +9,7 @@ const tabs = [
   {
     label: "Home",
     href: "/",
-    icon: "/icons/taskbar/home.png",
+    icon: "/icons/taskbar/home.webp",
     slotSize: "w-[144px]",
   },
   {
@@ -35,6 +35,34 @@ const tabs = [
     href: "/info",
     icon: "/icons/taskbar/info.png",
     slotSize: "w-[124px]",
+  },
+];
+
+const mobileTabs = [
+  {
+    label: "Home",
+    href: "/",
+    icon: "/icons/taskbar/home.webp",
+  },
+  {
+    label: "Watch",
+    href: "/watch",
+    icon: "/icons/taskbar/watch.png",
+  },
+  {
+    label: "Kids Zone",
+    href: "/kids-zone",
+    icon: "/icons/taskbar/kidsZone.png",
+  },
+  {
+    label: "Market",
+    href: "/market",
+    icon: "/icons/taskbar/market.png",
+  },
+  {
+    label: "More",
+    href: "/info",
+    icon: "/icons/taskbar/info.png",
   },
 ];
 
@@ -74,7 +102,7 @@ function Logo() {
       width={148}
       height={74}
       priority
-      className="h-[74px] w-[148px] object-contain"
+      className="h-[128px] w-[296px] object-contain"
     />
   );
 }
@@ -106,8 +134,9 @@ export default function TaskBar() {
   }, []);
 
   return (
+    <>
     <header
-      className={`fixed left-0 right-0 top-0 z-50 bg-transparent px-4 py-4 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] md:px-8 ${
+      className={`fixed left-0 right-0 top-0 z-50 hidden bg-transparent px-4 py-4 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] md:block md:px-8 ${
         hidden ? "-translate-y-full" : "translate-y-0"
       }`}
     >
@@ -203,5 +232,42 @@ export default function TaskBar() {
         </nav>
       </div>
     </header>
+
+    <header className="fixed left-0 right-0 top-0 z-50 bg-white/78 px-5 py-4 backdrop-blur-xl md:hidden">
+      <Link href="/" aria-label="A Plus Kids home" className="inline-flex">
+        <Image
+          src="/icons/taskbar/logo.png"
+          alt="A Plus Kids"
+          width={92}
+          height={46}
+          priority
+          className="h-[46px] w-[92px] object-contain"
+        />
+      </Link>
+    </header>
+
+    <nav className="fixed inset-x-3 bottom-3 z-50 grid h-[74px] grid-cols-5 rounded-[24px] border border-white/80 bg-white/86 px-2 shadow-[0_12px_34px_rgba(7,27,99,0.16)] backdrop-blur-xl md:hidden">
+      {mobileTabs.map((tab) => {
+        const active = isActivePath(pathname, tab.href);
+
+        return (
+          <Link
+            key={tab.href}
+            href={tab.href}
+            className={`flex min-w-0 flex-col items-center justify-center gap-1 rounded-[18px] text-[11px] font-medium ${
+              active ? "bg-[#0877ef] text-white" : "text-[#081944]"
+            }`}
+          >
+            <TaskIcon
+              src={tab.icon}
+              alt=""
+              className={`h-6 w-6 ${active ? "" : "opacity-80"}`}
+            />
+            <span className="max-w-full truncate">{tab.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+    </>
   );
 }

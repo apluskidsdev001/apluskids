@@ -35,7 +35,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="h-full antialiased">
-      <body className={`${fredoka.className} min-h-full flex flex-col`}>
+      <body className={`${fredoka.className} min-h-full flex flex-col pb-24 md:pb-0`}>
         <TaskBar />
         {children}
       </body>

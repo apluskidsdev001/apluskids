@@ -1,0 +1,90 @@
+export default function HeroSection() {
+  return (
+    <section className="relative mx-3 mt-[88px] h-[345px] min-h-0 w-auto overflow-hidden rounded-[24px] bg-white pt-0 shadow-[0_16px_38px_rgba(7,27,99,0.12)] md:mx-0 md:mt-0 md:h-screen md:min-h-[744px] md:w-full md:rounded-none md:pt-[124px] md:shadow-none">
+      <video
+        autoPlay
+        muted
+        loop
+        playsInline
+        className="absolute inset-0 h-full w-full object-cover object-[62%_50%] md:object-[66%_50%]"
+      >
+        <source src="/videos/home/hero_video.mp4" type="video/mp4" />
+      </video>
+
+      <div className="absolute inset-0 bg-white/10" />
+      <div className="absolute inset-y-0 left-0 w-full bg-[linear-gradient(90deg,#ffffff_0%,rgba(255,255,255,0.92)_30%,rgba(255,255,255,0.36)_58%,rgba(255,255,255,0)_82%)] md:bg-[linear-gradient(90deg,#ffffff_0%,rgba(255,255,255,0.96)_17%,rgba(255,255,255,0.66)_36%,rgba(255,255,255,0.13)_58%,rgba(255,255,255,0)_76%)]" />
+      <div className="absolute inset-y-0 left-0 w-[64%] bg-[radial-gradient(circle_at_15%_52%,rgba(255,255,255,0.98)_0%,rgba(255,255,255,0.82)_38%,rgba(255,255,255,0)_72%)] md:w-[50%]" />
+
+      <svg
+        aria-hidden="true"
+        className="absolute left-0 top-0 z-10 hidden h-[16%] w-full md:block"
+        preserveAspectRatio="none"
+        viewBox="0 0 1440 220"
+      >
+        <path
+          fill="#ffffff"
+          d="M0 0H1440V47C1270 77 1090 88 881 70C646 51 468 18 242 31C143 36 64 31 0 18V0Z"
+        />
+      </svg>
+
+      <svg
+        aria-hidden="true"
+        className="absolute -bottom-px left-0 z-10 hidden h-[18%] w-full md:block"
+        preserveAspectRatio="none"
+        viewBox="0 0 1440 260"
+      >
+        <path
+          fill="#ffffff"
+          d="M0 78C157 83 312 112 459 138C656 173 875 184 1091 143C1215 119 1328 77 1440 26V260H0V78Z"
+        />
+      </svg>
+
+      <div className="relative z-20 flex h-full items-center px-5 py-6 sm:px-10 md:px-16 md:pb-20 md:pt-4 lg:px-[5vw]">
+        <div className="max-w-[210px] md:max-w-[640px]">
+          <h1 className="text-[29px] font-bold leading-[1.08] tracking-normal text-[#071B63] sm:text-[42px] md:text-[72px] lg:text-[92px]">
+            Where Little
+            <br />
+            Minds <span className="text-[#ff3b0a]">Learn,</span>
+            <br />
+            <span className="text-[#ffc20a]">Laugh</span>{" "}
+            <span className="text-[#111827]">&</span>{" "}
+            <span className="text-[#0077ff]">Grow!</span>
+          </h1>
+
+          <p className="mt-5 max-w-[180px] text-[12px] font-medium leading-[1.45] text-[#071B63] sm:text-[16px] md:mt-8 md:max-w-[560px] md:text-[24px]">
+            Sri Lanka&apos;s First 24/7 Kids TV Channel with safe,
+            <br className="hidden sm:block" /> fun, and educational
+            entertainment for every child.
+          </p>
+
+          <div className="mt-5 flex flex-wrap gap-4 md:mt-9">
+            <a
+              href="/watch"
+              className="flex h-11 items-center gap-2 rounded-[24px] bg-[linear-gradient(135deg,#147dff,#35bdff)] px-4 text-[13px] font-medium text-white shadow-[0_14px_30px_rgba(20,125,255,0.24)] md:h-16 md:gap-4 md:rounded-[32px] md:px-8 md:text-[20px]"
+            >
+              <span className="grid h-7 w-7 place-items-center rounded-full bg-white/20 md:h-9 md:w-9">
+                <span className="ml-1 h-0 w-0 border-y-[6px] border-l-[9px] border-y-transparent border-l-white md:border-y-[7px] md:border-l-[11px]" />
+              </span>
+              <span className="md:hidden">Explore Shows</span>
+              <span className="hidden md:inline">Watch Now</span>
+            </a>
+            <a
+              href="/watch"
+              className="hidden h-16 items-center gap-4 rounded-[32px] bg-white/90 px-8 text-[20px] font-medium text-[#081944] shadow-[0_14px_30px_rgba(8,25,68,0.1)] md:flex"
+            >
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-[#eaf5ff] text-[#168dff]">
+                <span className="grid grid-cols-2 gap-1">
+                  <span className="h-2 w-2 rounded-sm bg-current" />
+                  <span className="h-2 w-2 rounded-sm bg-current" />
+                  <span className="h-2 w-2 rounded-sm bg-current" />
+                  <span className="h-2 w-2 rounded-sm bg-current" />
+                </span>
+              </span>
+              Explore Shows
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
