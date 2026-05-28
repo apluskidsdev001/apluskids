@@ -1,11 +1,16 @@
-import HeroSection from "@/components/home/HeroSection";
-import KidsZonePage from "./kids-zone/page";
-import AdvertisementBanner from "@/components/Advertisements/AdvertisementBox";
+import Home from "@/components/home/Home";
 
 export default function HomePage() {
   return (
     <>
-    <HeroSection/>
+      <Home/>
+    </>
+  );
+}
+export function KidsZonePageWrapper() {
+  return (
+    <>
+    <KidsZonePage/>
     <AdvertisementBanner
       type="image"  //image or video
       src="/videos/home/hero_video.mp4"   // path here
@@ -14,3 +19,4 @@ export default function HomePage() {
     </>
   );
 }
+
