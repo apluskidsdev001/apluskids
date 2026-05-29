@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { sitePath } from "@/utils/sitePath";
 
 const heroHighlight = ["Birthdays", "Kids Champ", "Events"];
 const welcomeText = "Welcome to";
@@ -81,7 +82,7 @@ export default function KidsZoneHero() {
                 className="block w-full scale-[1.08] border-0 bg-transparent object-contain outline-none"
               >
                 <source
-                  src="/videos/kidszone-hero/kidszone_hero.mp4"
+                  src={sitePath("/videos/kidszone-hero/kidszone_hero.mp4")}
                   type="video/mp4"
                 />
               </video>

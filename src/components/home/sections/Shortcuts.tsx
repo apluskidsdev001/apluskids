@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { CSSProperties } from "react";
+import { sitePath } from "@/utils/sitePath";
 
 const shortcuts = [
   {
@@ -49,7 +50,7 @@ export default function Shortcuts() {
                 className="group flex h-[112px] min-w-0 flex-col items-center justify-center rounded-[14px] border border-white/80 bg-[linear-gradient(145deg,rgba(255,255,255,0.96),rgba(241,247,255,0.88))] px-2 shadow-[0_12px_28px_rgba(7,27,99,0.08),inset_0_1px_0_rgba(255,255,255,0.95)] transition-transform duration-300 hover:-translate-y-1 hover:shadow-[0_22px_48px_rgba(7,27,99,0.12),inset_0_1px_0_rgba(255,255,255,0.95)] md:h-[150px] md:rounded-[24px] md:px-4 lg:h-[250px] lg:w-[200px] lg:rounded-[30px]"
               >
                 <Image
-                  src={shortcut.icon}
+                  src={sitePath(shortcut.icon)}
                   alt=""
                   width={78}
                   height={78}
@@ -106,7 +107,7 @@ export default function Shortcuts() {
               playsInline
               className="h-full w-full object-cover"
             >
-              <source src="/videos/home/hero_video.mp4" type="video/mp4" />
+              <source src={sitePath("/videos/home/hero_video.mp4")} type="video/mp4" />
             </video>
             <span className="absolute inset-0 bg-white/10" />
             <span className="absolute inset-0 grid place-items-center">

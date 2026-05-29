@@ -1,10 +1,11 @@
 import Image from "next/image";
+import { sitePath } from "@/utils/sitePath";
 
 function ChampIllustration() {
   return (
     <div className="relative mx-auto w-full max-w-[520px]">
       <Image
-        src="/images/KidsZone/kids_champ.png"
+        src={sitePath("/images/KidsZone/kids_champ.png")}
         alt="Kids Champ creativity illustration"
         width={720}
         height={560}

@@ -1,3 +1,5 @@
+import { sitePath } from "@/utils/sitePath";
+
 type AdvertisementBannerProps = {
   type?: "image" | "video";
   src?: string;
@@ -48,7 +50,7 @@ export default function AdvertisementBanner({
             className="h-full w-full object-cover"
           >
             <source
-              src={src}
+              src={sitePath(src)}
               type="video/mp4"
             />
           </video>
@@ -56,7 +58,7 @@ export default function AdvertisementBanner({
         ) : (
 
           <img
-            src={src}
+            src={sitePath(src)}
             alt={alt}
             className="h-full w-full object-cover"
           />

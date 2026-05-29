@@ -1,3 +1,5 @@
+import { sitePath } from "@/utils/sitePath";
+
 function BirthdayIllustration() {
   return (
     <div className="relative mx-auto w-full max-w-[520px] overflow-hidden rounded-[8px] bg-transparent">
@@ -8,7 +10,7 @@ function BirthdayIllustration() {
         playsInline
         className="block h-auto w-full bg-transparent object-contain"
       >
-        <source src="/videos/kidszone-hero/cake.mp4" type="video/mp4" />
+        <source src={sitePath("/videos/kidszone-hero/cake.mp4")} type="video/mp4" />
       </video>
       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-10 bg-[linear-gradient(180deg,rgba(245,251,255,0)_0%,#F5FBFF_100%)]" />
     </div>

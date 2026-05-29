@@ -1,3 +1,5 @@
+import { sitePath } from "@/utils/sitePath";
+
 export default function HeroSection() {
   return (
     <section className="relative mx-3 mt-[88px] h-[345px] min-h-0 w-auto overflow-hidden rounded-[24px] bg-white pt-0 shadow-[0_16px_38px_rgba(7,27,99,0.12)] tablet:h-[520px] tablet:rounded-[30px] desktop:mx-0 desktop:mt-0 desktop:h-screen desktop:min-h-[820px] desktop:w-full desktop:rounded-none desktop:pt-[124px] desktop:shadow-none">
@@ -8,7 +10,7 @@ export default function HeroSection() {
         playsInline
         className="absolute inset-0 h-full w-full object-cover object-[62%_50%] tablet:object-[68%_50%] desktop:object-[66%_50%]"
       >
-        <source src="/videos/home/hero_video.mp4" type="video/mp4" />
+        <source src={sitePath("/videos/home/hero_video.mp4")} type="video/mp4" />
       </video>
 
       <div className="absolute inset-0 bg-white/10" />
@@ -59,7 +61,7 @@ export default function HeroSection() {
 
           <div className="mt-5 flex flex-wrap gap-4 desktop:mt-9">
             <a
-              href="/watch"
+              href={sitePath("/watch")}
               className="flex h-11 items-center gap-2 rounded-[24px] bg-[linear-gradient(135deg,#147dff,#35bdff)] px-4 text-[13px] font-medium text-white shadow-[0_14px_30px_rgba(20,125,255,0.24)] desktop:h-16 desktop:gap-4 desktop:rounded-[32px] desktop:px-8 desktop:text-[20px]"
             >
               <span className="grid h-7 w-7 place-items-center rounded-full bg-white/20 desktop:h-9 desktop:w-9">
@@ -69,7 +71,7 @@ export default function HeroSection() {
               <span className="hidden desktop:inline">Watch Now</span>
             </a>
             <a
-              href="/watch"
+              href={sitePath("/watch")}
               className="hidden h-16 items-center gap-4 rounded-[32px] bg-white/90 px-8 text-[20px] font-medium text-[#081944] shadow-[0_14px_30px_rgba(8,25,68,0.1)] desktop:flex"
             >
               <span className="grid h-9 w-9 place-items-center rounded-full bg-[#eaf5ff] text-[#168dff]">

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { sitePath } from "@/utils/sitePath";
 import { getYouTubeEmbedUrl } from "./youtube";
 
 type TrailerPopupProps = {
@@ -22,7 +23,7 @@ export default function TrailerPopup({
         <div className="overflow-hidden rounded-[28px] bg-[#24a9f3] shadow-[0_18px_48px_rgba(0,0,0,0.22)]">
           <div className="flex h-[76px] items-center justify-between gap-4 rounded-t-[28px] bg-white px-9">
             <Image
-              src="/icons/taskbar/logo.png"
+              src={sitePath("/icons/taskbar/logo.png")}
               alt="A Plus Kids"
               width={116}
               height={58}

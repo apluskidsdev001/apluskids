@@ -8,11 +8,7 @@ export default function KidsZonePage() {
   return (
     <main className="bg-white text-black">
       <KidsZoneHero />
-      <AdvertisementBox 
-        type="image"
-        src="/images/kidszone/advertisement.jpg"
-        href="https://google.com"
-      />
+      <AdvertisementBox />
 
       <BirthdaySection />
       <KidsChampSection />

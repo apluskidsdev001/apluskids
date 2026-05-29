@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { sitePath } from "@/utils/sitePath";
 
 const tabs = [
   {
@@ -130,7 +131,7 @@ function TaskIcon({
 }) {
   return (
     <Image
-      src={src}
+      src={sitePath(src)}
       alt={alt}
       width={48}
       height={48}
@@ -142,7 +143,7 @@ function TaskIcon({
 function Logo() {
   return (
     <Image
-      src="/icons/taskbar/logo.png"
+      src={sitePath("/icons/taskbar/logo.png")}
       alt="A Plus Kids"
       width={148}
       height={74}
@@ -400,7 +401,7 @@ export default function TaskBar() {
     <header className="fixed left-0 right-0 top-0 z-50 bg-white/78 px-5 py-4 backdrop-blur-xl laptop:hidden">
       <Link href="/" aria-label="A Plus Kids home" className="inline-flex">
         <Image
-          src="/icons/taskbar/logo.png"
+          src={sitePath("/icons/taskbar/logo.png")}
           alt="A Plus Kids"
           width={92}
           height={46}

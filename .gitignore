@@ -20,6 +20,33 @@
 # production
 /build
 
+# static export artifacts copied to the repository root
+/.nojekyll
+/404/
+/404.html
+/_next/
+/_not-found/
+/audios/
+/favicon.ico
+/file.svg
+/fonts/
+/globe.svg
+/icons/
+/images/
+/index.html
+/index.txt
+/info/
+/kids-zone/
+/market/
+/next.svg
+/profile/
+/search/
+/vercel.svg
+/videos/
+/watch/
+/window.svg
+/__next.*
+
 # misc
 .DS_Store
 *.pem
