@@ -15,7 +15,7 @@ export default function AdvertisementBanner({
   // Placeholder
   if (!src) {
     return (
-      <section data-scroll-reveal="pop" className="-mt-px w-full bg-white px-3 py-4 md:px-6 md:py-8">
+      <section  className="-mt-px w-full bg-white px-3 py-4 md:px-6 md:py-8">
         <div className="mx-auto flex h-[132px] max-w-7xl items-center justify-center rounded-[22px] bg-[#D9D9D9] md:h-[120px] md:rounded-3xl">
 
           <p className="text-[30px] font-bold text-[#6B6B6B] md:text-3xl">
@@ -28,7 +28,7 @@ export default function AdvertisementBanner({
   }
 
   return (
-    <section data-scroll-reveal="pop" className="-mt-px w-full bg-white px-3 py-4 md:px-6 md:py-8">
+    <section  className="-mt-px w-full bg-white px-3 py-4 md:px-6 md:py-8">
 
       {/* Entire Banner Clickable */}
       <a

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import Footer from "@/components/footer/Footer";
 import TaskBar from "@/components/taskBar/TaskBar";
 import "./globals.css";
 
@@ -38,6 +39,7 @@ export default function RootLayout({
       <body className={`${fredoka.className} min-h-full flex flex-col pb-24 md:pb-0`}>
         <TaskBar />
         {children}
+        <Footer />
       </body>
     </html>
   );
