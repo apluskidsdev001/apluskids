@@ -1,0 +1,59 @@
+⚠ Slow filesystem detected. The benchmark took 452ms. If D:\Aplus\apluskids\.next/dev is a network drive, consider moving it to a local folder.
+See more: https://nextjs.org/docs/app/guides/local-development
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⨯ ReferenceError: leadingEmptyDays is not defined
+    at Birthday (src\components\birthday\Birthday.tsx:645:41)
+  643 |                     </div>
+  644 |                   ))}
+> 645 |                   {Array.from({ length: leadingEmptyDays }).map((_, index) => (
+      |                                         ^
+  646 |                     <div key={`empty-${index}`} className="h-12 border-t border-[#d2e8f7]...
+  647 |                   ))}
+  648 |                   {monthDays.map((day) => ( {
+  digest: '1185511731'
+}
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⨯ ReferenceError: leadingEmptyDays is not defined
+    at Birthday (src\components\birthday\Birthday.tsx:646:41)
+  644 |                     </div>
+  645 |                   ))}
+> 646 |                   {Array.from({ length: leadingEmptyDays }).map((_, index) => (
+      |                                         ^
+  647 |                     <div key={`empty-${index}`} className="h-12 border-t border-[#d2e8f7]...
+  648 |                   ))}
+  649 |                   {monthDays.map((day) => ( {
+  digest: '1185511731'
+}
+[browser] Uncaught ReferenceError: leadingEmptyDays is not defined
+    at Birthday (src/components/birthday/Birthday.tsx:646:41)
+    at BirthdaysPage (src\app\birthdays\page.tsx:4:10)
+  644 |                     </div>
+  645 |                   ))}
+> 646 |                   {Array.from({ length: leadingEmptyDays }).map((_, index) => (
+      |                                         ^
+  647 |                     <div key={`empty-${index}`} className="h-12 border-t border-[#d2e8f7]...
+  648 |                   ))}
+  649 |                   {monthDays.map((day) => (
+⨯ ReferenceError: leadingEmptyDays is not defined
+    at Birthday (src\components\birthday\Birthday.tsx:646:41)
+  644 |                     </div>
+  645 |                   ))}
+> 646 |                   {Array.from({ length: leadingEmptyDays }).map((_, index) => (
+      |                                         ^
+  647 |                     <div key={`empty-${index}`} className="h-12 border-t border-[#d2e8f7]...
+  648 |                   ))}
+  649 |                   {monthDays.map((day) => ( {
+  digest: '1185511731'
+}
+[browser] Uncaught ReferenceError: leadingEmptyDays is not defined
+    at Birthday (src/components/birthday/Birthday.tsx:646:41)
+    at BirthdaysPage (src\app\birthdays\page.tsx:4:10)
+  644 |                     </div>
+  645 |                   ))}
+> 646 |                   {Array.from({ length: leadingEmptyDays }).map((_, index) => (
+      |                                         ^
+  647 |                     <div key={`empty-${index}`} className="h-12 border-t border-[#d2e8f7]...
+  648 |                   ))}
+  649 |                   {monthDays.map((day) => (
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
+⚠ Fast Refresh had to perform a full reload due to a runtime error.
