@@ -32,8 +32,8 @@ export default function HeroSection({
 
   return (
     <section className="bg-white pt-[74px] pb-4 sm:pt-[78px] sm:pb-6 lg:pt-[82px]">
-      <div className="mx-auto max-w-[1500px]">
-        <div className="relative isolate min-h-[430px] overflow-hidden border-b-[3px] border-[#2795ff] bg-[#dff2ff] sm:min-h-[500px] lg:aspect-[1793/805] lg:min-h-[288px]">
+      <div className="mx-auto w-[min(96vw,1840px)]">
+        <div className="relative isolate min-h-[430px] overflow-hidden bg-[#dff2ff] sm:min-h-[500px] lg:aspect-[1793/805] lg:min-h-[288px] 2xl:min-h-[760px]">
           <div className="absolute inset-0 -z-10">
             <div className="absolute inset-0 bg-[linear-gradient(180deg,#b9e3ff_0%,#d9efff_32%,#eff8ff_72%,#ffffff_100%)]" />
 
@@ -44,8 +44,8 @@ export default function HeroSection({
                 alt=""
                 fill
                 priority={index === 0}
-                sizes="100vw"
-                className={`origin-bottom-right object-cover transition-opacity duration-700 scale-[0.97] object-[88%_92%] sm:scale-[0.96] sm:object-[92%_90%] md:object-[96%_88%] lg:scale-[0.95] lg:object-[100%_89%] xl:scale-[0.945] xl:object-[100%_87%] ${
+                sizes="(min-width: 1536px) 1840px, 96vw"
+                className={`origin-bottom-right object-cover transition-opacity duration-700 scale-[0.97] object-[88%_92%] sm:scale-[0.96] sm:object-[92%_90%] md:object-[96%_88%] lg:scale-[0.95] lg:object-[100%_89%] xl:scale-[0.945] xl:object-[100%_87%] 2xl:scale-[0.92] 2xl:object-[100%_84%] ${
                   currentSlide === index ? "opacity-100" : "opacity-0"
                 }`}
               />
@@ -53,7 +53,7 @@ export default function HeroSection({
 
             <div className="absolute inset-0 bg-white/16" />
             <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.98)_0%,rgba(255,255,255,0.95)_28%,rgba(255,255,255,0.6)_54%,rgba(255,255,255,0.14)_76%,rgba(255,255,255,0)_88%)]" />
-            <div className="absolute inset-y-0 left-0 w-[72%] bg-[radial-gradient(circle_at_16%_40%,rgba(255,255,255,0.98)_0%,rgba(255,255,255,0.84)_36%,rgba(255,255,255,0)_76%)] sm:w-[64%] lg:w-[56%]" />
+            <div className="absolute inset-y-0 left-0 w-[72%] bg-[radial-gradient(circle_at_16%_40%,rgba(255,255,255,0.98)_0%,rgba(255,255,255,0.84)_36%,rgba(255,255,255,0)_76%)] sm:w-[64%] lg:w-[56%] 2xl:w-[52%]" />
             <div className="absolute inset-x-0 top-0 h-[38%] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.42)_0%,rgba(255,255,255,0)_72%)]" />
           </div>
 
@@ -81,31 +81,31 @@ export default function HeroSection({
             />
           </svg>
 
-          <div className="relative z-20 flex min-h-[430px] items-start px-5 pt-12 pb-16 sm:min-h-[500px] sm:px-8 sm:pt-14 sm:pb-20 md:px-10 md:pt-16 lg:h-full lg:items-center lg:px-12 lg:pt-10 lg:pb-14 xl:px-16">
-            <div className="w-full max-w-[260px] sm:max-w-[320px] md:max-w-[420px] lg:max-w-[650px]">
-              <h1 className="text-[44px] font-bold leading-[0.95] tracking-[-0.05em] text-black sm:text-[54px] md:text-[66px] lg:text-[78px] xl:text-[84px]">
+          <div className="relative z-20 flex min-h-[430px] items-start px-5 pt-12 pb-16 sm:min-h-[500px] sm:px-8 sm:pt-14 sm:pb-20 md:px-10 md:pt-16 lg:h-full lg:items-center lg:px-12 lg:pt-10 lg:pb-14 xl:px-16 2xl:px-24">
+            <div className="w-full max-w-[260px] sm:max-w-[320px] md:max-w-[420px] lg:max-w-[650px] 2xl:max-w-[760px]">
+              <h1 className="text-[44px] font-bold leading-[0.95] tracking-[-0.05em] text-black sm:text-[54px] md:text-[66px] lg:text-[78px] xl:text-[84px] 2xl:text-[96px]">
                 Fun Toys &
                 <br />
                 <span className="text-[#69a4ff]">Kids Essentials</span>
               </h1>
 
-              <p className="mt-3 max-w-[260px] text-[18px] font-medium leading-[1.3] text-[#4a5b77] sm:mt-4 sm:max-w-[320px] sm:text-[22px] md:max-w-[420px] md:text-[28px] lg:mt-5 lg:max-w-[500px] lg:text-[34px] xl:text-[38px]">
+              <p className="mt-3 max-w-[260px] text-[18px] font-medium leading-[1.3] text-[#4a5b77] sm:mt-4 sm:max-w-[320px] sm:text-[22px] md:max-w-[420px] md:text-[28px] lg:mt-5 lg:max-w-[500px] lg:text-[34px] xl:text-[38px] 2xl:max-w-[620px] 2xl:text-[44px]">
                 Discover exciting products
                 <br className="hidden sm:block" />
                 for little stars
               </p>
 
-              <div className="mt-5 flex flex-col gap-3 sm:mt-6 sm:flex-row sm:items-center sm:gap-4 lg:mt-8 lg:gap-5">
+              <div className="mt-5 flex flex-col gap-3 sm:mt-6 sm:flex-row sm:items-center sm:gap-4 lg:mt-8 lg:gap-5 2xl:mt-10 2xl:gap-6">
                 <Link
                   href="#market-categories"
-                  className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[linear-gradient(180deg,#5f87ff_0%,#4a73ee_100%)] px-6 text-center text-[18px] font-medium leading-none tracking-[-0.02em] text-white shadow-[0_18px_34px_rgba(79,124,243,0.26)] transition-transform duration-300 hover:scale-[1.02] sm:h-14 sm:w-auto sm:min-w-[190px] sm:px-7 sm:text-[20px] md:h-16 md:min-w-[220px] md:text-[22px] lg:h-[72px] lg:min-w-[250px] lg:px-10 lg:text-[26px] xl:h-[92px] xl:min-w-[310px] xl:text-[31px]"
+                  className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[linear-gradient(180deg,#5f87ff_0%,#4a73ee_100%)] px-6 text-center text-[18px] font-medium leading-none tracking-[-0.02em] text-white shadow-[0_18px_34px_rgba(79,124,243,0.26)] transition-transform duration-300 hover:scale-[1.02] sm:h-14 sm:w-auto sm:min-w-[190px] sm:px-7 sm:text-[20px] md:h-16 md:min-w-[220px] md:text-[22px] lg:h-[72px] lg:min-w-[250px] lg:px-10 lg:text-[26px] xl:h-[92px] xl:min-w-[310px] xl:text-[31px] 2xl:h-[104px] 2xl:min-w-[340px] 2xl:text-[34px]"
                 >
                   Shop Now
                 </Link>
 
                 <Link
                   href="#market-categories"
-                  className="inline-flex h-12 w-full items-center justify-center rounded-full border border-[#deE7fb] bg-white px-6 text-center text-[18px] font-medium leading-none tracking-[-0.02em] text-[#4f78f3] shadow-[0_16px_30px_rgba(24,56,115,0.08)] transition-transform duration-300 hover:scale-[1.02] sm:h-14 sm:w-auto sm:min-w-[250px] sm:px-8 sm:text-[20px] md:h-16 md:min-w-[280px] md:text-[22px] lg:h-[72px] lg:min-w-[330px] lg:px-12 lg:text-[26px] xl:h-[92px] xl:min-w-[400px] xl:text-[31px]"
+                  className="inline-flex h-12 w-full items-center justify-center rounded-full border border-[#deE7fb] bg-white px-6 text-center text-[18px] font-medium leading-none tracking-[-0.02em] text-[#4f78f3] shadow-[0_16px_30px_rgba(24,56,115,0.08)] transition-transform duration-300 hover:scale-[1.02] sm:h-14 sm:w-auto sm:min-w-[250px] sm:px-8 sm:text-[20px] md:h-16 md:min-w-[280px] md:text-[22px] lg:h-[72px] lg:min-w-[330px] lg:px-12 lg:text-[26px] xl:h-[92px] xl:min-w-[400px] xl:text-[31px] 2xl:h-[104px] 2xl:min-w-[430px] 2xl:text-[34px]"
                 >
                   Explore categories
                 </Link>
