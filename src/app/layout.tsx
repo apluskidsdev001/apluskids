@@ -1,6 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
-import Footer from "@/components/layout/Footer";
+import AppFooter from "@/components/layout/AppFooter";
 import TaskBar from "@/components/taskBar/TaskBar";
 import "./globals.css";
 
@@ -29,6 +29,11 @@ export const metadata: Metadata = {
   description: "A scalable kids entertainment platform built with Next.js.",
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -39,7 +44,7 @@ export default function RootLayout({
       <body className={`${fredoka.className} min-h-full flex flex-col pb-24 laptop:pb-0`}>
         <TaskBar />
         {children}
-        <Footer />
+        <AppFooter />
       </body>
     </html>
   );

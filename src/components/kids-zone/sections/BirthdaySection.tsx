@@ -111,7 +111,7 @@ export default function BirthdaySection() {
             ))}
           </div>
           <a
-            href="#birthday"
+            href="/birthdays"
             className="birthday-cta mt-9 inline-flex h-14 items-center gap-4 rounded-full bg-[#13A8DF] pl-7 pr-3 text-[21px] font-normal leading-none tracking-normal text-white no-underline shadow-[0_14px_28px_rgba(19,168,223,0.22)] transition-transform hover:scale-[1.03] hover:no-underline"
           >
             Send Birthday

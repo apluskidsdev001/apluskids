@@ -25,13 +25,7 @@ const heroHighlight = [
 const welcomeText = "Welcome to";
 
 export default function KidsZoneHero() {
-  const [isHeroBoxSpinning, setIsHeroBoxSpinning] = useState(false);
   const [activeChip, setActiveChip] = useState<string | null>(null);
-
-  function handleHeroBoxClick() {
-    setIsHeroBoxSpinning(false);
-    window.setTimeout(() => setIsHeroBoxSpinning(true), 0);
-  }
 
   function handleChipClick(chip: string) {
     setActiveChip(null);
@@ -115,15 +109,7 @@ export default function KidsZoneHero() {
 
         <div className="hero-visual-enter">
           <div className="flex justify-center md:justify-end">
-            <button
-              type="button"
-              aria-label="Play Kids Zone animation effect"
-              onClick={handleHeroBoxClick}
-              onAnimationEnd={() => setIsHeroBoxSpinning(false)}
-              className={`relative w-full max-w-[600px] cursor-pointer border-0 bg-transparent p-0 text-left outline-none transition-transform duration-300 hover:scale-[1.01] focus-visible:ring-4 focus-visible:ring-[#13A8DF]/30 sm:max-w-[640px] md:max-w-[560px] lg:max-w-[610px] xl:max-w-[640px] ${
-                isHeroBoxSpinning ? "hero-box-spin-forward" : ""
-              }`}
-            >
+            <div className="relative w-full max-w-[600px] sm:max-w-[640px] md:max-w-[560px] lg:max-w-[610px] xl:max-w-[640px]">
               <div className="absolute -left-4 -top-4 h-24 w-24 rounded-[8px] bg-[#FFE36E]" />
               <div className="absolute -bottom-4 -right-4 h-28 w-28 rounded-[8px] bg-[#13A8DF]" />
 
@@ -141,7 +127,7 @@ export default function KidsZoneHero() {
                   />
                 </video>
               </div>
-            </button>
+            </div>
           </div>
         </div>
       </div>
@@ -192,12 +178,6 @@ export default function KidsZoneHero() {
           will-change: opacity, transform;
         }
 
-        .hero-box-spin-forward {
-          animation: heroBoxSpinForward 900ms cubic-bezier(0.2, 0.85, 0.2, 1)
-            both;
-          transform-origin: center;
-        }
-
         .hero-chip-one-spin {
           animation: heroChipOneSpin 560ms ease-in-out both;
           transform-origin: center;
@@ -212,7 +192,6 @@ export default function KidsZoneHero() {
         @media (prefers-reduced-motion: reduce) {
           .hero-text-enter,
           .hero-visual-enter,
-          .hero-box-spin-forward,
           .hero-chip-one-spin,
           .welcome-letter,
           .kids-zone-title,
@@ -280,27 +259,6 @@ export default function KidsZoneHero() {
           to {
             opacity: 1;
             transform: translate3d(0, 0, 0) scale(1);
-          }
-        }
-
-        @keyframes heroBoxSpinForward {
-          0% {
-            transform: perspective(900px) translateZ(0) rotate(0deg) scale(1);
-          }
-
-          48% {
-            transform: perspective(900px) translateZ(80px) rotate(720deg)
-              scale(1.08);
-          }
-
-          72% {
-            transform: perspective(900px) translateZ(32px) rotate(720deg)
-              scale(1.04);
-          }
-
-          100% {
-            transform: perspective(900px) translateZ(0) rotate(720deg)
-              scale(1);
           }
         }
 
