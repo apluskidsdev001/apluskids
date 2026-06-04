@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { ChangeEvent, FormEvent, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { sitePath } from "@/utils/sitePath";
 
@@ -18,10 +18,10 @@ const copy = {
   english: {
     languageLabel: "English",
     title: "Birthday Wishes Chat",
-    subtitle: "Automated demo flow for A Plus Kids",
+    subtitle: "A Plus Kids chat flow",
     introTitle: "Introduction",
     introText:
-      "Welcome to A Plus Kids Birthday Wishes. This demo chat helps parents send birthday details step by step. First read the introduction, choose the birthday date, add child details, upload a photo, then select a payment option. A real database and payment API can be connected later.",
+      "Welcome to A Plus Kids Birthday Wishes. This chat helps parents send birthday details step by step. First read the introduction, choose the birthday date, add child details, upload a photo, then select a payment option. A real database and payment API can be connected later.",
     introHelp:
       "Later you can replace this text with your full introduction. This popup is prepared for long text and supports scrolling.",
     readIntro: "Tap to read full introduction",
@@ -30,7 +30,7 @@ const copy = {
     resetDate: "Reset Date",
     enterDetails: "Enter your details",
     messagePrompt:
-      "Type your birthday message and upload a picture. We will use this for the birthday wish demo.",
+      "Type your birthday message and upload a picture. We will use this for the birthday wish.",
     pictureReply: "We upload your picture.",
     paymentTitle: "Choose payment option",
     addSlip: "Add Slip",
@@ -47,7 +47,7 @@ const copy = {
     edit: "Edit",
     finalSubmit: "Final Submit",
     thanks:
-      "Thank you. Your birthday wish demo request is ready. We will connect database and payment API later.",
+      "Thank you. Your birthday wish request is ready. We will connect database and payment API later.",
     typeHere: "Type here",
     enter: "Enter",
     menuDelete: "Delete all",
@@ -62,10 +62,10 @@ const copy = {
   sinhala: {
     languageLabel: "සිංහල",
     title: "උපන්දින සුබ පැතුම් චැට්",
-    subtitle: "A Plus Kids සඳහා automated demo flow එක",
+    subtitle: "A Plus Kids chat flow එක",
     introTitle: "හැඳින්වීම",
     introText:
-      "A Plus Kids උපන්දින සුබ පැතුම් සේවාවට සාදරයෙන් පිළිගන්නවා. මේ demo chat එකෙන් දෙමාපියන්ට පියවරෙන් පියවර උපන්දින විස්තර යවන්න පුළුවන්. මුලින් හැඳින්වීම කියවලා, උපන්දින දිනය තෝරලා, දරුවාගේ විස්තර සහ පින්තූරය upload කරලා, payment option එක තෝරන්න.",
+      "A Plus Kids උපන්දින සුබ පැතුම් සේවාවට සාදරයෙන් පිළිගන්නවා. මේ chat එකෙන් දෙමාපියන්ට පියවරෙන් පියවර උපන්දින විස්තර යවන්න පුළුවන්. මුලින් හැඳින්වීම කියවලා, උපන්දින දිනය තෝරලා, දරුවාගේ විස්තර සහ පින්තූරය upload කරලා, payment option එක තෝරන්න.",
     introHelp:
       "පසුව ඔබගේ දිග හැඳින්වීම මේ තැනට replace කරන්න පුළුවන්. දිග text සඳහා මේ popup එක scroll වෙන්න සකස් කරලා තියෙනවා.",
     readIntro: "සම්පූර්ණ හැඳින්වීම බලන්න",
@@ -74,7 +74,7 @@ const copy = {
     resetDate: "දිනය reset කරන්න",
     enterDetails: "ඔබගේ විස්තර ඇතුළත් කරන්න",
     messagePrompt:
-      "උපන්දින message එක type කරලා පින්තූරයක් upload කරන්න. මේ demo එකේ birthday wish එකට ඒවා භාවිතා කරනවා.",
+      "උපන්දින message එක type කරලා පින්තූරයක් upload කරන්න. birthday wish එකට ඒවා භාවිතා කරනවා.",
     pictureReply: "අපි ඔබගේ පින්තූරය upload කළා.",
     paymentTitle: "Payment option එක තෝරන්න",
     addSlip: "Slip එක add කරන්න",
@@ -91,7 +91,7 @@ const copy = {
     edit: "Edit",
     finalSubmit: "Final Submit",
     thanks:
-      "ස්තුතියි. ඔබගේ birthday wish demo request එක ready. Database සහ payment API එක පසුව connect කරනවා.",
+      "ස්තුතියි. ඔබගේ birthday wish request එක ready. Database සහ payment API එක පසුව connect කරනවා.",
     typeHere: "මෙතැන type කරන්න",
     enter: "Enter",
     menuDelete: "සියල්ල delete කරන්න",
@@ -106,10 +106,10 @@ const copy = {
   tamil: {
     languageLabel: "தமிழ்",
     title: "பிறந்தநாள் வாழ்த்து Chat",
-    subtitle: "A Plus Kids automated demo flow",
+    subtitle: "A Plus Kids chat flow",
     introTitle: "அறிமுகம்",
     introText:
-      "A Plus Kids Birthday Wishes சேவைக்கு வரவேற்கிறோம். இந்த demo chat மூலம் பெற்றோர் படிப்படியாக பிறந்தநாள் விவரங்களை அனுப்பலாம். முதலில் அறிமுகத்தை படிக்கவும், பிறந்தநாள் தேதியை தேர்வு செய்யவும், குழந்தையின் விவரங்களையும் படத்தையும் upload செய்யவும், பின்னர் payment option தேர்வு செய்யவும்.",
+      "A Plus Kids Birthday Wishes சேவைக்கு வரவேற்கிறோம். இந்த chat மூலம் பெற்றோர் படிப்படியாக பிறந்தநாள் விவரங்களை அனுப்பலாம். முதலில் அறிமுகத்தை படிக்கவும், பிறந்தநாள் தேதியை தேர்வு செய்யவும், குழந்தையின் விவரங்களையும் படத்தையும் upload செய்யவும், பின்னர் payment option தேர்வு செய்யவும்.",
     introHelp:
       "பின்னர் உங்கள் முழு அறிமுக text இங்கே மாற்றலாம். நீளமான text க்காக இந்த popup scroll ஆகும்.",
     readIntro: "முழு அறிமுகத்தை பார்க்க",
@@ -118,7 +118,7 @@ const copy = {
     resetDate: "தேதியை reset செய்யவும்",
     enterDetails: "உங்கள் விவரங்களை உள்ளிடவும்",
     messagePrompt:
-      "Birthday message type செய்து ஒரு படத்தை upload செய்யவும். இந்த demo birthday wish க்காக அதைப் பயன்படுத்துவோம்.",
+      "Birthday message type செய்து ஒரு படத்தை upload செய்யவும். birthday wish க்காக அதைப் பயன்படுத்துவோம்.",
     pictureReply: "உங்கள் படத்தை upload செய்தோம்.",
     paymentTitle: "Payment option தேர்வு செய்யவும்",
     addSlip: "Slip add செய்யவும்",
@@ -135,7 +135,7 @@ const copy = {
     edit: "Edit",
     finalSubmit: "Final Submit",
     thanks:
-      "நன்றி. உங்கள் birthday wish demo request ready. Database மற்றும் payment API பின்னர் connect செய்யப்படும்.",
+      "நன்றி. உங்கள் birthday wish request ready. Database மற்றும் payment API பின்னர் connect செய்யப்படும்.",
     typeHere: "இங்கே type செய்யவும்",
     enter: "Enter",
     menuDelete: "Delete all",
@@ -210,8 +210,10 @@ export default function Birthday() {
   const [sureModalOpen, setSureModalOpen] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
   const [finalSubmitted, setFinalSubmitted] = useState(false);
+  const [navHidden, setNavHidden] = useState(false);
 
   // 3. Hidden upload inputs - plus/photo and payment slip use the browser file picker.
+  const chatBodyRef = useRef<HTMLDivElement>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const slipInputRef = useRef<HTMLInputElement>(null);
   const calendarDays = useMemo(() => buildCalendarDays(), []);
@@ -220,6 +222,19 @@ export default function Birthday() {
   const detailsComplete = detailFields.every((field) => details[field.id].trim());
   const canSendMessage = Boolean(confirmedDate) && detailsComplete;
   const canShowPayment = canSendMessage && messageSent;
+
+  useEffect(() => {
+    document.body.classList.toggle("birthday-chat-nav-hidden", navHidden);
+
+    return () => {
+      document.body.classList.remove("birthday-chat-nav-hidden");
+    };
+  }, [navHidden]);
+
+  function handleChatScroll() {
+    const scrollTop = chatBodyRef.current?.scrollTop ?? 0;
+    setNavHidden(scrollTop > 24);
+  }
 
   function updateDetail(id: DetailId, value: string) {
     setDetails((current) => ({ ...current, [id]: value }));
@@ -317,7 +332,13 @@ export default function Birthday() {
   }
 
   return (
-    <main className="flex h-[calc(100vh-6rem)] overflow-hidden bg-[#F5FBFF] px-3 pb-3 pt-[88px] sm:px-5 sm:pt-[104px] laptop:h-screen laptop:px-8 laptop:pb-6 laptop:pt-[142px]">
+    <main
+      className={`flex overflow-hidden bg-[#F5FBFF] px-3 pb-3 transition-[height,padding] duration-300 sm:px-5 laptop:h-screen laptop:px-8 laptop:pb-6 ${
+        navHidden
+          ? "h-screen pt-3 laptop:pt-3"
+          : "h-[calc(100vh-6rem)] pt-[88px] sm:pt-[104px] laptop:pt-[142px]"
+      }`}
+    >
       <section className="mx-auto flex min-h-0 w-full min-w-0 max-w-[1320px] flex-1 flex-col overflow-hidden rounded-[24px] border-2 border-[#8EDDF7] bg-white shadow-[0_28px_80px_rgba(7,27,99,0.18),0_0_0_8px_rgba(174,232,250,0.28)] sm:rounded-[32px]">
         {/* 4. Sticky chat header - never scrolls away, like WhatsApp. */}
         <div className="flex min-w-0 shrink-0 items-center gap-2 overflow-hidden bg-[#AEE8FA] px-3 py-3 text-[#071B63] sm:gap-3 sm:px-6 sm:py-4">
@@ -400,6 +421,8 @@ export default function Birthday() {
 
         {/* 5. Inner chat scroll area - page header/input stay fixed, only messages scroll. */}
         <div
+          ref={chatBodyRef}
+          onScroll={handleChatScroll}
           className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#DDF4FF] bg-cover bg-center px-3 py-5 sm:px-5 sm:py-7 md:px-8"
           style={{
             backgroundImage: `linear-gradient(rgba(229,247,255,0.18), rgba(229,247,255,0.24)), url(${sitePath("/images/birthday/wback.png")})`,
@@ -454,12 +477,12 @@ export default function Birthday() {
                 <p className="text-[16px] font-semibold text-[#071B63]">
                   {t.chooseDate}
                 </p>
-                <div className="mt-4 rounded-[14px] bg-white p-3 shadow-[inset_0_0_0_1px_rgba(7,27,99,0.08)] sm:p-5">
-                  <div className="mb-4 flex items-center justify-between">
-                    <span className="text-[22px] font-bold uppercase tracking-[0.14em] text-black">
+                <div className="mt-4 max-w-[460px] rounded-[14px] bg-white p-3 shadow-[inset_0_0_0_1px_rgba(7,27,99,0.08)] sm:p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <span className="text-[18px] font-bold uppercase tracking-[0.14em] text-black sm:text-[22px]">
                       June
                     </span>
-                    <span className="text-[22px] font-bold tracking-[0.14em] text-black">
+                    <span className="text-[18px] font-bold tracking-[0.14em] text-black sm:text-[22px]">
                       2026
                     </span>
                   </div>
@@ -467,7 +490,7 @@ export default function Birthday() {
                     {weekDays.map((day) => (
                       <div
                         key={day}
-                        className="bg-[#F2FAFF] px-1 py-2 text-center text-[10px] font-bold uppercase text-[#58718D] sm:text-[12px]"
+                        className="bg-[#F2FAFF] px-1 py-1.5 text-center text-[9px] font-bold uppercase text-[#58718D] sm:text-[11px]"
                       >
                         {day}
                       </div>
@@ -477,7 +500,7 @@ export default function Birthday() {
                         type="button"
                         key={day}
                         onClick={() => setSelectedDay(day)}
-                        className={`aspect-square border-t border-[#C4D7E5] text-[13px] font-semibold transition-colors sm:text-[15px] ${
+                        className={`h-8 border-t border-[#C4D7E5] text-[12px] font-semibold transition-colors sm:h-10 sm:text-[14px] ${
                           selectedDay === day
                             ? "bg-[#13A8DF] text-white"
                             : "bg-white text-[#071B63] hover:bg-[#EAF5FF]"
@@ -557,7 +580,7 @@ export default function Birthday() {
               </>
             ) : null}
 
-            {/* 11. Payment cards - slip flow can submit, online button remains demo only. */}
+            {/* 11. Payment cards - slip flow can submit, online button waits for PayHere. */}
             {canShowPayment ? (
               <BotBubble>
                 <div>
@@ -780,6 +803,18 @@ export default function Birthday() {
           </div>
         </div>
       ) : null}
+
+      <style>{`
+        body.birthday-chat-nav-hidden header.fixed,
+        body.birthday-chat-nav-hidden nav.fixed {
+          opacity: 0;
+          pointer-events: none;
+          transform: translateY(-120%);
+          transition:
+            opacity 240ms ease,
+            transform 300ms ease;
+        }
+      `}</style>
     </main>
   );
 }
