@@ -1,0 +1,144 @@
+
+> aplus_kids_web@0.1.0 dev
+> next dev -H 0.0.0.0
+
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://0.0.0.0:3000
+✓ Ready in 4.5s
+Creating turbopack project { dir: 'D:\\Aplus\\apluskids', testMode: true }
+
+ GET /birthdays/ 200 in 2.0s (next.js: 1288ms, application-code: 724ms)
+ GET / 200 in 314ms (next.js: 46ms, application-code: 268ms)
+ GET /kids-zone/ 200 in 141ms (next.js: 89ms, application-code: 52ms)
+ GET /birthdays/ 200 in 132ms (next.js: 4ms, application-code: 128ms)
+ GET /birthdays/ 200 in 111ms (next.js: 5ms, application-code: 106ms)
+ GET / 200 in 64ms (next.js: 7ms, application-code: 57ms)
+ GET /kids-zone/ 200 in 96ms (next.js: 11ms, application-code: 85ms)
+ GET /kids-zone/ 200 in 64ms (next.js: 4ms, application-code: 60ms)
+ GET /kids-zone/ 200 in 84ms (next.js: 6ms, application-code: 78ms)
+ GET / 200 in 155ms (next.js: 5ms, application-code: 150ms)
+ GET /kids-zone/ 200 in 46ms (next.js: 4ms, application-code: 42ms)
+ GET /birthdays/ 200 in 138ms (next.js: 6ms, application-code: 131ms)
+ GET /info/ 200 in 2.8s (next.js: 2.7s, application-code: 58ms)
+ GET /market/ 200 in 75ms (next.js: 46ms, application-code: 29ms)
+ GET /kids-zone/ 200 in 45ms (next.js: 3ms, application-code: 42ms)
+ GET /market/ 200 in 36ms (next.js: 2ms, application-code: 33ms)
+ GET /kids-zone/ 200 in 121ms (next.js: 3ms, application-code: 118ms)
+ GET /kids-zone/ 200 in 84ms (next.js: 5ms, application-code: 79ms)
+ GET / 200 in 29ms (next.js: 3ms, application-code: 26ms)
+ GET /kids-zone/ 200 in 85ms (next.js: 47ms, application-code: 38ms)
+ GET /kids-zone/ 200 in 92ms (next.js: 4ms, application-code: 89ms)
+ GET /birthdays/ 200 in 116ms (next.js: 3ms, application-code: 112ms)
+ GET / 200 in 76ms (next.js: 3ms, application-code: 73ms)
+ GET / 200 in 49ms (next.js: 4ms, application-code: 45ms)
+ GET /kids-zone/ 200 in 41ms (next.js: 3ms, application-code: 37ms)
+ GET /birthdays/ 200 in 99ms (next.js: 3ms, application-code: 96ms)
+ GET /birthdays/ 200 in 106ms (next.js: 6ms, application-code: 100ms)
+ GET / 200 in 456ms (next.js: 352ms, application-code: 104ms)
+ GET /info/ 200 in 158ms (next.js: 84ms, application-code: 74ms)
+ GET / 200 in 98ms (next.js: 4ms, application-code: 94ms)
+ GET / 200 in 52ms (next.js: 3ms, application-code: 49ms)
+✓ Compiled in 1512ms
+ GET / 200 in 888ms (next.js: 784ms, application-code: 104ms)
+ GET /birthdays/ 200 in 1082ms (next.js: 384ms, application-code: 698ms)
+ GET /birthdays/ 200 in 281ms (next.js: 4ms, application-code: 277ms)
+ GET /birthdays/ 200 in 160ms (next.js: 4ms, application-code: 155ms)
+ GET /birthdays/ 200 in 1727ms (next.js: 4ms, application-code: 1723ms)
+ GET /birthdays/ 200 in 406ms (next.js: 19ms, application-code: 387ms)
+ GET /birthdays/ 200 in 867ms (next.js: 5ms, application-code: 862ms)
+✓ Compiled in 263ms
+ GET / 200 in 218ms (next.js: 117ms, application-code: 101ms)
+ GET /birthdays/ 200 in 445ms (next.js: 134ms, application-code: 310ms)
+✓ Compiled in 12.9s
+ GET / 200 in 6.0s (next.js: 5.5s, application-code: 491ms)
+ GET / 200 in 264ms (next.js: 155ms, application-code: 109ms)
+ GET / 200 in 157ms (next.js: 8ms, application-code: 149ms)
+ GET / 200 in 213ms (next.js: 9ms, application-code: 204ms)
+ GET / 200 in 202ms (next.js: 14ms, application-code: 188ms)
+ GET / 200 in 74ms (next.js: 13ms, application-code: 62ms)
+✓ Compiled in 141ms
+ GET / 200 in 157ms (next.js: 93ms, application-code: 65ms)
+✓ Compiled in 51ms
+ GET / 200 in 184ms (next.js: 107ms, application-code: 77ms)
+ GET / 200 in 118ms (next.js: 4ms, application-code: 115ms)
+ GET / 200 in 58ms (next.js: 3ms, application-code: 55ms)
+ GET / 200 in 71ms (next.js: 33ms, application-code: 37ms)
+ GET / 200 in 74ms (next.js: 4ms, application-code: 69ms)
+ GET / 200 in 38ms (next.js: 2ms, application-code: 35ms)
+ GET /birthdays/ 200 in 341ms (next.js: 108ms, application-code: 234ms)
+✓ Compiled in 444ms
+✓ Compiled in 1488ms
+ GET / 200 in 1945ms (next.js: 1565ms, application-code: 380ms)
+ GET / 200 in 332ms (next.js: 161ms, application-code: 171ms)
+ GET / 200 in 136ms (next.js: 4ms, application-code: 132ms)
+ GET / 200 in 132ms (next.js: 3ms, application-code: 129ms)
+ GET / 200 in 127ms (next.js: 4ms, application-code: 123ms)
+ GET / 200 in 83ms (next.js: 3ms, application-code: 80ms)
+ GET / 200 in 47ms (next.js: 3ms, application-code: 45ms)
+✓ Finished filesystem cache database compaction in 14.2s
+ GET / 200 in 548ms (next.js: 5ms, application-code: 543ms)
+ GET /kids-zone/ 200 in 1920ms (next.js: 1744ms, application-code: 176ms)
+ GET / 200 in 51ms (next.js: 3ms, application-code: 48ms)
+ GET /kids-zone/ 200 in 47ms (next.js: 3ms, application-code: 44ms)
+ GET /birthdays/ 200 in 401ms (next.js: 108ms, application-code: 293ms)
+✓ Compiled in 4s
+ GET /birthdays/ 200 in 481ms (next.js: 109ms, application-code: 371ms)
+ GET /birthdays/ 200 in 227ms (next.js: 109ms, application-code: 118ms)
+ GET /birthdays/ 200 in 231ms (next.js: 82ms, application-code: 150ms)
+ GET / 200 in 957ms (next.js: 252ms, application-code: 705ms)
+ GET /birthdays/ 200 in 144ms (next.js: 4ms, application-code: 140ms)
+ GET /birthdays/ 200 in 478ms (next.js: 150ms, application-code: 328ms)
+ GET /birthdays/ 404 in 1732ms (next.js: 1651ms, application-code: 82ms)
+ GET /birthdays/ 200 in 89ms (next.js: 3ms, application-code: 86ms)
+ GET /birthdays/ 200 in 35ms (next.js: 4ms, application-code: 30ms)
+ GET /birthdays/ 200 in 94ms (next.js: 3ms, application-code: 91ms)
+ GET /kids-zone/ 200 in 305ms (next.js: 209ms, application-code: 96ms)
+ GET / 200 in 63ms (next.js: 15ms, application-code: 48ms)
+ GET /kids-zone/ 200 in 44ms (next.js: 4ms, application-code: 40ms)
+ GET /birthdays/ 200 in 105ms (next.js: 3ms, application-code: 102ms)
+✓ Compiled in 82ms
+ GET /birthdays/ 200 in 150ms (next.js: 103ms, application-code: 47ms)
+✓ Compiled in 149ms
+ GET /birthdays/ 200 in 146ms (next.js: 102ms, application-code: 44ms)
+ GET /birthdays/ 200 in 171ms (next.js: 6ms, application-code: 166ms)
+ GET /birthdays/ 200 in 3.7s (next.js: 3.6s, application-code: 133ms)
+ GET /birthdays/ 200 in 77ms (next.js: 3ms, application-code: 73ms)
+ GET /birthdays/ 200 in 34ms (next.js: 4ms, application-code: 31ms)
+✓ Compiled in 82ms
+ GET /birthdays/ 200 in 172ms (next.js: 103ms, application-code: 69ms)
+✓ Compiled in 1789ms
+ GET /birthdays/ 200 in 786ms (next.js: 602ms, application-code: 184ms)
+✓ Compiled in 191ms
+ GET /birthdays/ 200 in 135ms (next.js: 91ms, application-code: 43ms)
+✓ Compiled in 93ms
+ GET /birthdays/ 200 in 216ms (next.js: 149ms, application-code: 67ms)
+✓ Compiled in 163ms
+ GET /birthdays/ 200 in 154ms (next.js: 113ms, application-code: 41ms)
+✓ Compiled in 170ms
+ GET /birthdays/ 200 in 154ms (next.js: 105ms, application-code: 49ms)
+✓ Compiled in 1027ms
+ GET /birthdays/ 200 in 367ms (next.js: 189ms, application-code: 178ms)
+ GET /birthdays/ 200 in 71ms (next.js: 5ms, application-code: 67ms)
+✓ Compiled in 70ms
+ GET /birthdays/ 200 in 124ms (next.js: 82ms, application-code: 42ms)
+ GET /birthdays/ 200 in 1232ms (next.js: 4ms, application-code: 1228ms)
+✓ Compiled in 190ms
+ GET /birthdays/ 200 in 173ms (next.js: 118ms, application-code: 55ms)
+✓ Compiled in 109ms
+ GET /birthdays/ 200 in 316ms (next.js: 216ms, application-code: 100ms)
+✓ Compiled in 79ms
+ GET /birthdays/ 200 in 313ms (next.js: 256ms, application-code: 57ms)
+✓ Compiled in 184ms
+ GET /birthdays/ 500 in 1266ms (next.js: 116ms, application-code: 1149ms)
+✓ Compiled in 89ms
+ GET /birthdays/ 500 in 363ms (next.js: 99ms, application-code: 264ms)
+ GET /birthdays/ 500 in 149ms (next.js: 7ms, application-code: 142ms)
+✓ Compiled in 395ms
+ GET /birthdays/ 200 in 386ms (next.js: 111ms, application-code: 275ms)
+✓ Compiled in 101ms
+ GET /birthdays/ 200 in 235ms (next.js: 175ms, application-code: 61ms)
+✓ Compiled in 80ms
+ GET /birthdays/ 200 in 436ms (next.js: 148ms, application-code: 288ms)
+✓ Compiled in 82ms
+ GET /birthdays/ 200 in 151ms (next.js: 91ms, application-code: 60ms)
