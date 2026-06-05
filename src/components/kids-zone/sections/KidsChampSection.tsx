@@ -45,7 +45,7 @@ export default function KidsChampSection() {
             Upload your artwork and share your talent with others
           </p>
           <a
-            href="#kids-champ"
+            href="/kids-champ"
             className="kids-champ-cta mt-9 inline-flex h-14 items-center gap-4 rounded-full bg-[#0B8ED8] pl-7 pr-3 text-[21px] font-normal leading-none tracking-normal text-white shadow-[0_14px_28px_rgba(11,142,216,0.22)] transition-transform hover:scale-[1.03]"
           >
             Upload Drawing
