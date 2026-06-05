@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Image from "next/image";
+import { jsPDF } from "jspdf";
 import {
   ChangeEvent,
   ReactNode,
@@ -13,7 +14,7 @@ import {
 } from "react";
 
 type Language = "english" | "sinhala" | "tamil";
-type DetailId = "fullName" | "city" | "mobile" | "schoolPhone" | "topic";
+type DetailId = "fullName" | "city" | "mobile" | "school" | "age" | "topic";
 type Details = Record<DetailId, string>;
 type DetailErrors = Partial<Record<DetailId | "artImage", string>>;
 
@@ -25,14 +26,15 @@ type PreviewFile = {
 
 const emptyDetails: Details = {
   fullName: "",
+  age: "",
+  school: "",
   city: "",
   mobile: "",
-  schoolPhone: "",
   topic: "",
 };
 
 const callNumber = "0768212266";
-const avatarPath = "/images/birthday/chatbot.png";
+const avatarPath = "/icons/shortcuts/KidsChamp.png";
 const backgroundPath = "/images/kidschamp/kcback.png";
 
 // Easy copy update area for future Sinhala/Tamil/client text updates.
@@ -45,6 +47,7 @@ const copy = {
       "Welcome to A Plus Kids Kids Champ. Submit your art image, add your details, and tell us the topic of your art. This is a simple chat-style submission flow for Kids Champ.",
     introButton: "Read full introduction",
     uploadAsk: "Upload your drawing",
+    uploadHint: "Add one or more clear photos of the artwork.",
     uploadSubmit: "Submit Drawing",
     uploadSuccess: "Upload successful. Now please add your details.",
     detailsAsk: "Enter art details",
@@ -71,10 +74,13 @@ const copy = {
     finalThanks: "Thanks for submitting your art. This is the preview slot for the current version.",
     menuDelete: "Delete all",
     menuRefresh: "Refresh",
+    menuDownload: "Download summary PDF",
+    menuLocked: "Available after final submit",
     fullName: "Full name",
     city: "City",
     mobile: "Mobile number",
-    schoolPhone: "School phone number",
+    school: "School",
+    age: "Age",
     topic: "Topic of art",
     required: "This field is required.",
     mobileError: "Enter a valid mobile number.",
@@ -87,6 +93,7 @@ const copy = {
       "A Plus Kids Kids Champ වෙත සාදරයෙන් පිළිගනිමු. ඔබේ art image එක upload කරලා, විස්තර දාලා, art topic එක සඳහන් කරන්න. මේක Kids Champ සඳහා chat style submission flow එකක්.",
     introButton: "සම්පූර්ණ හැඳින්වීම කියවන්න",
     uploadAsk: "ඔබේ drawing එක upload කරන්න",
+    uploadHint: "Artwork එක පැහැදිලිව පේන photo එකක් හෝ කිහිපයක් add කරන්න.",
     uploadSubmit: "Drawing Submit කරන්න",
     uploadSuccess: "Upload successful. දැන් ඔබේ විස්තර ඇතුළත් කරන්න.",
     detailsAsk: "Art විස්තර ඇතුළත් කරන්න",
@@ -113,10 +120,13 @@ const copy = {
     finalThanks: "ඔබේ art එක submit කළාට ස්තුතියි. මේක current version එකේ preview slot එකයි.",
     menuDelete: "සියල්ල Delete කරන්න",
     menuRefresh: "Refresh කරන්න",
+    menuDownload: "Summary PDF Download",
+    menuLocked: "Final submit පසුව available",
     fullName: "සම්පූර්ණ නම",
     city: "නගරය",
     mobile: "දුරකථන අංකය",
-    schoolPhone: "School phone number",
+    school: "පාසල",
+    age: "වයස",
     topic: "Art topic",
     required: "මෙම field එක අවශ්‍යයි.",
     mobileError: "නිවැරදි mobile number එකක් ඇතුළත් කරන්න.",
@@ -129,6 +139,7 @@ const copy = {
       "A Plus Kids Kids Champ-க்கு வரவேற்கிறோம். உங்கள் art image upload செய்து, விவரங்களை சேர்த்து, art topic குறிப்பிடவும். இது Kids Champ-க்கான chat style submission flow.",
     introButton: "முழு அறிமுகத்தை வாசிக்க",
     uploadAsk: "உங்கள் drawing upload செய்யவும்",
+    uploadHint: "Artwork தெளிவாக தெரியும் ஒரு அல்லது பல photos add செய்யவும்.",
     uploadSubmit: "Drawing Submit செய்யவும்",
     uploadSuccess: "Upload successful. இப்போது உங்கள் விவரங்களை உள்ளிடவும்.",
     detailsAsk: "Art விவரங்களை உள்ளிடவும்",
@@ -155,10 +166,13 @@ const copy = {
     finalThanks: "உங்கள் art submit செய்ததற்கு நன்றி. இது current version preview slot.",
     menuDelete: "அனைத்தையும் Delete செய்யவும்",
     menuRefresh: "Refresh செய்யவும்",
+    menuDownload: "Summary PDF Download",
+    menuLocked: "Final submit பிறகு available",
     fullName: "முழு பெயர்",
     city: "நகரம்",
     mobile: "மொபைல் எண்",
-    schoolPhone: "School phone number",
+    school: "பள்ளி",
+    age: "வயது",
     topic: "Art topic",
     required: "இந்த field அவசியம்.",
     mobileError: "சரியான mobile number உள்ளிடவும்.",
@@ -166,9 +180,157 @@ const copy = {
 };
 
 const languageTabs: Language[] = ["english", "sinhala", "tamil"];
-const textOnlyFields: DetailId[] = ["fullName", "city"];
-const numberOnlyFields: DetailId[] = ["mobile", "schoolPhone"];
+void copy;
+const localizedCopy = {
+  english: {
+    langLabel: "English",
+    chatName: "A Plus Kids Kids Champ",
+    introTitle: "Submit your art",
+    intro:
+      "Welcome to A Plus Kids Kids Champ. Upload your art image, add your details, and tell us the topic of your artwork. This chat helps you submit everything step by step.",
+    introButton: "Read full introduction",
+    uploadAsk: "Upload your drawing",
+    uploadHint: "Add one or more clear photos of the artwork.",
+    uploadSubmit: "Submit Drawing",
+    uploadSuccess: "Upload successful. Now please add your details.",
+    detailsAsk: "Enter art details",
+    detailsSubmit: "Submit Details",
+    detailsSaved: "Are you sure these details are correct?",
+    yesSure: "Yes, sure",
+    updateButton: "Update",
+    summaryTitle: "Check your summary",
+    okButton: "OK",
+    uploadArt: "Upload art image",
+    uploadRequired: "Please upload your art image before submitting.",
+    textPlaceholder: "Type a short note",
+    disabledPlaceholder: "Submit details first",
+    send: "Enter",
+    artUploaded: "Submitted art",
+    thanks: "Thank you!",
+    checking: "Checking available slots",
+    greatNews: "Great News",
+    date: "Date",
+    time: "Time",
+    channel: "Channel",
+    timeValue: "07:30 PM (Evening Slot)",
+    channelValue: "A Plus Kids",
+    finalThanks:
+      "Thanks for submitting your art. Your artwork will be reviewed and the expected TV display slot is shown here.",
+    menuDelete: "Delete all",
+    menuRefresh: "Refresh",
+    menuDownload: "Download summary PDF",
+    menuLocked: "Available after final submit",
+    fullName: "Full name",
+    city: "City",
+    mobile: "Mobile number",
+    school: "School",
+    age: "Age",
+    topic: "Topic of art",
+    required: "This field is required.",
+    mobileError: "Add 10 numbers.",
+    ageError: "Enter a valid age.",
+  },
+  sinhala: {
+    langLabel: "සිංහල",
+    chatName: "A Plus Kids Kids Champ",
+    introTitle: "ඔබේ චිත්‍රය submit කරන්න",
+    intro:
+      "A Plus Kids Kids Champ වෙත සාදරයෙන් පිළිගනිමු. ඔබේ art image එක upload කරලා, විස්තර දාලා, art topic එක සඳහන් කරන්න. මේ chat එකෙන් ඔබට step by step submit කරන්න පුළුවන්.",
+    introButton: "සම්පූර්ණ හැඳින්වීම කියවන්න",
+    uploadAsk: "ඔබේ drawing එක upload කරන්න",
+    uploadHint: "Artwork එක පැහැදිලිව පේන photo එකක් හෝ කිහිපයක් add කරන්න.",
+    uploadSubmit: "Drawing submit කරන්න",
+    uploadSuccess: "Upload successful. දැන් ඔබේ විස්තර ඇතුළත් කරන්න.",
+    detailsAsk: "Art විස්තර ඇතුළත් කරන්න",
+    detailsSubmit: "විස්තර submit කරන්න",
+    detailsSaved: "මේ විස්තර සියල්ල නිවැරදිද?",
+    yesSure: "ඔව්, sure",
+    updateButton: "Update",
+    summaryTitle: "Summary එක check කරන්න",
+    okButton: "OK",
+    uploadArt: "Art image upload කරන්න",
+    uploadRequired: "Submit කිරීමට පෙර art image එක upload කරන්න.",
+    textPlaceholder: "කුඩා note එකක් type කරන්න",
+    disabledPlaceholder: "මුලින් විස්තර submit කරන්න",
+    send: "Enter",
+    artUploaded: "Submit කළ art",
+    thanks: "ස්තුතියි!",
+    checking: "Available slots check කරනවා",
+    greatNews: "Great News",
+    date: "Date",
+    time: "Time",
+    channel: "Channel",
+    timeValue: "07:30 PM (Evening Slot)",
+    channelValue: "A Plus Kids",
+    finalThanks:
+      "ඔබේ art එක submit කළාට ස්තුතියි. ඔබේ art එක review කරලා expected TV display slot එක මෙහි පෙන්වයි.",
+    menuDelete: "සියල්ල delete කරන්න",
+    menuRefresh: "Refresh කරන්න",
+    menuDownload: "Summary PDF Download",
+    menuLocked: "Final submit පසුව available",
+    fullName: "සම්පූර්ණ නම",
+    city: "නගරය",
+    mobile: "දුරකථන අංකය",
+    school: "පාසල",
+    age: "වයස",
+    topic: "Art topic",
+    required: "මෙම field එක අවශ්‍යයි.",
+    mobileError: "අංක 10ක් ඇතුළත් කරන්න.",
+    ageError: "නිවැරදි වයසක් ඇතුළත් කරන්න.",
+  },
+  tamil: {
+    langLabel: "தமிழ்",
+    chatName: "A Plus Kids Kids Champ",
+    introTitle: "உங்கள் art submit செய்யவும்",
+    intro:
+      "A Plus Kids Kids Champ-க்கு வரவேற்கிறோம். உங்கள் art image upload செய்து, விவரங்களை சேர்த்து, art topic குறிப்பிடவும். இந்த chat மூலம் step by step submit செய்யலாம்.",
+    introButton: "முழு அறிமுகத்தை வாசிக்க",
+    uploadAsk: "உங்கள் drawing upload செய்யவும்",
+    uploadHint: "Artwork தெளிவாக தெரியும் ஒரு அல்லது பல photos add செய்யவும்.",
+    uploadSubmit: "Drawing submit செய்யவும்",
+    uploadSuccess: "Upload successful. இப்போது உங்கள் விவரங்களை உள்ளிடவும்.",
+    detailsAsk: "Art விவரங்களை உள்ளிடவும்",
+    detailsSubmit: "விவரங்களை submit செய்யவும்",
+    detailsSaved: "இந்த விவரங்கள் சரியா?",
+    yesSure: "ஆம், sure",
+    updateButton: "Update",
+    summaryTitle: "Summary check செய்யவும்",
+    okButton: "OK",
+    uploadArt: "Art image upload செய்யவும்",
+    uploadRequired: "Submit செய்வதற்கு முன் art image upload செய்யவும்.",
+    textPlaceholder: "சிறிய note type செய்யவும்",
+    disabledPlaceholder: "முதலில் விவரங்களை submit செய்யவும்",
+    send: "Enter",
+    artUploaded: "Submitted art",
+    thanks: "நன்றி!",
+    checking: "Available slots check செய்கிறோம்",
+    greatNews: "Great News",
+    date: "Date",
+    time: "Time",
+    channel: "Channel",
+    timeValue: "07:30 PM (Evening Slot)",
+    channelValue: "A Plus Kids",
+    finalThanks:
+      "உங்கள் art submit செய்ததற்கு நன்றி. உங்கள் art review செய்யப்பட்டு expected TV display slot இங்கே காட்டப்படும்.",
+    menuDelete: "அனைத்தையும் delete செய்யவும்",
+    menuRefresh: "Refresh செய்யவும்",
+    menuDownload: "Summary PDF Download",
+    menuLocked: "Final submit பிறகு available",
+    fullName: "முழு பெயர்",
+    city: "நகரம்",
+    mobile: "மொபைல் எண்",
+    school: "பள்ளி",
+    age: "வயது",
+    topic: "Art topic",
+    required: "இந்த field அவசியம்.",
+    mobileError: "10 எண்கள் சேர்க்கவும்.",
+    ageError: "சரியான வயது உள்ளிடவும்.",
+  },
+};
+const textOnlyFields: DetailId[] = ["fullName", "city", "school"];
+const numberOnlyFields: DetailId[] = ["mobile", "age"];
 const multilineFields: DetailId[] = ["topic"];
+const detailFieldOrder: DetailId[] = ["fullName", "age", "school", "city", "mobile", "topic"];
 
 // Bot bubble: same chat language as Birthday, with KidsChamp-specific content.
 function BotBubble({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
@@ -236,7 +398,7 @@ export default function KidsChamp() {
     sentImages: [],
   });
 
-  const t = copy[language];
+  const t = localizedCopy[language];
   const slotDate = useMemo(() => {
     const today = new Date();
     return formatSlotDate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 14));
@@ -272,13 +434,15 @@ export default function KidsChamp() {
     };
   }, []);
 
-  // Input filter: name/city are text-only, phone fields are digits-only.
+  // Input filter: name/city/school are text-only, mobile is 10 digits, age is 2 digits.
   const updateDetail = (id: DetailId, value: string) => {
     const nextValue = textOnlyFields.includes(id)
       ? value.replace(/[0-9]/g, "")
-      : numberOnlyFields.includes(id)
-        ? value.replace(/\D/g, "").slice(0, 10)
-        : value;
+      : id === "age"
+        ? value.replace(/\D/g, "").slice(0, 2)
+        : numberOnlyFields.includes(id)
+          ? value.replace(/\D/g, "").slice(0, 10)
+          : value;
 
     setDetails((current) => ({ ...current, [id]: nextValue }));
     setDetailsSubmitted(false);
@@ -295,13 +459,13 @@ export default function KidsChamp() {
       if (!details[id].trim()) errors[id] = t.required;
     });
 
-    if (details.mobile.trim() && details.mobile.trim().length < 9) {
+    if (details.mobile.trim() && details.mobile.trim().length !== 10) {
       errors.mobile = t.mobileError;
     }
-    if (details.schoolPhone.trim() && details.schoolPhone.trim().length < 9) {
-      errors.schoolPhone = t.mobileError;
-    }
 
+    if (details.age.trim() && Number(details.age) < 1) {
+      errors.age = t.ageError;
+    }
     setDetailErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -381,6 +545,59 @@ export default function KidsChamp() {
       current.forEach((image) => URL.revokeObjectURL(image.url));
       return [];
     });
+  };
+
+  // Real PDF summary download for Kids Champ final submissions.
+  const downloadSummaryPdf = () => {
+    if (!submissionComplete) return;
+
+    const doc = new jsPDF();
+    const rows = [
+      ["Full name", details.fullName || "-"],
+      ["Age", details.age || "-"],
+      ["School", details.school || "-"],
+      ["City", details.city || "-"],
+      ["Mobile number", details.mobile || "-"],
+      ["Topic of art", details.topic || "-"],
+      ["Submitted art images", sentArtImages.map((image) => image.name).join(", ") || "-"],
+      ["Slot date", slotDate],
+      ["Slot time", t.timeValue],
+      ["Channel", t.channelValue],
+    ];
+
+    doc.setFillColor(232, 248, 255);
+    doc.rect(0, 0, 210, 34, "F");
+    doc.setTextColor(16, 39, 93);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.text("A Plus Kids Champ Summary", 16, 22);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(90, 111, 149);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 16, 42);
+
+    let y = 56;
+    rows.forEach(([label, value]) => {
+      const valueLines = doc.splitTextToSize(value, 115);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(16, 39, 93);
+      doc.text(`${label}:`, 16, y);
+
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(35, 60, 114);
+      doc.text(valueLines, 66, y);
+
+      y += Math.max(10, valueLines.length * 6 + 4);
+      if (y > 275) {
+        doc.addPage();
+        y = 20;
+      }
+    });
+
+    doc.save("a-plus-kids-champ-summary.pdf");
   };
 
   const goBack = () => {
@@ -472,6 +689,15 @@ export default function KidsChamp() {
                 >
                   {t.menuRefresh}
                 </button>
+                <button
+                  type="button"
+                  onClick={downloadSummaryPdf}
+                  disabled={!submissionComplete}
+                  className="block w-full rounded-2xl px-4 py-3 text-left transition hover:bg-[#e8f8ff] disabled:cursor-not-allowed disabled:text-[#8aa5bd]"
+                  title={!submissionComplete ? t.menuLocked : undefined}
+                >
+                  {t.menuDownload}
+                </button>
               </div>
             )}
           </div>
@@ -502,7 +728,7 @@ export default function KidsChamp() {
                       language === tab ? "bg-[#31aee4] text-white shadow-sm" : "text-[#5f7b99] hover:bg-white"
                     }`}
                   >
-                    {copy[tab].langLabel}
+                    {localizedCopy[tab].langLabel}
                   </button>
                 ))}
               </div>
@@ -521,6 +747,7 @@ export default function KidsChamp() {
             {!submissionComplete && (
               <BotBubble wide>
                 <h2 className="mb-3 text-lg font-black">{t.uploadAsk}</h2>
+                <p className="mb-3 text-sm font-bold leading-6 text-[#527392]">{t.uploadHint}</p>
                 <div className="flex flex-wrap items-center gap-3 rounded-3xl border border-dashed border-[#75c8ee] bg-white/65 p-4">
                   {artImages.map((image) => (
                     <div key={image.id} className="group relative h-20 w-20 shrink-0">
@@ -567,7 +794,7 @@ export default function KidsChamp() {
               <BotBubble wide>
                 <h2 className="mb-4 text-lg font-black">{t.detailsAsk}</h2>
                 <div className="grid gap-3 md:grid-cols-2">
-                  {(Object.keys(emptyDetails) as DetailId[]).map((id) => (
+                  {detailFieldOrder.map((id) => (
                     <label key={id} className={multilineFields.includes(id) ? "md:col-span-2" : ""}>
                       <span className="mb-1 block text-xs font-black uppercase tracking-[0.06em] text-[#5a7b9c]">
                         {t[id]}
@@ -587,7 +814,7 @@ export default function KidsChamp() {
                           onChange={(event) => updateDetail(id, event.target.value)}
                           inputMode={numberOnlyFields.includes(id) ? "numeric" : "text"}
                           pattern={numberOnlyFields.includes(id) ? "[0-9]*" : undefined}
-                          maxLength={numberOnlyFields.includes(id) ? 10 : undefined}
+                          maxLength={id === "age" ? 2 : numberOnlyFields.includes(id) ? 10 : undefined}
                           className={`min-h-12 w-full rounded-2xl border bg-[#f6fcff] px-4 text-sm font-black text-[#10275d] outline-none transition focus:bg-white ${
                             detailErrors[id] ? "border-[#ff5b6e]" : "border-[#cbe6f5] focus:border-[#31aee4]"
                           }`}
@@ -729,13 +956,26 @@ export default function KidsChamp() {
         <div className="fixed inset-0 z-[100] grid place-items-center bg-[#0b2c73]/35 p-4 backdrop-blur-sm">
           <div className="w-full max-w-xl rounded-[28px] border border-white/80 bg-white/90 p-6 shadow-[0_30px_80px_rgba(8,33,93,0.25)] backdrop-blur-2xl">
             <h2 className="mb-4 text-xl font-black text-[#10275d]">{t.summaryTitle}</h2>
-            <div className="grid gap-2 text-sm font-bold text-[#10275d]">
-              <p>{t.fullName}: {details.fullName}</p>
-              <p>{t.city}: {details.city}</p>
-              <p>{t.mobile}: {details.mobile}</p>
-              <p>{t.schoolPhone}: {details.schoolPhone}</p>
-              <p>{t.topic}: {details.topic}</p>
-              <p>{t.artUploaded}: {artImages.length}</p>
+            <div className="grid gap-3 text-sm font-bold text-[#10275d] sm:grid-cols-2">
+              {[
+                [t.fullName, details.fullName],
+                [t.age, details.age],
+                [t.school, details.school],
+                [t.city, details.city],
+                [t.mobile, details.mobile],
+                [t.topic, details.topic],
+                [t.artUploaded, String(artImages.length)],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  className={`rounded-2xl border border-[#d7effa] bg-[#f5fbff] px-4 py-3 ${
+                    label === t.topic ? "sm:col-span-2" : ""
+                  }`}
+                >
+                  <p className="text-[11px] font-black uppercase tracking-[0.06em] text-[#5a7b9c]">{label}</p>
+                  <p className="mt-1 break-words text-sm font-black text-[#10275d]">{value}</p>
+                </div>
+              ))}
             </div>
             <button
               type="button"

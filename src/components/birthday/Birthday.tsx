@@ -3,6 +3,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import Image from "next/image";
+import { jsPDF } from "jspdf";
 import {
   ChangeEvent,
   FormEvent,
@@ -18,6 +19,7 @@ type DetailId = "fullName" | "age" | "city" | "phoneOne" | "phoneTwo";
 type PaymentMode = "slip" | "online" | "";
 
 type Details = Record<DetailId, string>;
+type DetailErrors = Partial<Record<DetailId, string>>;
 
 type PreviewFile = {
   id: string;
@@ -90,7 +92,7 @@ const copy = {
     submit: "Submit",
     summaryTitle: "Check summary",
     finalThanks:
-      "Thank you. Your birthday details are ready. We will connect database and payment saving later.",
+      "Thank you. Your birthday details are ready. ",
     menuDelete: "Delete all",
     menuRefresh: "Refresh",
     menuDownload: "Download summary PDF",
@@ -100,6 +102,7 @@ const copy = {
     city: "City",
     phoneOne: "Phone number 1",
     phoneTwo: "Phone number 2",
+    phoneLengthError: "Add 10 numbers.",
   },
   sinhala: {
     langLabel: "සිංහල",
@@ -131,7 +134,7 @@ const copy = {
     submit: "Submit",
     summaryTitle: "Summary එක check කරන්න",
     finalThanks:
-      "ස්තුතියි. ඔබගේ birthday details සූදානම්. Database සහ payment saving පසුව connect කරනවා.",
+      "ස්තුතියි. ඔබගේ birthday details සූදානම්.",
     menuDelete: "සියල්ල Delete කරන්න",
     menuRefresh: "Refresh කරන්න",
     menuDownload: "Summary PDF Download",
@@ -141,6 +144,7 @@ const copy = {
     city: "නගරය",
     phoneOne: "දුරකථන අංකය 1",
     phoneTwo: "දුරකථන අංකය 2",
+    phoneLengthError: "අංක 10ක් ඇතුළත් කරන්න.",
   },
   tamil: {
     langLabel: "தமிழ்",
@@ -172,7 +176,7 @@ const copy = {
     submit: "Submit",
     summaryTitle: "Summary check செய்யவும்",
     finalThanks:
-      "நன்றி. உங்கள் birthday details தயார். Database மற்றும் payment saving பின்னர் connect செய்யப்படும்.",
+      "நன்றி. உங்கள் birthday details தயார்.",
     menuDelete: "அனைத்தையும் Delete செய்யவும்",
     menuRefresh: "Refresh செய்யவும்",
     menuDownload: "Summary PDF Download",
@@ -182,6 +186,7 @@ const copy = {
     city: "நகரம்",
     phoneOne: "தொலைபேசி எண் 1",
     phoneTwo: "தொலைபேசி எண் 2",
+    phoneLengthError: "10 எண்கள் சேர்க்கவும்.",
   },
 };
 
@@ -227,6 +232,7 @@ export default function Birthday() {
   const [selectedDate, setSelectedDate] = useState<SelectedBirthdayDate | null>(null);
   const [confirmedDate, setConfirmedDate] = useState("");
   const [details, setDetails] = useState<Details>(emptyDetails);
+  const [detailErrors, setDetailErrors] = useState<DetailErrors>({});
   const [detailsSubmitted, setDetailsSubmitted] = useState(false);
   const [chatText, setChatText] = useState("");
   const [sentChatText, setSentChatText] = useState("");
@@ -309,6 +315,7 @@ export default function Birthday() {
     [details],
   );
   const canTypeMessage = Boolean(confirmedDate) && detailsSubmitted;
+  const canSubmitMessage = canTypeMessage && childImages.length > 0;
   const canShowPayment = canTypeMessage && messageSent;
   const canSubmitSlip = paymentMode === "slip" && Boolean(slipImage);
 
@@ -374,6 +381,7 @@ export default function Birthday() {
 
     setDetails((current) => ({ ...current, [id]: nextValue }));
     setDetailsSubmitted(false);
+    setDetailErrors((current) => ({ ...current, [id]: undefined }));
   };
 
   // Reset keeps the conversation fresh without touching other pages.
@@ -382,6 +390,7 @@ export default function Birthday() {
     setSelectedDate(null);
     setConfirmedDate("");
     setDetails(emptyDetails);
+    setDetailErrors({});
     setDetailsSubmitted(false);
     setChatText("");
     setSentChatText("");
@@ -410,7 +419,14 @@ export default function Birthday() {
   };
 
   const submitDetails = () => {
-    if (!detailsComplete) return;
+    const errors: DetailErrors = {};
+
+    if (details.phoneOne.length !== 10) errors.phoneOne = t.phoneLengthError;
+    if (details.phoneTwo.length !== 10) errors.phoneTwo = t.phoneLengthError;
+
+    setDetailErrors(errors);
+    if (!detailsComplete || Object.keys(errors).length > 0) return;
+
     setDetailsSubmitted(true);
   };
 
@@ -457,9 +473,17 @@ export default function Birthday() {
     event.target.value = "";
   };
 
+  // Payment slip remove button: clears preview and hides final submit until a new slip is uploaded.
+  const removeSlipImage = () => {
+    setSlipImage((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return null;
+    });
+  };
+
   const handleMessageSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canTypeMessage || (!chatText.trim() && childImages.length === 0)) return;
+    if (!canSubmitMessage) return;
 
     // Send the draft message into the chat, then clear the type area.
     setSentChatText(chatText.trim());
@@ -472,30 +496,56 @@ export default function Birthday() {
     setMessageSent(true);
   };
 
-  // This creates a simple downloadable summary now; PDF/API can replace it later.
+  // Real PDF summary download. Keep this as jsPDF, not a fake PDF blob.
   const downloadSummaryPdf = () => {
     if (!finalSubmitted) return;
 
-    const summary = [
-      "A Plus Kids Birthday Summary",
-      `Birthday date: ${confirmedDate || "-"}`,
-      `Full name: ${details.fullName || "-"}`,
-      `Age: ${details.age || "-"}`,
-      `City: ${details.city || "-"}`,
-      `Phone number 1: ${details.phoneOne || "-"}`,
-      `Phone number 2: ${details.phoneTwo || "-"}`,
-      `Child photos: ${sentChildImages.map((image) => image.name).join(", ") || "-"}`,
-      `Payment: ${paymentMode || "-"}`,
-      `Slip: ${slipImage?.name || "-"}`,
-    ].join("\n");
+    const doc = new jsPDF();
+    const rows = [
+      ["Birthday date", confirmedDate || "-"],
+      ["Full name", details.fullName || "-"],
+      ["Age", details.age || "-"],
+      ["City", details.city || "-"],
+      ["Phone number 1", details.phoneOne || "-"],
+      ["Phone number 2", details.phoneTwo || "-"],
+      ["Child photos", sentChildImages.map((image) => image.name).join(", ") || "-"],
+      ["Payment", paymentMode || "-"],
+      ["Slip", slipImage?.name || "-"],
+    ];
 
-    const blob = new Blob([summary], { type: "application/pdf" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "a-plus-kids-birthday-summary.pdf";
-    link.click();
-    URL.revokeObjectURL(url);
+    doc.setFillColor(232, 248, 255);
+    doc.rect(0, 0, 210, 34, "F");
+    doc.setTextColor(16, 39, 93);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.text("A Plus Kids Birthday Summary", 16, 22);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(11);
+    doc.setTextColor(90, 111, 149);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 16, 42);
+
+    let y = 56;
+    rows.forEach(([label, value]) => {
+      const valueLines = doc.splitTextToSize(value, 115);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(16, 39, 93);
+      doc.text(`${label}:`, 16, y);
+
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(35, 60, 114);
+      doc.text(valueLines, 66, y);
+
+      y += Math.max(10, valueLines.length * 6 + 4);
+      if (y > 275) {
+        doc.addPage();
+        y = 20;
+      }
+    });
+
+    doc.save("a-plus-kids-birthday-summary.pdf");
   };
 
   // Chat header back action: works like a normal app back button.
@@ -736,8 +786,10 @@ export default function Birthday() {
                           onChange={(event) => updateDetail(id, event.target.value)}
                           inputMode={numberOnlyFields.includes(id) ? "numeric" : "text"}
                           pattern={numberOnlyFields.includes(id) ? "[0-9]*" : undefined}
-                          maxLength={id === "age" ? 2 : undefined}
-                          className="min-h-12 w-full rounded-2xl border border-[#cbe6f5] bg-[#f6fcff] px-4 text-sm font-black text-[#10275d] outline-none transition focus:border-[#31aee4] focus:bg-white"
+                          maxLength={id === "age" ? 2 : id === "phoneOne" || id === "phoneTwo" ? 10 : undefined}
+                          className={`min-h-12 w-full rounded-2xl border bg-[#f6fcff] px-4 text-sm font-black text-[#10275d] outline-none transition focus:bg-white ${
+                            detailErrors[id] ? "border-[#ff5b6e]" : "border-[#cbe6f5] focus:border-[#31aee4]"
+                          }`}
                         />
                         {id === "phoneTwo" && (
                           <button
@@ -750,6 +802,9 @@ export default function Birthday() {
                           </button>
                         )}
                       </div>
+                      {detailErrors[id] && (
+                        <span className="mt-1 block text-xs font-black text-[#ff4560]">{detailErrors[id]}</span>
+                      )}
                     </label>
                   ))}
                 </div>
@@ -757,8 +812,53 @@ export default function Birthday() {
             )}
 
             {detailsSubmitted && (
-              <BotBubble>
-                <p className="text-sm font-black leading-6">{t.detailsSaved}</p>
+              <>
+                <BotBubble>
+                  <p className="text-sm font-black leading-6">{t.detailsSaved}</p>
+                </BotBubble>
+                <UserBubble>
+                  <div className="grid gap-1 text-sm font-black leading-6">
+                    <p>{t.fullName}: {details.fullName}</p>
+                    <p>{t.age}: {details.age}</p>
+                    <p>{t.city}: {details.city}</p>
+                    <p>{t.phoneOne}: {details.phoneOne}</p>
+                    <p>{t.phoneTwo}: {details.phoneTwo}</p>
+                  </div>
+                </UserBubble>
+              </>
+            )}
+
+            {detailsSubmitted && !messageSent && (
+              <BotBubble wide>
+                <h2 className="mb-3 text-lg font-black">{t.uploadPhotos}</h2>
+                <p className="mb-4 text-sm font-bold leading-6 text-[#62839f]">{t.photoHint}</p>
+                <div className="flex flex-wrap items-center gap-3 rounded-3xl border border-dashed border-[#75c8ee] bg-white/65 p-4">
+                  {childImages.map((image) => (
+                    <div key={image.id} className="group relative h-20 w-20 shrink-0">
+                      <img src={image.url} alt={image.name} className="h-20 w-20 rounded-2xl object-cover shadow-sm" />
+                      <button
+                        type="button"
+                        onClick={() => removeDraftImage(image.id)}
+                        className="absolute -right-1 -top-1 z-10 grid h-6 w-6 place-items-center rounded-full border border-white bg-[#10275d] text-xs leading-none text-white shadow-sm transition hover:bg-[#31aee4]"
+                        aria-label={`Remove ${image.name}`}
+                      >
+                        x
+                      </button>
+                      <div className="pointer-events-none absolute left-0 top-full z-50 mt-3 hidden w-64 rounded-3xl border border-white/80 bg-white/78 p-3 shadow-[0_20px_50px_rgba(20,84,132,0.22)] backdrop-blur-2xl group-hover:block">
+                        <img src={image.url} alt="" className="max-h-64 w-full rounded-2xl object-contain" />
+                        <p className="mt-2 truncate text-xs font-black text-[#10275d]">{image.name}</p>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => childImageInputRef.current?.click()}
+                    className="grid h-20 w-20 shrink-0 place-items-center rounded-2xl border border-[#b9e2f6] bg-[#e8f8ff] text-4xl font-light leading-none text-[#31aee4] transition hover:bg-[#d6f3ff]"
+                    aria-label={t.uploadPhotos}
+                  >
+                    +
+                  </button>
+                </div>
               </BotBubble>
             )}
 
@@ -796,7 +896,10 @@ export default function Birthday() {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <button
                     type="button"
-                    onClick={() => setPaymentMode("slip")}
+                    onClick={() => {
+                      setPaymentMode("slip");
+                      slipInputRef.current?.click();
+                    }}
                     className={`rounded-3xl border p-5 text-left transition ${
                       paymentMode === "slip"
                         ? "border-[#31aee4] bg-[#e7f8ff]"
@@ -822,23 +925,26 @@ export default function Birthday() {
 
                 {paymentMode === "slip" && (
                   <div className="mt-4 rounded-3xl border border-dashed border-[#75c8ee] bg-white/72 p-4">
-                    <button
-                      type="button"
-                      onClick={() => slipInputRef.current?.click()}
-                      className="rounded-2xl bg-[#31aee4] px-5 py-3 text-sm font-black text-white transition hover:bg-[#229bd2]"
-                    >
-                      {t.uploadSlip}
-                    </button>
-                    {slipImage && (
+                    {slipImage ? (
                       <div className="group relative mt-4 w-44 overflow-visible">
                         <div className="aspect-[4/3] overflow-hidden rounded-2xl border border-white bg-white shadow-sm">
                           <img src={slipImage.url} alt={slipImage.name} className="h-full w-full object-cover" />
                         </div>
+                        <button
+                          type="button"
+                          onClick={removeSlipImage}
+                          className="absolute -right-2 -top-2 z-10 grid h-6 w-6 place-items-center rounded-full border border-white bg-[#10275d] text-xs leading-none text-white shadow-sm transition hover:bg-[#31aee4]"
+                          aria-label={`Remove ${slipImage.name}`}
+                        >
+                          x
+                        </button>
                         <div className="pointer-events-none absolute left-0 top-full z-30 mt-3 hidden w-72 rounded-3xl border border-white/80 bg-white/78 p-3 shadow-[0_20px_50px_rgba(20,84,132,0.22)] backdrop-blur-2xl group-hover:block">
                           <img src={slipImage.url} alt="" className="max-h-72 w-full rounded-2xl object-contain" />
                           <p className="mt-2 truncate text-xs font-black text-[#10275d]">{slipImage.name}</p>
                         </div>
                       </div>
+                    ) : (
+                      <p className="text-sm font-black text-[#62839f]">{t.uploadSlip}</p>
                     )}
                     {canSubmitSlip && (
                       <button
@@ -885,27 +991,6 @@ export default function Birthday() {
             +
           </button>
           <div className="min-w-0 flex-1">
-            {childImages.length > 0 && (
-              <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
-                {childImages.map((image) => (
-                  <div key={image.id} className="group relative h-12 w-12 shrink-0">
-                    <img src={image.url} alt={image.name} className="h-12 w-12 rounded-xl object-cover shadow-sm" />
-                    <button
-                      type="button"
-                      onClick={() => removeDraftImage(image.id)}
-                      className="absolute -right-1 -top-1 z-10 grid h-5 w-5 place-items-center rounded-full border border-white bg-[#10275d] text-xs leading-none text-white shadow-sm transition hover:bg-[#31aee4]"
-                      aria-label={`Remove ${image.name}`}
-                    >
-                      ×
-                    </button>
-                    <div className="pointer-events-none absolute bottom-14 left-0 z-50 hidden w-64 rounded-3xl border border-white/80 bg-white/78 p-3 shadow-[0_20px_50px_rgba(20,84,132,0.22)] backdrop-blur-2xl group-hover:block">
-                      <img src={image.url} alt="" className="max-h-64 w-full rounded-2xl object-contain" />
-                      <p className="mt-2 truncate text-xs font-black text-[#10275d]">{image.name}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
             <input
               value={chatText}
               onChange={(event) => setChatText(event.target.value)}
@@ -916,8 +1001,10 @@ export default function Birthday() {
           </div>
           <button
             type="submit"
-            disabled={!canTypeMessage || (!chatText.trim() && childImages.length === 0)}
-            className="h-12 shrink-0 rounded-full bg-[#bfe3f5] px-6 text-sm font-black text-white transition hover:bg-[#31aee4] disabled:cursor-not-allowed disabled:bg-[#d9edf7]"
+            disabled={!canSubmitMessage}
+            className={`h-12 shrink-0 rounded-full px-6 text-sm font-black text-white transition disabled:cursor-not-allowed ${
+              canSubmitMessage ? "bg-[#31aee4] shadow-sm hover:bg-[#229bd2]" : "bg-[#d9edf7]"
+            }`}
           >
             {t.send}
           </button>

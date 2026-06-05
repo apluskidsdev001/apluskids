@@ -50,7 +50,10 @@ function BirthdayIllustration() {
 
 export default function BirthdaySection() {
   return (
-    <section className="relative flex min-h-screen w-full items-center overflow-hidden bg-[#F5FBFF] px-4 py-14 sm:px-6 md:px-10 lg:px-16 xl:px-20">
+    <section
+      id="birthdays"
+      className="relative flex min-h-screen w-full scroll-mt-32 items-center overflow-hidden bg-[#F5FBFF] px-4 py-14 sm:px-6 md:px-10 lg:px-16 xl:px-20"
+    >
       <div className="pointer-events-none absolute left-[7%] top-[18%] h-3 w-3 rounded-full bg-[#FFD23F]/70" />
       <div className="pointer-events-none absolute left-[15%] bottom-[22%] h-4 w-4 rounded-full bg-[#13A8DF]/34" />
       <div className="pointer-events-none absolute right-[8%] top-[24%] h-5 w-5 rounded-full bg-[#F04B23]/20" />

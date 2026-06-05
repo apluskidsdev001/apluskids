@@ -2,34 +2,36 @@
 
 import { sitePath } from "@/utils/sitePath";
 import Image from "next/image";
-import { useState } from "react";
 
 const heroHighlight = [
   {
     label: "Birthdays",
     icon: "/icons/shortcuts/cake.png",
     alt: "Birthday cake icon",
+    target: "#birthdays",
   },
   {
     label: "Kids Champ",
     icon: "/icons/shortcuts/KidsChamp.png",
     alt: "Kids Champ icon",
+    target: "#kids-champ-section",
   },
   {
     label: "Events",
     icon: "/icons/shortcuts/gallery.png",
     alt: "Events gallery icon",
+    target: "#events",
   },
 ];
 
 const welcomeText = "Welcome to";
 
 export default function KidsZoneHero() {
-  const [activeChip, setActiveChip] = useState<string | null>(null);
-
-  function handleChipClick(chip: string) {
-    setActiveChip(null);
-    window.setTimeout(() => setActiveChip(chip), 0);
+  function scrollToSection(target: string) {
+    document.querySelector(target)?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
   }
 
   return (
@@ -75,18 +77,14 @@ export default function KidsZoneHero() {
 
             <div className="mt-7 flex flex-wrap gap-3 sm:gap-4">
               {heroHighlight.map((highlight) => (
-                <button
-                  type="button"
+                <a
                   key={highlight.label}
-                  onClick={() => handleChipClick(highlight.label)}
-                  onAnimationEnd={(event) => {
-                    if (event.animationName === "heroChipOneSpin") {
-                      setActiveChip(null);
-                    }
+                  href={highlight.target}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    scrollToSection(highlight.target);
                   }}
-                  className={`hero-chip relative inline-flex h-14 items-center justify-center gap-2 rounded-full bg-white/95 py-2 pl-2.5 pr-5 text-[15px] font-bold text-[#071B63] shadow-[0_12px_28px_rgba(7,27,99,0.12)] backdrop-blur-md transition-transform duration-200 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#13A8DF]/30 sm:h-[60px] sm:gap-3 sm:pr-6 sm:text-[16px] ${
-                    activeChip === highlight.label ? "hero-chip-one-spin" : ""
-                  }`}
+                  className="hero-chip relative inline-flex h-14 items-center justify-center gap-2 rounded-full bg-white/95 py-2 pl-2.5 pr-5 text-[15px] font-bold text-[#071B63] no-underline shadow-[0_12px_28px_rgba(7,27,99,0.12)] backdrop-blur-md transition duration-200 hover:-translate-y-0.5 hover:no-underline hover:shadow-[0_16px_34px_rgba(7,27,99,0.16)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#13A8DF]/30 sm:h-[60px] sm:gap-3 sm:pr-6 sm:text-[16px]"
                 >
                   <span className="relative z-10 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F7FCFF] shadow-[inset_0_0_0_1px_rgba(7,27,99,0.04)] sm:h-11 sm:w-11">
                     <Image
@@ -101,7 +99,7 @@ export default function KidsZoneHero() {
                   <span className="hero-chip-label relative z-10">
                     {highlight.label}
                   </span>
-                </button>
+                </a>
               ))}
             </div>
           </div>
@@ -178,12 +176,6 @@ export default function KidsZoneHero() {
           will-change: opacity, transform;
         }
 
-        .hero-chip-one-spin {
-          animation: heroChipOneSpin 560ms ease-in-out both;
-          transform-origin: center;
-          will-change: transform;
-        }
-
         .hero-chip-label {
           pointer-events: none;
           white-space: nowrap;
@@ -192,7 +184,6 @@ export default function KidsZoneHero() {
         @media (prefers-reduced-motion: reduce) {
           .hero-text-enter,
           .hero-visual-enter,
-          .hero-chip-one-spin,
           .welcome-letter,
           .kids-zone-title,
           .kids-zone-word::after {
@@ -259,16 +250,6 @@ export default function KidsZoneHero() {
           to {
             opacity: 1;
             transform: translate3d(0, 0, 0) scale(1);
-          }
-        }
-
-        @keyframes heroChipOneSpin {
-          0% {
-            transform: rotate(0deg);
-          }
-
-          100% {
-            transform: rotate(360deg);
           }
         }
       `}</style>
