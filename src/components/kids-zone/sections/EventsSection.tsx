@@ -15,7 +15,10 @@ const events = [
 
 export default function EventsSection() {
   return (
-    <section className="flex min-h-screen w-full items-center bg-white px-4 py-12 sm:px-6 md:px-10 lg:px-16 xl:px-20">
+    <section
+      id="events"
+      className="flex min-h-screen w-full scroll-mt-32 items-center bg-white px-4 py-12 sm:px-6 md:px-10 lg:px-16 xl:px-20"
+    >
       <div className="mx-auto w-full max-w-[1180px]">
         <div className="max-w-[760px]">
           <span className="text-[13px] font-bold uppercase tracking-[0.2em] text-[#F04B23]">

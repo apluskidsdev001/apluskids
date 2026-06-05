@@ -21,7 +21,10 @@ function ChampIllustration() {
 
 export default function KidsChampSection() {
   return (
-    <section className="relative flex min-h-screen w-full items-center overflow-hidden bg-white px-4 py-14 sm:px-6 md:px-10 lg:px-16 xl:px-20">
+    <section
+      id="kids-champ-section"
+      className="relative flex min-h-screen w-full scroll-mt-32 items-center overflow-hidden bg-white px-4 py-14 sm:px-6 md:px-10 lg:px-16 xl:px-20"
+    >
       <div className="pointer-events-none absolute left-[7%] top-[24%] h-3 w-3 rounded-full bg-[#FFD23F]/80" />
       <div className="pointer-events-none absolute left-[32%] bottom-[16%] h-2.5 w-2.5 rounded-full bg-[#13A8DF]/38" />
       <div className="pointer-events-none absolute left-[46%] top-[18%] h-2 w-9 rotate-12 rounded-full bg-[#FFD23F]/62" />
