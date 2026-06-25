@@ -1,7 +1,5 @@
+import Watch from "@/components/watch/Watch";
+
 export default function WatchPage() {
-  return (
-    <main>
-      <h1>Watch</h1>
-    </main>
-  );
+  return <Watch />;
 }
