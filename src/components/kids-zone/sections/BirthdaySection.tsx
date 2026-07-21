@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { sitePath } from "@/utils/sitePath";
+import type { ContentItem } from "@/components/admin/adminData";
 
 const birthdayChips = [
   {
@@ -48,7 +49,7 @@ function BirthdayIllustration() {
   );
 }
 
-export default function BirthdaySection() {
+export default function BirthdaySection({ content }: { content?: ContentItem }) {
   return (
     <section
       id="birthdays"
@@ -87,12 +88,10 @@ export default function BirthdaySection() {
             Birthday Wishes
           </span>
           <h2 className="mt-3 text-[42px] font-medium leading-[1.1] text-black sm:text-[56px] lg:text-[66px]">
-            Make Their
-            <br />
-            Day <span className="text-[#FFD23F]">Special!</span>
+            {content?.title || <><span>Make Their</span><br />Day <span className="text-[#FFD23F]">Special!</span></>}
           </h2>
           <p className="mt-5 max-w-[560px] text-[22px] font-medium leading-[1.32] text-black/78 sm:text-[26px]">
-            Send your birthday wishes and get featured on A+ Kids
+            {content?.description || "Send your birthday wishes and get featured on A+ Kids"}
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             {birthdayChips.map((chip) => (
@@ -114,10 +113,10 @@ export default function BirthdaySection() {
             ))}
           </div>
           <a
-            href="/birthdays"
+            href={content?.linkUrl || "/birthdays"}
             className="birthday-cta mt-9 inline-flex h-14 items-center gap-4 rounded-full bg-[#13A8DF] pl-7 pr-3 text-[21px] font-normal leading-none tracking-normal text-white no-underline shadow-[0_14px_28px_rgba(19,168,223,0.22)] transition-transform hover:scale-[1.03] hover:no-underline"
           >
-            Send Birthday
+            {content?.linkLabel || "Send Birthday"}
             <span
               aria-hidden="true"
               className="birthday-cta-arrow flex h-10 w-10 items-center justify-center rounded-full bg-[#071B63]"

@@ -13,7 +13,7 @@ const events = [
   },
 ];
 
-export default function EventsSection() {
+export default function EventsSection({ content }: { content?: ContentItem }) {
   return (
     <section
       id="events"
@@ -25,11 +25,11 @@ export default function EventsSection() {
             Explore
           </span>
           <h2 className="mt-4 text-[42px] font-bold leading-[1.05] text-[#071B63] sm:text-[54px] md:text-[62px] lg:text-[76px] xl:text-[86px]">
-            Events &
-            <br />
-            Memories
+            {content?.title || <><span>Events &</span><br />Memories</>}
           </h2>
         </div>
+
+        {content?.description ? <p className="mt-5 max-w-2xl text-[18px] font-medium leading-7 text-[#526382]">{content.description}</p> : null}
 
         <div className="mt-8 grid gap-4 sm:gap-5 md:grid-cols-3 lg:mt-12">
           {events.map((event) => (
@@ -51,3 +51,4 @@ export default function EventsSection() {
     </section>
   );
 }
+import type { ContentItem } from "@/components/admin/adminData";

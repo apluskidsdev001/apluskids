@@ -2,6 +2,7 @@
 
 import { sitePath } from "@/utils/sitePath";
 import Image from "next/image";
+import type { ContentItem } from "@/components/admin/adminData";
 
 const heroHighlight = [
   {
@@ -26,7 +27,7 @@ const heroHighlight = [
 
 const welcomeText = "Welcome to";
 
-export default function KidsZoneHero() {
+export default function KidsZoneHero({ content }: { content?: ContentItem }) {
   function scrollToSection(target: string) {
     document.querySelector(target)?.scrollIntoView({
       behavior: "smooth",
@@ -51,7 +52,7 @@ export default function KidsZoneHero() {
           <div>
             <h1 className="font-bold leading-[1.08] text-black">
               <span className="block text-[40px] sm:text-[48px] md:text-[55px] lg:text-[64px] xl:text-[70px]">
-                {welcomeText.split("").map((letter, index) => (
+                {(content?.title || welcomeText).split("").map((letter, index) => (
                   <span
                     key={`${letter}-${index}`}
                     className="welcome-letter inline-block"
@@ -71,8 +72,7 @@ export default function KidsZoneHero() {
             </h1>
 
             <p className="mt-5 max-w-[500px] text-[18px] font-semibold leading-[1.45] text-black sm:text-[20px] md:text-[17px] lg:text-[20px] xl:text-[23px]">
-              A safe and happy place for kids to celebrate, compete, explore
-              and create amazing memories
+              {content?.description || "A safe and happy place for kids to celebrate, compete, explore and create amazing memories"}
             </p>
 
             <div className="mt-7 flex flex-wrap gap-3 sm:gap-4">
