@@ -183,12 +183,11 @@ function getOverflowKeys(width: number) {
 
 export default function TaskBar() {
   const pathname = usePathname();
-  const [hidden, setHidden] = useState(false);
+  const isAdminPath = pathname.startsWith("/admin");
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [navWidth, setNavWidth] = useState(0);
   const navRef = useRef<HTMLElement>(null);
-  const lastScrollY = useRef(0);
 
   const overflowKeys = getOverflowKeys(navWidth);
   const visibleTabs = tabs.filter((tab) => !overflowKeys.includes(tab.key));
@@ -198,27 +197,6 @@ export default function TaskBar() {
   const mobileMenuIsActive = mobileMenuItems.some((item) =>
     isActivePath(pathname, item.href)
   );
-
-  useEffect(() => {
-    lastScrollY.current = window.scrollY;
-
-    function handleScroll() {
-      const currentScrollY = window.scrollY;
-      const scrollingDown = currentScrollY > lastScrollY.current;
-
-      if (currentScrollY < 24) {
-        setHidden(false);
-      } else {
-        setHidden(scrollingDown);
-      }
-
-      lastScrollY.current = currentScrollY;
-    }
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
-
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
 
   useEffect(() => {
     const nav = navRef.current;
@@ -241,12 +219,14 @@ export default function TaskBar() {
     return () => resizeObserver.disconnect();
   }, []);
 
+  if (isAdminPath) {
+    return null;
+  }
+
   return (
     <>
     <header
-      className={`fixed left-0 right-0 top-0 z-50 hidden bg-transparent px-5 py-4 transition-transform duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] laptop:block desktop:px-8 ${
-        hidden ? "-translate-y-full" : "translate-y-0"
-      }`}
+      className="fixed left-0 right-0 top-0 z-50 hidden bg-transparent px-5 py-4 laptop:block desktop:px-8"
     >
       <div className="relative mx-auto max-w-[1840px]">
         <div className="pointer-events-none absolute -inset-x-3 -bottom-6 top-5 rounded-[38px] bg-[linear-gradient(180deg,rgba(163,220,255,0.34),rgba(87,190,255,0.16)_58%,rgba(87,190,255,0))] blur-2xl" />

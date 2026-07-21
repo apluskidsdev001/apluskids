@@ -1,5 +1,9 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import type { ContentItem } from "@/components/admin/adminData";
+import { useAdminDisplayContent } from "@/components/admin/useAdminStorage";
 import { sitePath } from "@/utils/sitePath";
 
 const mapLink =
@@ -55,6 +59,21 @@ const contactItems = [
 const socials = ["f", "ig", "yt"];
 
 export default function Footer() {
+  const managedContent = useAdminDisplayContent<ContentItem[]>("aplus-admin-footer-content", "aplus-published-footer-content", []);
+  const hasManagedContent = managedContent.length > 0;
+  const activeContent = managedContent.filter((item) => item.active);
+  const brand = activeContent.find((item) => item.id === "brand" || item.section === "Brand");
+  const managedContacts = activeContent.filter((item) => item.section === "Contact");
+  const effectiveContacts = hasManagedContent
+    ? managedContacts.map((item) => ({
+        label: item.title,
+        href: item.linkUrl || "#",
+        icon: item.title.toLowerCase().includes("mail") ? "/images/footer/email.png" : item.title.toLowerCase().includes("location") ? "/images/footer/location.png" : "/images/footer/call.png",
+        text: item.description,
+      }))
+    : contactItems;
+  const managedSocials = activeContent.filter((item) => item.section === "Social");
+
   return (
     <footer
       id="site-footer"
@@ -76,8 +95,7 @@ export default function Footer() {
             />
 
             <p className="mt-4 max-w-[330px] text-[13px] font-medium leading-[1.7] text-[#435A84] sm:text-[14px] lg:text-[15px]">
-              A happy kids TV space for songs, stories, learning moments, and
-              bright little smiles.
+              {hasManagedContent ? (brand?.description ?? "") : "A happy kids TV space for songs, stories, learning moments, and bright little smiles."}
             </p>
           </div>
 
@@ -114,7 +132,7 @@ export default function Footer() {
           </h2>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {contactItems.map((item) => (
+            {effectiveContacts.map((item) => (
               <Link
                 key={item.label}
                 href={item.href}
@@ -145,10 +163,10 @@ export default function Footer() {
           </p>
 
           <div className="flex gap-2">
-            {socials.map((item) => (
+            {(hasManagedContent ? managedSocials.map((item) => item.linkLabel || item.title) : socials).map((item) => (
               <Link
                 key={item}
-                href="#"
+                href={managedSocials.find((social) => (social.linkLabel || social.title) === item)?.linkUrl || "#"}
                 aria-label={item}
                 className="flex h-9 w-9 items-center justify-center rounded-full border border-[#D7ECFA] bg-white/80 text-[11px] font-bold uppercase text-[#071B63] transition-colors hover:bg-[#FFE36E]"
               >

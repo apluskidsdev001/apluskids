@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import Footer from "./Footer";
 
-const hiddenFooterPaths = ["/birthdays", "/kids-champ"];
+const hiddenFooterPaths = ["/birthdays", "/kids-champ", "/admin"];
 
 export default function AppFooter() {
   const pathname = usePathname();
