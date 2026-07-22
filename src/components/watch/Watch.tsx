@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import AdvertisementBanner from "@/components/Advertisements/AdvertisementBox";
 import ScrollRevealObserver from "@/components/animations/ScrollRevealObserver";
-import type { AdminCategory, AdminVideo } from "@/components/admin/adminData";
+import type { AdminCategory, AdminVideo, WeeklySchedule } from "@/components/admin/adminData";
 import { useAdminDisplayContent } from "@/components/admin/useAdminStorage";
 import { sitePath } from "@/utils/sitePath";
 
@@ -297,9 +297,10 @@ export default function Watch() {
   const managedCategories = useAdminDisplayContent<AdminCategory[]>("aplus-admin-watch-categories", "aplus-published-watch-categories", []);
   const managedVideos = useAdminDisplayContent<AdminVideo[]>("aplus-admin-watch-videos", "aplus-published-watch-videos", []);
   const watchCopy = useAdminDisplayContent("aplus-admin-watch-copy", "aplus-published-watch-copy", defaultWatchCopy);
+  const managedSchedule = useAdminDisplayContent<WeeklySchedule | null>("aplus-admin-watch-schedule", "aplus-published-watch-schedule", null);
   const weekDates = useMemo(() => getWeekDates(), []);
   const todayName = getTodayName();
-  const activeSchedule = weeklySchedule[activeDay];
+  const activeSchedule = managedSchedule?.[activeDay] ?? weeklySchedule[activeDay];
   const normalizedSearch = searchTerm.trim().toLowerCase();
   const effectiveCategories = managedCategories.length
     ? [{ name: "All" as CategoryName, icon: "/icons/taskbar/play.png" }, ...managedCategories.filter((category) => category.active && category.name !== "All").map((category) => ({ name: category.name as CategoryName, icon: category.icon }))]

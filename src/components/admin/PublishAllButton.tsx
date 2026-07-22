@@ -11,6 +11,7 @@ export default function PublishAllButton() {
       { draft: "aplus-admin-watch-categories", published: "aplus-published-watch-categories" },
       { draft: "aplus-admin-watch-videos", published: "aplus-published-watch-videos" },
       { draft: "aplus-admin-watch-copy", published: "aplus-published-watch-copy" },
+      { draft: "aplus-admin-watch-schedule", published: "aplus-published-watch-schedule" },
       { draft: "aplus-admin-kids-zone-content", published: "aplus-published-kids-zone-content" },
       { draft: "aplus-admin-footer-content", published: "aplus-published-footer-content" },
     ]);
