@@ -24,6 +24,33 @@ export type ContentItem = {
   active: boolean;
 };
 
+export type ScheduleDayName = "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday" | "Sunday";
+
+export type ScheduleEntry = {
+  id: string;
+  time: string;
+  title: string;
+};
+
+export type WeeklySchedule = Record<ScheduleDayName, ScheduleEntry[]>;
+
+const defaultScheduleRows: ScheduleEntry[] = [
+  ["06.00", "Rhyme Doo"], ["07.00", "A Plus Kids House"], ["07.30", "Plus Toon"],
+  ["08.00", "A Plus Radio"], ["08.30", "Ekomath Eka Kaleka"], ["09.00", "Chat with LM"],
+  ["10.00", "Kids Champ"], ["10.30", "DP - Art"], ["11.00", "Uncle Toy"], ["11.30", "O2"],
+  ["12.00", "Rhyme Doo"], ["13.00", "A Plus Kids House"], ["13.30", "Plus Toon"],
+  ["14.00", "Chat with LM"], ["15.00", "Kids Champ"], ["15.30", "Ekomath Eka Kaleka"],
+  ["16.00", "Uncle Toy"], ["16.30", "O2"], ["17.00", "A Plus Radio"], ["17.30", "Rhyme Doo"],
+  ["18.30", "A Plus Kids House"], ["19.00", "Kids Champ"], ["19.30", "O2"],
+  ["20.00", "Chat with LM"], ["21.00", "A Plus Radio"], ["22.30", "DP - Art"], ["23.00", "Uncle Toy"],
+].map(([time, title], index) => ({ id: `slot-${index + 1}`, time, title }));
+
+export const scheduleDayNames: ScheduleDayName[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+
+export const defaultWeeklySchedule = Object.fromEntries(
+  scheduleDayNames.map((day) => [day, defaultScheduleRows.map((row) => ({ ...row, id: `${day.toLowerCase()}-${row.id}` }))]),
+) as WeeklySchedule;
+
 export const defaultCategories: AdminCategory[] = [
   { id: "stories", name: "Stories", icon: "📚", active: true },
   { id: "education", name: "Education", icon: "🎓", active: true },

@@ -15,7 +15,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div className="min-h-screen bg-[#F3F6FA] font-sans text-[#17243D]">
+    <div className="min-h-screen bg-[#F3F6FA] text-[#17243D]">
       <aside className="fixed inset-y-0 left-0 z-50 hidden w-[260px] border-r border-[#DFE6EF] bg-[#102A56] px-4 py-6 text-white laptop:flex laptop:flex-col">
         <Link href="/admin" className="px-3 text-[21px] font-semibold tracking-[-0.02em]">
           A Plus Admin
