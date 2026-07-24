@@ -120,6 +120,10 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+function staticPageHref(href: string) {
+  return sitePath(href === "/" ? "/" : `${href}/`);
+}
+
 function TaskIcon({
   src,
   alt,
@@ -183,7 +187,10 @@ function getOverflowKeys(width: number) {
 
 export default function TaskBar() {
   const pathname = usePathname();
-  const isAdminPath = pathname.startsWith("/admin");
+  const isHiddenPath =
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/register");
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [navWidth, setNavWidth] = useState(0);
@@ -219,7 +226,7 @@ export default function TaskBar() {
     return () => resizeObserver.disconnect();
   }, []);
 
-  if (isAdminPath) {
+  if (isHiddenPath) {
     return null;
   }
 
@@ -350,9 +357,9 @@ export default function TaskBar() {
                     const active = isActivePath(pathname, item.href);
 
                     return (
-                      <Link
+                      <a
                         key={item.key}
-                        href={item.href}
+                        href={staticPageHref(item.href)}
                         onClick={() => setMenuOpen(false)}
                         className={`flex h-12 items-center gap-3 rounded-[18px] px-3 text-[14px] font-medium transition-colors ${
                           active
@@ -366,7 +373,7 @@ export default function TaskBar() {
                           className="h-7 w-7"
                         />
                         <span>{item.label}</span>
-                      </Link>
+                      </a>
                     );
                   })}
                 </div>
@@ -439,9 +446,9 @@ export default function TaskBar() {
               const active = isActivePath(pathname, item.href);
 
               return (
-                <Link
+                <a
                   key={`${item.href}-${item.label}`}
-                  href={item.href}
+                  href={staticPageHref(item.href)}
                   onClick={() => setMobileMenuOpen(false)}
                   className={`flex h-11 items-center gap-3 rounded-[16px] px-3 text-[13px] font-medium ${
                     active ? "bg-[#0877ef] text-white" : "hover:bg-[#eaf6ff]"
@@ -449,7 +456,7 @@ export default function TaskBar() {
                 >
                   <TaskIcon src={item.icon} alt="" className="h-6 w-6" />
                   <span>{item.label}</span>
-                </Link>
+                </a>
               );
             })}
           </div>
