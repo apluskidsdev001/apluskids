@@ -1,0 +1,86 @@
+import { backendFetch } from "@/utils/backendActivity";
+
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081").replace(/\/$/, "");
+
+function getAccessToken() {
+  return window.sessionStorage.getItem("aplus-access-token")
+    || window.localStorage.getItem("aplus-access-token");
+}
+
+function saveAccessToken(token: string) {
+  const storage = window.localStorage.getItem("aplus-access-token")
+    ? window.localStorage
+    : window.sessionStorage;
+  storage.setItem("aplus-access-token", token);
+}
+
+export function clearAuthStorage() {
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    storage.removeItem("aplus-access-token");
+    storage.removeItem("aplus-current-user");
+  }
+}
+
+async function refreshAccessToken() {
+  const response = await backendFetch(`${API_BASE_URL}/api/v1/auth/refresh`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) {
+    clearAuthStorage();
+    return null;
+  }
+  const result = (await response.json()) as { accessToken: string };
+  saveAccessToken(result.accessToken);
+  return result.accessToken;
+}
+
+export async function apiFetch(path: string, init: RequestInit = {}) {
+  let token = getAccessToken();
+  if (!token) token = await refreshAccessToken();
+
+  const isFormData = typeof FormData !== "undefined" && init.body instanceof FormData;
+  const request = (accessToken: string | null) => backendFetch(`${API_BASE_URL}${path}`, {
+    ...init,
+    credentials: "include",
+    headers: {
+      ...(init.body && !isFormData ? { "Content-Type": "application/json" } : {}),
+      ...init.headers,
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+  });
+
+  let response = await request(token);
+  if (response.status === 401) {
+    token = await refreshAccessToken();
+    if (token) response = await request(token);
+  }
+  return response;
+}
+
+export async function logout() {
+  try {
+    await backendFetch(`${API_BASE_URL}/api/v1/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+  } finally {
+    clearAuthStorage();
+  }
+}
+
+export async function reauthenticate(login: string, password: string) {
+  const response = await backendFetch(`${API_BASE_URL}/api/v1/auth/login`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ login, password, rememberMe: Boolean(window.localStorage.getItem("aplus-access-token")) }),
+  });
+  if (!response.ok) {
+    clearAuthStorage();
+    return false;
+  }
+  const result = await response.json() as { accessToken: string };
+  saveAccessToken(result.accessToken);
+  return true;
+}

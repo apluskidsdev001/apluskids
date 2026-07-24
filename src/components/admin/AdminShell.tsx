@@ -8,6 +8,7 @@ const navItems = [
   { href: "/admin", label: "Dashboard", icon: "⌂" },
   { href: "/admin/watch", label: "Watch Page", icon: "▶" },
   { href: "/admin/kids-zone", label: "Kids Zone", icon: "★" },
+  { href: "/admin/kids-champ", label: "Kids Champ", icon: "KC" },
   { href: "/admin/footer", label: "Footer", icon: "▤" },
 ];
 
