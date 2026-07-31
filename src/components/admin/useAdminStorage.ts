@@ -7,14 +7,18 @@ export function useAdminStorage<T>(key: string, initialValue: T) {
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(key);
-      if (saved) setValue(JSON.parse(saved) as T);
-    } catch {
-      // Keep the safe defaults when browser storage is unavailable or invalid.
-    } finally {
-      setReady(true);
-    }
+    const timer = window.setTimeout(() => {
+      try {
+        const saved = window.localStorage.getItem(key);
+        if (saved) setValue(JSON.parse(saved) as T);
+      } catch {
+        // Keep the safe defaults when browser storage is unavailable or invalid.
+      } finally {
+        setReady(true);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(timer);
   }, [key]);
 
   useEffect(() => {
