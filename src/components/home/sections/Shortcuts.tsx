@@ -28,35 +28,35 @@ const shortcuts = [
 
 export default function Shortcuts() {
   return (
-    <section className="w-full bg-white px-5 pb-7 pt-2 md:px-8 md:pb-12">
-      <div className="mx-auto grid max-w-[1720px] items-start gap-10 lg:grid-cols-[max-content_536px] lg:justify-center lg:gap-24">
-        <div>
+    <section className="w-full overflow-x-clip bg-white px-5 pb-7 pt-2 tablet:px-8 tablet:pb-12">
+      <div className="mx-auto grid w-full max-w-[1720px] min-w-0 items-start gap-8 desktop:grid-cols-[minmax(0,1fr)_minmax(480px,536px)] desktop:gap-10 monitor:gap-14">
+        <div className="min-w-0">
           <div data-scroll-reveal="slide-right" className="flex items-center justify-between">
-            <h2 className="text-[20px] font-bold leading-none tracking-normal text-[#071B63] md:text-[28px]">
+            <h2 className="text-[20px] font-bold leading-none tracking-normal text-[#071B63] tablet:text-[28px]">
               Shortcuts
             </h2>
-            <Link href="/watch" className="text-[13px] font-bold text-[#0077ff] md:hidden">
+            <Link href="/watch" className="text-[13px] font-bold text-[#0077ff] tablet:hidden">
               View All
             </Link>
           </div>
 
-          <div className="mt-5 grid grid-cols-4 gap-2 sm:gap-4 md:mt-8 lg:ml-14 lg:flex lg:gap-10">
+          <div className="mt-5 grid grid-cols-2 gap-3 tablet:mt-8 tablet:grid-cols-4 tablet:gap-4 desktop:gap-5 monitor:gap-8">
             {shortcuts.map((shortcut, index) => (
               <Link
                 key={shortcut.label}
                 href={shortcut.href}
                 data-scroll-reveal="pop"
                 style={{ "--reveal-delay": `${index * 70}ms` } as CSSProperties}
-                className="group flex h-[112px] min-w-0 flex-col items-center justify-center rounded-[14px] border border-white/80 bg-[linear-gradient(145deg,rgba(255,255,255,0.96),rgba(241,247,255,0.88))] px-2 shadow-[0_12px_28px_rgba(7,27,99,0.08),inset_0_1px_0_rgba(255,255,255,0.95)] transition-transform duration-300 hover:-translate-y-1 hover:shadow-[0_22px_48px_rgba(7,27,99,0.12),inset_0_1px_0_rgba(255,255,255,0.95)] md:h-[150px] md:rounded-[24px] md:px-4 lg:h-[250px] lg:w-[200px] lg:rounded-[30px]"
+                className="group flex h-[112px] min-w-0 flex-col items-center justify-center rounded-[14px] border border-white/80 bg-[linear-gradient(145deg,rgba(255,255,255,0.96),rgba(241,247,255,0.88))] px-2 shadow-[0_12px_28px_rgba(7,27,99,0.08),inset_0_1px_0_rgba(255,255,255,0.95)] transition-transform duration-300 hover:-translate-y-1 hover:shadow-[0_22px_48px_rgba(7,27,99,0.12),inset_0_1px_0_rgba(255,255,255,0.95)] tablet:h-[150px] tablet:rounded-[24px] tablet:px-4 desktop:h-[220px] desktop:w-full monitor:h-[250px] monitor:rounded-[30px]"
               >
                 <Image
                   src={sitePath(shortcut.icon)}
                   alt=""
                   width={78}
                   height={78}
-                  className="h-[42px] w-[42px] object-contain transition-transform duration-300 group-hover:scale-105 md:h-[68px] md:w-[68px] lg:h-[96px] lg:w-[96px]"
+                  className="h-[42px] w-[42px] object-contain transition-transform duration-300 group-hover:scale-105 tablet:h-[68px] tablet:w-[68px] desktop:h-[82px] desktop:w-[82px] monitor:h-[96px] monitor:w-[96px]"
                 />
-                <span className="mt-3 text-center text-[12px] font-bold leading-tight text-[#071B63] md:mt-4 md:text-[16px] lg:mt-7 lg:text-[22px]">
+                <span className="mt-3 text-center text-[12px] font-bold leading-tight text-[#071B63] tablet:mt-4 tablet:text-[16px] desktop:mt-6 desktop:text-[19px] monitor:mt-7 monitor:text-[22px]">
                   {shortcut.label}
                 </span>
               </Link>
@@ -67,7 +67,7 @@ export default function Shortcuts() {
         <aside
           data-scroll-reveal="slide-left"
           style={{ "--reveal-delay": "220ms" } as CSSProperties}
-          className="relative hidden h-[350px] overflow-hidden rounded-[42px] bg-[#0C84E8] px-11 py-12 text-white shadow-[0_24px_54px_rgba(12,132,232,0.24)] lg:mt-[60px] lg:block"
+          className="relative hidden h-[320px] min-w-0 overflow-hidden rounded-[36px] bg-[#0C84E8] px-8 py-10 text-white shadow-[0_24px_54px_rgba(12,132,232,0.24)] desktop:mt-[60px] desktop:block monitor:h-[350px] monitor:rounded-[42px] monitor:px-11 monitor:py-12"
         >
           <div className="flex items-center gap-2">
             <h3 className="text-[27px] font-bold leading-none">Watch Live</h3>
