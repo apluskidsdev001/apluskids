@@ -1,0 +1,11 @@
+# Local logs and temporary tunnel output
+*.log
+
+# Runtime uploads and generated Kids Champ archives contain private user data
+/aplus_kids_api/data/
+
+# Operating-system and editor files
+.DS_Store
+Thumbs.db
+/.idea/
+/.vscode/

@@ -1,0 +1,230 @@
+A PLUS KIDS ADMIN PANEL - PAGE, SECTION AND BUTTON GUIDE
+=========================================================
+
+Purpose
+-------
+The admin panel is at /admin. It manages selected public-site content and the
+Kids Champ operations workspace. The left navigation (or the mobile top tabs)
+connects the following routes:
+
+  Dashboard       /admin
+  Watch Page      /admin/watch       -> public /watch
+  Kids Zone       /admin/kids-zone   -> public /kids-zone
+  Kids Champ      /admin/kids-champ  -> public /kids-champ
+  Footer          /admin/footer      -> footer on public pages
+
+IMPORTANT STORAGE / PUBLISHING NOTE
+-----------------------------------
+Watch, Kids Zone and Footer edits are stored in this browser's localStorage.
+"Save draft" keeps a local draft only. "Preview draft" opens the related public
+page with ?adminPreview=1, so it reads the draft. "Publish" copies the draft
+to the local published version used by the normal public page in this browser.
+"Publish all drafts" does this for Watch, Kids Zone and Footer together.
+
+There is no shared database in the current implementation. Changes are not
+automatically available on other browsers/devices. Removing/resetting content
+may require confirmation in the browser.
+
+1. DASHBOARD (/admin)
+---------------------
+Main task: entry point for content management and publishing.
+
+Buttons / links
+  - Watch Page / Kids Zone / Footer card: opens that admin editor.
+  - Edit page: same as the page card; opens its editor.
+  - Preview: opens the relevant public page in draft-preview mode.
+  - View public website: opens the normal public home page.
+  - Publish all drafts: publishes all Watch, Kids Zone and Footer local drafts.
+  - Sidebar/top navigation: changes between every admin route above.
+
+Connection: Dashboard is a navigation hub. Its page cards link editors to their
+matching public pages. Kids Champ is available in the main navigation but is
+not included in the dashboard's editable-page cards or Publish all action.
+
+2. WATCH PAGE (/admin/watch)
+----------------------------
+Main task: control video listings, categories, TV schedule and Watch-page text.
+The normal public Watch page reads the published Watch data; preview reads the
+draft Watch data.
+
+Top actions
+  - Preview draft: opens /watch?adminPreview=1.
+  - Save draft: confirms the current local draft; it does not publish it.
+  - Publish: publishes categories, videos, schedule and titles for /watch.
+
+Tabs and actions
+  A. Videos
+     - Add video / Update video: saves a video title, valid YouTube URL, type,
+       category and visibility setting into the draft playlist.
+     - Cancel: exits video editing and clears the form.
+     - All / Program / Trailer / Short: filters the admin playlist list only.
+     - Edit: loads that video into the form.
+     - Hide / Show: toggles whether that video appears on public /watch.
+     - Remove: deletes the video from the draft playlist.
+     - Connection: Program videos populate the public program list; Trailer and
+       Short videos populate the public trailers/shorts list.
+
+  B. Categories
+     - Add category / Update category: creates or updates a category and icon.
+       Renaming a category also updates videos that use its old name.
+     - Edit: loads that category into the form.
+     - Hide / Show: controls whether the category is visible on public /watch.
+     - Remove: deletes the category from the draft. Videos are not deleted, so
+       reassignment may be needed before publishing.
+     - Connection: categories are used by the public Watch category filters.
+
+  C. TV Schedule
+     - Monday through Sunday tabs: chooses the schedule day being edited.
+     - Add slot / Update slot: saves a time and programme title for that day.
+     - Cancel: leaves schedule-item editing.
+     - Copy to [day]: replaces the target day's schedule with the current day.
+     - Reset day: restores that day to its built-in default schedule.
+     - Up / Down arrows: move a programme earlier/later in display order.
+     - Edit: loads a programme slot into the editor.
+     - Remove: removes the programme slot.
+     - Connection: the public Watch schedule uses the selected day's published
+       slots in this exact order.
+
+  D. Titles
+     - Text fields: edit page heading, description, program heading, trailer
+       heading and category heading.
+     - Update title draft: confirms the copy changes as a local draft.
+     - Connection: these values become headings/copy on public /watch after
+       Publish is pressed.
+
+3. KIDS ZONE (/admin/kids-zone)
+--------------------------------
+Main task: edit the content blocks that drive the public Kids Zone sections.
+
+Top actions
+  - Preview draft: opens /kids-zone?adminPreview=1.
+  - Save draft: retains the draft locally without publishing.
+  - Publish: makes the current blocks available to normal public /kids-zone.
+
+Content-block form
+  - Section, Title, Description, Link label, Link URL: define an editable
+    block. Use the established section names/IDs for the intended public area.
+  - Active in public page: controls whether the block/section is shown.
+  - Add content / Update content: saves the new or edited draft block.
+  - Cancel: exits edit mode.
+  - Reset drafts: restores the page's default blocks after confirmation.
+  - Per block: Edit loads it into the form; Hide/Show toggles visibility;
+    Remove deletes it from the draft.
+
+Public section connection
+  - Hero (id: hero)       -> Kids Zone hero introduction and action link.
+  - Birthday (birthdays)  -> birthday section/action link, normally /birthdays.
+  - Kids Champ (kids-champ) -> Kids Champ section/action link, normally
+                               /kids-champ.
+  - Events (events)       -> events section/action link, normally
+                               /kids-zone#events.
+If managed content exists and one of these blocks is hidden/removed, its public
+section is hidden. Additional custom blocks are stored but are not rendered by
+the current public Kids Zone component.
+
+4. FOOTER (/admin/footer)
+-------------------------
+Main task: edit selected footer brand, contact and social content.
+
+Buttons are the same as Kids Zone: Preview draft, Save draft, Publish,
+Add/Update content, Cancel, Reset drafts, and per-block Edit, Hide/Show,
+Remove. Preview opens the home page at the footer.
+
+Public section connection
+  - Brand (id: brand / section Brand): its description replaces footer brand
+    text. The footer logo and built-in navigation groups are not editable here.
+  - Contact (section Contact): each active item creates a contact card. Title
+    is its label, Description is visible contact text, and Link URL is used for
+    calling, emailing or opening a map.
+  - Social (section Social): each active item creates a social button. Link
+    label (or Title) is button text; Link URL is its destination.
+Custom navigation labels are stored by the editor but the current Footer UI uses
+its built-in navigation links, so they will not change the navigation yet.
+
+5. KIDS CHAMP (/admin/kids-champ)
+---------------------------------
+Main task: operational workspace for submission review, TV selection, ZIP
+photo batches and participant management.
+
+Current data behavior: submissions, artwork files, review decisions, ZIP
+batches and participant summaries are loaded from the Spring Boot/PostgreSQL
+backend. Backend failures are displayed instead of being replaced by demo
+records. Some secondary overview, calendar, settings and messaging features
+are still being migrated from local UI state.
+
+Top actions
+  - View public page: opens /kids-champ.
+  - Settings: opens the settings drawer.
+  - Privacy on/off: masks/unmasks child names, tracking codes and participant
+    references in the operational views. It is display-only.
+  - Overview / Submissions / ZIP / Participants: switch workspaces. The chosen
+    workspace is remembered in the URL hash and local storage.
+
+  A. Overview
+     - KPI/attention cards: open the related quick-view drawer/workspace.
+     - Calendar: opens the calendar; selecting a day opens that day's panel to
+       add, complete or delete planned tasks.
+     - Growth chart/export controls: select metrics and time period, then
+       export the shown growth data as an Excel-compatible file.
+     - Recent activity, upcoming telecasts and alerts: provide quick access to
+       their related records/actions.
+
+  B. Submissions
+     - Search, review-status tabs and filters: narrow submissions by status,
+       age, TV status, location and submitted date.
+     - Review queue / review mode: opens focused review flow for checking a
+       submission and changing its review/TV state.
+     - Upload: opens photo upload; settings control permitted categories, file
+       types and maximum size.
+     - Checkboxes / Select all: select visible submissions for bulk actions.
+     - Create ZIP from selected: changes to ZIP workspace and creates a queued
+       ZIP batch for those selected submission IDs.
+     - Open/view row: opens submission details. Edit/save changes that
+       workspace's temporary record; selection and telecast controls update its
+       workflow status. Delete removes the temporary record after confirmation.
+
+  C. ZIP
+     - Create ZIP: creates a queued, empty batch using the configured batch size.
+     - ZIP settings: controls batch size, expiry and warning-day values.
+     - Search/status filter: narrows ZIP rows.
+     - Open a ZIP row/details: views or edits batch information, telecast state,
+       archive metadata and recipient records.
+     - Download: securely downloads the real ZIP archive generated by the backend.
+     - Send message/campaign: opens messaging for that batch's recipients.
+     - Delete archive: soft-deletes a batch while retaining its audit record.
+
+  D. Participants
+     - Search, segments and filters: narrow participant records.
+     - Export: downloads the currently visible participant data.
+     - Checkboxes / bulk actions: select records for a message campaign or
+       confirmed deletion.
+     - Message: opens a WhatsApp campaign for selected/filtered participants.
+     - Open row/details: views or edits the temporary participant record;
+       actions can start a related message or inspect submissions.
+
+Settings drawer sections
+  - Categories: allowed submission categories.
+  - Submission rules: allowed file size/types and automatic tracking.
+  - Telecast: daily selection limit and default time.
+  - ZIP retention: batch size, expiry period and expiry-warning period.
+  - Participants: accepted age range and frequent-participant threshold.
+  - Messaging: WhatsApp-consent requirement, campaign limit and default text.
+  - Save settings: stores settings locally. Reset restores settings defaults.
+
+KIDS CHAMP WORKFLOW CONNECTION
+------------------------------
+Public /kids-champ -> child submission -> Admin Submissions -> review/approve
+-> TV selection/scheduling -> ZIP batch -> download or parent campaign.
+
+Admin Participants is the parent/child record view used for filtering, exporting
+and campaigns. Overview summarizes the same operational workflow. In the
+The public Kids Champ page and the admin submission workspace use the same
+PostgreSQL records and protected file storage.
+
+QUICK SAFE WORKFLOW FOR CONTENT EDITORS
+---------------------------------------
+1. Open the appropriate editor from Dashboard or sidebar.
+2. Make changes and use Preview draft to check the corresponding public page.
+3. Press Publish on that page (or Publish all drafts from Dashboard).
+4. Confirm normal public route without adminPreview=1.
+
