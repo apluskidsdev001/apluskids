@@ -81,6 +81,7 @@ public class SecurityConfiguration {
                 .requestMatchers(HttpMethod.POST, "/api/v1/kids-champ/submissions").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/kids-champ/track/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/kids-champ/events").permitAll()
+                .requestMatchers("/api/v1/webhooks/whatsapp").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .anyRequest().authenticated()
             )

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { countries, getCountryCode } from "@/utils/countries";
 import { apiFetch } from "@/utils/auth";
 
@@ -152,7 +153,7 @@ export default function KidsChamp() {
       <header className="z-20 flex items-center justify-between border-b border-white/80 bg-white/85 px-4 py-3 backdrop-blur-xl sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <button type="button" onClick={() => history.back()} className="grid size-10 place-items-center rounded-full bg-[#e8f8ff] text-xl text-[#10275d] transition hover:-translate-x-0.5 hover:bg-white" aria-label="Go back">‹</button>
-          <div className="grid size-11 place-items-center overflow-hidden rounded-full bg-white shadow-sm"><img src="/icons/shortcuts/KidsChamp.png" alt="" className="size-10 object-contain"/></div>
+          <div className="grid size-11 place-items-center overflow-hidden rounded-full bg-white shadow-sm"><Image src="/icons/shortcuts/KidsChamp.png" alt="" width={40} height={40} className="size-10 object-contain"/></div>
           <div className="min-w-0"><h1 className="truncate text-base font-bold text-[#10275d] sm:text-lg">A Plus Kids Kids Champ</h1><p className="text-xs font-medium text-[#4c8eb7]">online · photo submission</p></div>
         </div>
         <a href="tel:0768212266" className="grid size-11 place-items-center rounded-full bg-[#e8f8ff] transition hover:-translate-y-0.5 hover:bg-white" aria-label="Call A Plus Kids"><span className="text-xl">☎</span></a>

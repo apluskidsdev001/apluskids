@@ -1,19 +1,17 @@
 package lk.apluskids.platform.kidschamp;
 
-import java.util.List;
-import java.util.Map;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
+import java.time.Instant;
+import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 @Component
 class WhatsAppCloudDelivery {
     private final KidsChampMessageRecipientRepository recipients;
     private final KidsChampWhatsAppAdminService whatsapp;
+    private Instant nextDeliveryAt=Instant.EPOCH;
 
     WhatsAppCloudDelivery(
         KidsChampMessageRecipientRepository recipients,
@@ -23,47 +21,53 @@ class WhatsAppCloudDelivery {
         this.whatsapp = whatsapp;
     }
 
-    @Scheduled(fixedDelayString = "${aplus.whatsapp.delivery-delay-ms:2000}")
+    @Scheduled(fixedDelay = 1000)
     @Transactional
     void deliverQueuedMessages() {
         KidsChampWhatsAppAdminService.ActiveConfig active=whatsapp.active();
         if (active.phoneNumberId().isBlank() || active.token().isBlank()) return;
-        for (KidsChampMessageRecipientEntity recipient : recipients.findTop20ByStatusOrderByIdAsc("QUEUED")) {
-            deliver(recipient,active);
-        }
+        if(Instant.now().isBefore(nextDeliveryAt)) return;
+        recipients.findTop20ByStatusOrderByIdAsc("QUEUED").stream().findFirst().ifPresent(recipient->deliver(recipient,active));
+        nextDeliveryAt=Instant.now().plusSeconds(ThreadLocalRandom.current().nextLong(1,11));
     }
 
     private void deliver(KidsChampMessageRecipientEntity recipient,KidsChampWhatsAppAdminService.ActiveConfig active) {
         recipient.sending();
         try {
-            String messageId = whatsapp.send(active,recipient.getDestination(),recipient.getRenderedMessage());
+            String messageId = recipient.getTemplateName()==null||recipient.getTemplateName().isBlank()
+                ? whatsapp.send(active,recipient.getDestination(),recipient.getRenderedMessage())
+                : whatsapp.sendTemplate(active,recipient.getDestination(),recipient.getTemplateName(),recipient.getTemplateLanguageCode(),recipient.getTemplateParameters());
             recipient.sent(messageId);
-            recipient.getCampaign().complete();
+            refreshCampaignStatus(recipient);
         } catch (RestClientResponseException error) {
-            recipient.failed("Meta API " + error.getStatusCode().value() + ": " + safeProviderMessage(error.getResponseBodyAsString()));
-            recipient.getCampaign().fail();
+            recipient.failed(friendlyProviderMessage(error.getStatusCode().value(),error.getResponseBodyAsString()));
+            refreshCampaignStatus(recipient);
         } catch (RuntimeException error) {
-            recipient.failed(error.getMessage());
-            recipient.getCampaign().fail();
+            recipient.failed(friendlyRuntimeMessage(error));
+            refreshCampaignStatus(recipient);
         }
     }
 
-    private static String normalize(String phone) {
-        return phone == null ? "" : phone.replaceAll("[^0-9]", "");
+    private void refreshCampaignStatus(KidsChampMessageRecipientEntity recipient) {
+        var values=recipients.findAllByCampaignPublicIdOrderByIdAsc(recipient.getCampaign().getPublicId());
+        boolean queued=values.stream().anyMatch(value->"QUEUED".equals(value.getStatus())||"SENDING".equals(value.getStatus()));
+        boolean sent=values.stream().anyMatch(value->"SENT".equals(value.getStatus()));
+        boolean failed=values.stream().anyMatch(value->"FAILED".equals(value.getStatus()));
+        recipient.getCampaign().status(queued?"QUEUED":sent&&failed?"PARTIAL":sent?"COMPLETED":"FAILED");
     }
 
-    private static String extractMessageId(Map<String, Object> response) {
-        if (response == null) return null;
-        Object messages = response.get("messages");
-        if (messages instanceof List<?> list && !list.isEmpty() && list.getFirst() instanceof Map<?, ?> message) {
-            Object id = message.get("id");
-            return id == null ? null : id.toString();
-        }
-        return null;
+    private static String friendlyProviderMessage(int status,String body) {
+        String lower=body==null?"":body.toLowerCase();
+        if(lower.contains("expected number of params")||lower.contains("template")&&lower.contains("params"))return "WhatsApp template parameters do not match the approved template.";
+        if(lower.contains("token")||status==401||status==403)return "WhatsApp access token is invalid, expired, or not permitted.";
+        if(lower.contains("recipient")||lower.contains("phone number"))return "The recipient phone number could not receive this WhatsApp message.";
+        if(status==429)return "WhatsApp rate limit reached. The message can be retried later.";
+        return "WhatsApp rejected the message (HTTP "+status+").";
     }
 
-    private static String safeProviderMessage(String body) {
-        if (body == null || body.isBlank()) return "Request rejected.";
-        return body.substring(0, Math.min(body.length(), 500));
+    private static String friendlyRuntimeMessage(RuntimeException error) {
+        String message=error.getMessage();
+        if(message==null||message.isBlank())return "The message could not be sent due to an unexpected delivery error.";
+        return message.substring(0,Math.min(message.length(),300));
     }
 }
