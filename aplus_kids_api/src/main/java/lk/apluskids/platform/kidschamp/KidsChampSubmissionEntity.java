@@ -114,6 +114,7 @@ public class KidsChampSubmissionEntity {
     public void setFileSize(long v) { fileSize=v; }
     public void setBatch(KidsChampBatchEntity v) { batch=v; telecastStatus = TelecastStatus.SELECTED; }
     public void scheduleTelecast() { telecastStatus = TelecastStatus.SCHEDULED; }
+    public void markTelecasted() { telecastStatus = TelecastStatus.TELECASTED; }
     public void selectForTelecast(boolean selected) { telecastStatus = selected ? TelecastStatus.SELECTED : TelecastStatus.NOT_SELECTED; }
     public void setConsentAcceptedAt(Instant v) { consentAcceptedAt=v; }
     public void setWhatsappConsentAt(Instant v) { whatsappConsentAt=v; }

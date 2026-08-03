@@ -64,6 +64,18 @@ class KidsChampWhatsAppAdminService {
         throw new IllegalStateException("Meta did not return a message ID.");
     }
 
+    String sendTemplate(ActiveConfig active,String destination,String name,String languageCode,List<String> parameters){
+        if(active.phoneNumberId().isBlank()||active.token().isBlank())throw new IllegalStateException("WhatsApp configuration is incomplete.");
+        List<Map<String,String>> values=parameters.stream().map(value->Map.of("type","text","text",value)).toList();
+        Map<String,Object> template=new LinkedHashMap<>();template.put("name",name);template.put("language",Map.of("code",languageCode));
+        if(!values.isEmpty())template.put("components",List.of(Map.of("type","body","parameters",values)));
+        @SuppressWarnings("unchecked") Map<String,Object> response=RestClient.builder().baseUrl("https://graph.facebook.com/"+active.version()).build().post().uri("/{id}/messages",active.phoneNumberId())
+            .header("Authorization","Bearer "+active.token()).contentType(MediaType.APPLICATION_JSON)
+            .body(Map.of("messaging_product","whatsapp","to",digits(destination),"type","template","template",template)).retrieve().body(Map.class);
+        Object messages=response==null?null:response.get("messages");if(messages instanceof List<?> list&&!list.isEmpty()&&list.getFirst() instanceof Map<?,?> value&&value.get("id")!=null)return value.get("id").toString();
+        throw new IllegalStateException("Meta did not return a message ID.");
+    }
+
     String sendTestTemplate(ActiveConfig active,String destination){
         if(active.phoneNumberId().isBlank()||active.token().isBlank())throw new IllegalStateException("WhatsApp configuration is incomplete.");
         @SuppressWarnings("unchecked") Map<String,Object> response=RestClient.builder().baseUrl("https://graph.facebook.com/"+active.version()).build().post().uri("/{id}/messages",active.phoneNumberId())
