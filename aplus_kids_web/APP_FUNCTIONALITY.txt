@@ -1,0 +1,287 @@
+A+ KIDS WEB APPLICATION - PAGE AND FUNCTIONALITY GUIDE
+=======================================================
+
+This document describes the currently implemented user-facing and administrator-facing pages.
+It is intended as a quick functional handover guide.
+
+GENERAL APPLICATION BEHAVIOUR
+-----------------------------
+- The site is a Next.js application connected to the A+ Kids API.
+- Users can register, sign in, manage their profiles and submit Kids Champ artwork.
+- Administrators use the /admin area to manage content, Kids Champ submissions, ZIP archives,
+  participants, account records, operational data and WhatsApp delivery.
+- Kids Champ administration receives server-sent live update events. New normal-user submissions
+  are published after the database transaction succeeds and appear in the admin workspace without
+  a browser refresh.
+- Database-changing actions show a saving overlay until the API request completes. Normal searches,
+  filters and list refreshes update their content area without blocking the whole page.
+- The top administrator connection badge checks the API/database connection automatically and can
+  be clicked for diagnostics and common recovery steps.
+
+PUBLIC PAGES
+------------
+
+1. /  Home page
+   - Main A+ Kids TV landing page.
+   - Contains hero content, programme shortcuts, special events, trailers, schedule content,
+     market promotion and public navigation.
+   - Links visitors to Watch, Kids Zone, Kids Champ, Market, registration and login.
+
+2. /watch  Watch page
+   - Displays watch-page content, trailers and programme/video areas.
+   - Public users can browse available watch content.
+
+3. /kids-zone  Kids Zone
+   - Public Kids Zone landing page and its programme/content entry point.
+
+4. /kids-champ  Kids Champ public submission page
+   - Allows a guest or authenticated account holder to send artwork to Kids Champ.
+   - Supports registered child-profile selection and manual guest details.
+   - Validates parent consent, child age, category, phone details and image upload.
+   - Produces a tracking code after a successful submission.
+   - Registered users can see their own submission history.
+   - Supports tracking a submission by tracking code.
+   - Supports claiming matching guest submission history after identity verification.
+
+5. /market  Market
+   - Product/category browsing interface.
+   - Shows categories and product cards.
+
+6. /birthdays  Birthdays
+   - Birthday-related public page and printable/exportable birthday content.
+
+7. /info  Information page
+   - Public information and supporting content.
+
+8. /search  Search
+   - Public search interface for site content.
+
+9. /register  Registration
+   - Creates a parent/guardian account.
+   - Captures account contact information, password, consent and child profile details.
+   - Supports email verification after registration.
+
+10. /login  Login
+    - Authenticates registered users and administrators.
+    - Routes administrators into the protected admin area.
+
+11. /verify-email  Email verification
+    - Confirms a registration email verification code.
+
+12. /reset-password  Password reset
+    - Starts and completes password-reset actions for account holders.
+
+13. /profile  User profile
+    - Lets signed-in users manage parent/guardian account details.
+    - Manages child profiles, account security, password, notifications and profile actions.
+    - Shows a user's own Kids Champ submission history and related records.
+
+ADMINISTRATION
+--------------
+
+All /admin pages require an administrator role. The sidebar expands on hover and collapses when
+the pointer leaves it. The active page is highlighted.
+
+ROLES
+-----
+- Admin
+  Operational access to Kids Champ workflows and account operations.
+  Cannot manage administrator accounts, secrets or Super Admin-only history.
+
+- Super Admin
+  Full access, including administrator roles, WhatsApp credentials, Meta connection checks and
+  administrator audit history.
+
+ADMIN SHELL
+-----------
+- The top bar displays Administrator / Local workspace.
+- The connection status chip checks the Kids Champ API/database every 15 seconds.
+- Clicking the status chip opens a popup with current connection reason, common fixes and a retry.
+- The left navigation links to Dashboard, Watch Page, Kids Zone, Kids Champ, Account Management
+  and Footer management.
+
+1. /admin  Admin landing page
+   - General administrator workspace entry point.
+   - Provides access to administration features and publishing controls.
+
+2. /admin/home  Dashboard
+   - Main admin overview dashboard.
+   - Provides operational summaries and shortcuts to managed site areas.
+
+3. /admin/watch  Watch Page administration
+   - Manages public Watch page content.
+   - Includes public preview access for draft/watch content.
+
+4. /admin/kids-zone  Kids Zone administration
+   - Manages Kids Zone page content and related operational records.
+
+5. /admin/footer  Footer administration
+   - Manages footer content and footer-related site links.
+
+6. /admin/kids-champ  Kids Champ administration
+   - Main Kids Champ control centre.
+   - Uses live server events so newly received public submissions can appear without refreshing the
+     browser page.
+   - Includes Overview, Submissions, ZIP & Telecast, Participants and Account & Management areas.
+
+KIDS CHAMP - OVERVIEW
+---------------------
+- Displays operational summary cards for approvals, new submissions, ZIP/telecast work and
+  WhatsApp queue attention.
+- Summary cards navigate into the relevant workspace/filter.
+- Shows programme summary cards for approved items, telecasts, participants and operations calendar.
+- Shows Needs attention and Recent activity panels.
+- Shows submission/participant growth data.
+- The former large blue promotional control-room banner has been removed.
+- Uses supplied Kids Champ icon assets for priorities, programme summary and activity areas.
+
+KIDS CHAMP - SUBMISSIONS
+------------------------
+- Displays submissions in a paginated table. The server page size is 25 records.
+- Previous and Next pagination controls load the next/previous 25 records.
+- Search supports child name and tracking code.
+- Filters support approval state, location, category, age and multiple date modes.
+- The Waiting, Approved and Matching summary cards are clickable.
+- Waiting shows only SUBMITTED and UNDER_REVIEW records, matching its displayed count.
+- Approved shows approved records.
+- Matching records returns to the current overall result set.
+- Cards use stable backend summary totals, so clicking a filter does not incorrectly change card values.
+- Records can be selected individually or in bulk.
+- Selected/visible submissions can be approved.
+- Approval is persisted to the database and starts automatic ZIP processing only for source files
+  that actually exist.
+- Submission detail panels support category/review operations, photo preview, tracking-code copy,
+  WhatsApp sharing and protected profile data viewing.
+- Rejection uses an in-app reason panel instead of a browser prompt.
+- Deletion is controlled and backend-aware.
+
+KIDS CHAMP - ZIP AND TELECAST
+------------------------------
+- Displays automatic ZIP queue progress, ZIP archive records and retention information.
+- Supports approved-photo selection for manual ZIP recovery/creation.
+- Manual ZIP filters include search, ZIP state and date/date-range selection.
+- Supports Select all and Deselect all for eligible ZIP photos.
+- Already-zipped submissions are visibly unavailable for a duplicate manual ZIP.
+- ZIP archive download is supported.
+- ZIP batch operational actions include edited status, download state, deletion protections and
+  telecast completion where applicable.
+- Automatic ZIP processing waits for its configured batch target.
+- ZIP filenames use this exact ordering:
+  001_Name_Age_Hometown.extension
+  Example: 001_Ashinshana-kawshal_10_lunugala.png
+- File-safe name formatting replaces unsafe characters with hyphens.
+
+KIDS CHAMP - PARTICIPANTS
+-------------------------
+- Shows registered and guest participants derived from submissions.
+- Supports participant search, filters and participant detail panels.
+- Shows submission, approval, telecast and WhatsApp-consent related data.
+- Includes duplicate guest and registered/guest matching checks.
+- Administrators can merge, delete duplicate, or ignore duplicate matches using audited actions.
+- Supports operational messaging workflows through the WhatsApp message queue.
+
+KIDS CHAMP - CALENDAR AND DAILY OPERATIONS
+-------------------------------------------
+- Calendar loads today's date when opened.
+- Supports month navigation, jump-to-date and a selected-day operations panel.
+- Shows submissions, ZIPs, telecasts, tasks and warning counts for a selected day.
+- Clicking a day/metric navigates to the related data context.
+- Shows received submissions and available photo preview actions.
+- Supports approving a selected-day submission without leaving the calendar flow.
+- Displays open tasks for the selected day and supports task completion/deletion.
+- Scheduling/move-task UI has been removed as requested.
+- The calendar is designed to keep its primary content visible without unnecessary page-level scroll.
+
+KIDS CHAMP - WHATSAPP MESSAGE QUEUE
+-----------------------------------
+- Message queue popup is available throughout Kids Champ administration.
+- Shows campaign delivery statuses: needs attention, retry ready, delivered and errors.
+- Supports campaign/recipient selection, retry, ignore and deletion actions.
+- Displays recipient attempts, failure reasons, message preview and delivery timeline.
+- The queue is backed by Kids Champ campaign/recipient records.
+- Meta/WhatsApp delivery should only be used with valid consent and configured credentials.
+
+KIDS CHAMP - ACCOUNT AND MANAGEMENT WORKSPACE
+----------------------------------------------
+- Provides account-management access from the Kids Champ workspace.
+- Includes a visual style aligned with the Kids Champ page: soft gradients, rounded cards, blue
+  active navigation, status chips and compact operational controls.
+- Provides account overview counts.
+- Super Admin-only areas include administrator controls, WhatsApp API controls, template area and
+  administrator history.
+
+7. /admin/account-management  Dedicated Account Management page
+   - Uses the same visual system as Kids Champ.
+   - Tabs: Overview, Kids accounts, Admin users (Super Admin), WhatsApp API (Super Admin),
+     Templates (Super Admin), Admin history (Super Admin).
+
+ACCOUNT MANAGEMENT - OVERVIEW
+-----------------------------
+- Shows total accounts, active accounts, child profiles and administrator counts.
+- Uses live data from the account-management API.
+
+ACCOUNT MANAGEMENT - ACCOUNTS
+-----------------------------
+- Shows registered account records and non-registered/guest Kids Champ contacts.
+- Registered and non-registered records are clearly labelled.
+- Supports name, email and phone search.
+- Supports registered/non-registered filter and account-status filter.
+- Supports selection, Select all and Deselect all.
+- Supports safe account editing, including guardian name, email, phone and account status.
+- Supports guest contact editing.
+- Supports safe soft-delete with mandatory reason and restore for registered accounts.
+- Supports guest-contact soft-delete and restore while retaining submission history.
+- Supports selected-record Excel-compatible CSV export and PDF export.
+- Supports opening a WhatsApp message action for selected records. Bulk campaign delivery is managed
+  through the Kids Champ Message Queue.
+- Account changes are written to administrator audit history.
+
+ACCOUNT MANAGEMENT - ADMIN USERS
+--------------------------------
+- Super Admin only.
+- Lists administrator accounts and their access level.
+- Supports controlled Admin/Super Admin role changes.
+- Prevents an administrator from removing their own Super Admin role.
+
+ACCOUNT MANAGEMENT - WHATSAPP API
+---------------------------------
+- Super Admin only.
+- Stores Graph API version, Phone Number ID, Business Account ID and encrypted access token.
+- Tokens are masked on return and are never exposed as plain text by the UI.
+- Supports Meta connection testing with common failure solutions.
+- Supports test-message delivery.
+- Credential changes and tests are written to audit history.
+
+ACCOUNT MANAGEMENT - TEMPLATES
+------------------------------
+- Super Admin-only template-management area.
+- Displays the planned/available template-management foundation for reminder, submission and ZIP
+  messaging workflows.
+- Full Meta template CRUD/sync, approval status and language variants are the next implementation
+  enhancement.
+
+ACCOUNT MANAGEMENT - ADMIN HISTORY
+----------------------------------
+- Super Admin only.
+- Shows append-only administrator activity.
+- Includes action name, actor, target/detail and timestamp.
+- Records account changes, deletes/restores, role changes, WhatsApp credential changes and relevant
+  operational actions.
+
+BACKEND DATA AND SAFETY NOTES
+-----------------------------
+- Kids Champ submissions, batches, guest contacts, settings, calendar tasks, campaigns and audit
+  activity are stored in PostgreSQL.
+- Admin-only APIs require ROLE_ADMIN or ROLE_SUPER_ADMIN.
+- Secret-bearing WhatsApp configuration/history endpoints require ROLE_SUPER_ADMIN.
+- User/guest deletes are soft deletes where implemented, preserving submission history.
+- Demo data can be added to the test database only by enabling the explicit demo seed property.
+- Demo records use the DEMO prefix and demo email addresses.
+
+TEST/DEMO DATA
+--------------
+- Demo test records were designed for the testing database and include registered parents, child
+  profiles, guest contacts, submissions with multiple review states and calendar tasks.
+- WhatsApp delivery is intentionally excluded from dummy-data testing unless credentials and consent
+  are explicitly configured.
+

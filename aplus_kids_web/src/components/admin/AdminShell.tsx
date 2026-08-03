@@ -20,6 +20,8 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [access, setAccess] = useState<"allowed" | "forbidden">("allowed");
   const [connection, setConnection] = useState<"checking" | "online" | "offline">("checking");
+  const [connectionDetails,setConnectionDetails]=useState("Checking the Kids Champ API and database connection.");
+  const [connectionPopup,setConnectionPopup]=useState(false);
 
   const checkConnection = useCallback(async () => {
     try {
@@ -29,10 +31,13 @@ export default function AdminShell({ children }: { children: ReactNode }) {
         router.replace(`/login?returnTo=${encodeURIComponent(pathname)}`);
         return false;
       }
+      const body=await response.json().catch(()=>null) as {message?:string;code?:string}|null;
       setConnection(response.ok ? "online" : "offline");
+      setConnectionDetails(response.ok?"The Kids Champ API and database are responding normally.":body?.message||`The API returned HTTP ${response.status}.`);
       return response.ok;
     } catch {
       setConnection("offline");
+      setConnectionDetails("The API server could not be reached. Check that the backend is running on port 8081 and that PostgreSQL is available.");
       return false;
     }
   }, [pathname, router]);
@@ -71,10 +76,11 @@ export default function AdminShell({ children }: { children: ReactNode }) {
               <span className="grid size-9 place-items-center rounded-full bg-[#E8F3FF] text-[12px] font-bold text-[#087BF1]">AD</span>
               <div><p className="text-[13px] font-bold text-[#14264A]">Administrator</p><p className="text-[11px] text-[#8190A5]">Local workspace</p></div>
             </div>
-            <button type="button" onClick={() => void checkConnection()} title="Check database connection" className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-[11px] font-bold ${connection === "online" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : connection === "offline" ? "border-red-200 bg-red-50 text-red-700" : "border-amber-200 bg-amber-50 text-amber-700"}`} aria-live="polite"><span className={`size-2 rounded-full ${connection === "online" ? "bg-emerald-500" : connection === "offline" ? "bg-red-500" : "bg-amber-500"}`} />{connection === "online" ? "Database connected" : connection === "offline" ? "Database disconnected" : "Checking database"}</button>
+            <button type="button" onClick={() => {setConnectionPopup(true);void checkConnection();}} title="Open database connection details" className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-[11px] font-bold ${connection === "online" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : connection === "offline" ? "border-red-200 bg-red-50 text-red-700" : "border-amber-200 bg-amber-50 text-amber-700"}`} aria-live="polite"><span className={`size-2 rounded-full ${connection === "online" ? "bg-emerald-500" : connection === "offline" ? "bg-red-500" : "bg-amber-500"}`} />{connection === "online" ? "Database connected" : connection === "offline" ? "Database disconnected" : "Checking database"}</button>
           </div>
         </header>
         <main className="mx-auto max-w-[1420px] px-4 py-7 tablet:px-7 laptop:px-8 laptop:py-9">{children}</main>
+        {connectionPopup?<div className="fixed inset-0 z-[180] grid place-items-center bg-[#102044]/30 p-4"><div className="w-full max-w-md rounded-[18px] bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-[11px] font-bold uppercase tracking-[.14em] text-[#2488F4]">System connection</p><h2 className="mt-1 text-[19px] font-semibold">{connection==="online"?"Database connected":connection==="checking"?"Checking connection":"Database disconnected"}</h2></div><button onClick={()=>setConnectionPopup(false)} className="grid size-8 place-items-center rounded-full bg-[#F1F5F9] text-[#50627E]">×</button></div><div className={`mt-5 rounded-[12px] border p-4 text-[12px] leading-5 ${connection==="online"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-red-200 bg-red-50 text-red-800"}`}>{connectionDetails}</div>{connection!=="online"?<div className="mt-4 rounded-[12px] bg-[#F7FAFE] p-4 text-[12px] leading-5 text-[#526178]"><p className="font-semibold text-[#263852]">Common fixes</p><ul className="mt-2 list-disc space-y-1 pl-4"><li>Start the A+ Kids API on port 8081.</li><li>Confirm PostgreSQL is running and the database credentials are valid.</li><li>Retry after the API health check succeeds.</li></ul></div>:null}<button onClick={()=>void checkConnection()} className="mt-5 h-10 w-full rounded-[10px] bg-[#1689F7] text-[12px] font-semibold text-white">Check again</button></div></div>:null}
       </div>
     </div>
   );

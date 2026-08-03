@@ -109,5 +109,7 @@ public class UserEntity {
     public void setCredentialsChangedAt(Instant value) { credentialsChangedAt = value; }
     public Instant getDeletedAt() { return deletedAt; }
     public void setDeletedAt(Instant value) { deletedAt = value; }
+    public Instant getCreatedAt() { return createdAt; }
     public Set<RoleEntity> getRoles() { return roles; }
+    public void replaceRoles(Set<RoleEntity> value) { roles.clear(); roles.addAll(value); }
 }
