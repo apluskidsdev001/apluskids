@@ -7,12 +7,12 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { apiFetch } from "@/utils/auth";
 
 const navItems = [
-  { href: "/admin", label: "Dashboard", symbol: "⌂" },
-  { href: "/admin/watch", label: "Watch Page", symbol: "▻" },
-  { href: "/admin/kids-zone", label: "Kids Zone", symbol: "✦" },
-  { href: "/admin/kids-champ", label: "Kids Champ", symbol: "★" },
-  { href: "/admin/account-management", label: "Account management", symbol: "⚙" },
-  { href: "/admin/footer", label: "Footer", symbol: "▥" },
+  { href: "/admin/home", label: "Dashboard", icon: "/icons/admin-sidebar/dashboard.png" },
+  { href: "/admin/watch", label: "Watch Page", icon: "/icons/admin-sidebar/watch.png" },
+  { href: "/admin/kids-zone", label: "Kids Zone", icon: "/icons/admin-sidebar/kids-zone.png" },
+  { href: "/admin/kids-champ", label: "Kids Champ", icon: "/icons/admin-sidebar/kids-champ.png" },
+  { href: "/admin/account-management", label: "Account management", icon: "/icons/admin-sidebar/account.png" },
+  { href: "/admin/footer", label: "Footer", icon: "/icons/admin-sidebar/footer.png" },
 ];
 
 export default function AdminShell({ children }: { children: ReactNode }) {
@@ -47,19 +47,20 @@ export default function AdminShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen bg-[#F6F9FD] text-[#14264A]">
-      <aside className="fixed inset-y-0 left-0 z-50 hidden w-[76px] flex-col items-center border-r border-[#E4EBF3] bg-white py-3 shadow-[5px_0_22px_rgba(19,60,115,.03)] laptop:flex">
-        <Link href="/admin" className="grid size-[52px] place-items-center" aria-label="A Plus Kids admin home">
+      <aside className="group fixed inset-y-0 left-0 z-50 hidden w-[76px] flex-col overflow-hidden border-r border-[#E4EBF3] bg-white py-3 shadow-[5px_0_22px_rgba(19,60,115,.03)] transition-[width] duration-200 ease-out hover:w-[242px] laptop:flex">
+        <Link href="/admin/home" className="flex h-[52px] w-[242px] items-center gap-3 px-[17px]" aria-label="A Plus Kids admin home">
           <Image src="/images/brand/a-plus-logo.png" alt="A Plus Kids" width={42} height={42} className="h-[42px] w-[42px] object-contain" priority />
+          <span className="whitespace-nowrap text-[14px] font-bold text-[#14264A] opacity-0 transition-opacity duration-150 group-hover:opacity-100">A Plus Kids TV</span>
         </Link>
-        <span className="mt-1 text-[9px] font-bold tracking-wide text-[#087BF1]">KIDS TV</span>
-        <nav className="mt-7 flex w-full flex-col items-center gap-3" aria-label="Admin navigation">
+        <span className="ml-[17px] mt-1 w-[220px] text-[9px] font-bold tracking-wide text-[#087BF1]">KIDS TV</span>
+        <nav className="mt-7 flex w-[242px] flex-col gap-3 px-3" aria-label="Admin navigation">
           {navItems.map((item) => {
-            const active = item.href === "/admin" ? pathname === item.href : pathname.startsWith(item.href);
-            return <Link key={item.href} href={item.href} title={item.label} aria-label={item.label} className={`grid size-12 place-items-center rounded-[12px] text-[22px] transition ${active ? "bg-[#087BF1] text-white shadow-[0_8px_16px_rgba(8,123,241,.32)]" : "text-[#50627E] hover:bg-[#EDF6FF] hover:text-[#087BF1]"}`}><span aria-hidden>{item.symbol}</span></Link>;
+            const active = pathname.startsWith(item.href);
+            return <Link key={item.href} href={item.href} title={item.label} aria-label={item.label} aria-current={active ? "page" : undefined} className={`flex h-12 w-[216px] items-center gap-4 rounded-[12px] px-2.5 transition ${active ? "bg-gradient-to-r from-[#0789F9] to-[#0875E8] text-white shadow-[0_9px_19px_rgba(8,123,241,.28)]" : "text-[#50627E] hover:bg-[#EDF6FF] hover:text-[#087BF1]"}`}><span className="grid size-7 shrink-0 place-items-center"><Image src={item.icon} alt="" width={26} height={26} className={`size-[26px] object-contain ${active ? "brightness-0 invert" : ""}`} /></span><span className="whitespace-nowrap text-[13px] font-semibold opacity-0 transition-opacity duration-150 group-hover:opacity-100">{item.label}</span></Link>;
           })}
         </nav>
-        <div className="mt-auto flex flex-col gap-3 pb-2">
-          <a href="/" target="_blank" title="View public website" aria-label="View public website" className="grid size-10 place-items-center rounded-full text-[20px] text-[#50627E] hover:bg-[#EDF6FF] hover:text-[#087BF1]">↗</a>
+        <div className="mt-auto flex w-[242px] gap-3 px-4 pb-2">
+          <a href="/" target="_blank" title="View public website" aria-label="View public website" className="grid size-10 shrink-0 place-items-center rounded-full text-[20px] text-[#50627E] hover:bg-[#EDF6FF] hover:text-[#087BF1]">↗</a><span className="my-auto whitespace-nowrap text-[12px] font-semibold text-[#5B6C85] opacity-0 transition-opacity duration-150 group-hover:opacity-100">View public website</span>
         </div>
       </aside>
 
