@@ -12,4 +12,5 @@ import jakarta.persistence.*;import java.time.*;import java.util.UUID;import lk.
  void create(String channel,String template,int count,UserEntity actor){this.channel=channel;messageTemplate=template;recipientCount=count;createdBy=actor;status="QUEUED";}
  void complete(){status="COMPLETED";}
  void fail(){status="FAILED";}
+ void status(String value){status=value;}
 }

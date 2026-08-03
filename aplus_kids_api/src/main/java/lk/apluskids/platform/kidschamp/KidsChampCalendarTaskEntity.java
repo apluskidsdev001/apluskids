@@ -21,5 +21,5 @@ class KidsChampCalendarTaskEntity {
     UUID getPublicId(){return publicId;} LocalDate getTaskDate(){return taskDate;} String getTitle(){return title;}
     String getDetails(){return details;} Instant getCompletedAt(){return completedAt;} Instant getCreatedAt(){return createdAt;}
     void create(LocalDate date,String title,String details,UserEntity actor){this.taskDate=date;this.title=title;this.details=details;this.createdBy=actor;}
-    void setCompleted(boolean completed){completedAt=completed?Instant.now():null;} void delete(){deletedAt=Instant.now();}
+    void setCompleted(boolean completed){completedAt=completed?Instant.now():null;} void reschedule(LocalDate date){this.taskDate=date;} void delete(){deletedAt=Instant.now();}
 }

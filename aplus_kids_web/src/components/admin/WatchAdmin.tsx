@@ -1,25 +1,19 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { defaultCategories, defaultVideos, defaultWeeklySchedule, scheduleDayNames, type AdminVideo, type ScheduleDayName } from "./adminData";
 import { makeAdminId, publishAdminKeys, useAdminStorage } from "./useAdminStorage";
 
-type WatchCopy = { pageTitle: string; pageDescription: string; channelLabel: string; searchPlaceholder: string; youtubeChannelLabel: string; latestVideosLabel: string; programsTitle: string; trailersTitle: string; categoriesTitle: string; scheduleTitle: string; scheduleDescription: string };
+type WatchCopy = { pageTitle: string; pageDescription: string; programsTitle: string; trailersTitle: string; categoriesTitle: string };
 type EditorTab = "Videos" | "Categories" | "TV Schedule" | "Titles";
 
 const defaultCopy: WatchCopy = {
   pageTitle: "Watch A Plus Kids TV",
   pageDescription: "Sinhala stories, learning clips, shorts and TV moments for little viewers.",
-  channelLabel: "Dialog TV Channel 48",
-  searchPlaceholder: "Search stories, programs and shorts ...",
-  youtubeChannelLabel: "YouTube Channel",
-  latestVideosLabel: "Latest Videos",
   programsTitle: "Program Listing",
   trailersTitle: "Trailers / Shorts",
   categoriesTitle: "Categories",
-  scheduleTitle: "Weekly TV Schedule",
-  scheduleDescription: "Explore every day of the week. Today's schedule is highlighted for quick access.",
 };
 
 const emptyVideo: Omit<AdminVideo, "id"> = { title: "", youtubeUrl: "", type: "Program", category: "Stories", active: true };
@@ -45,71 +39,17 @@ export default function WatchAdmin() {
   const [activeScheduleDay, setActiveScheduleDay] = useState<ScheduleDayName>("Monday");
   const [scheduleTime, setScheduleTime] = useState("");
   const [scheduleTitle, setScheduleTitle] = useState("");
-  const [scheduleYoutubeUrl, setScheduleYoutubeUrl] = useState("");
   const [editingScheduleId, setEditingScheduleId] = useState<string | null>(null);
   const [copyTarget, setCopyTarget] = useState<ScheduleDayName>("Tuesday");
-  const [isEditing, setIsEditing] = useState(false);
-  const [undoState, setUndoState] = useState<EditorState | null>(null);
-  const previousStateRef = useRef<EditorState | null>(null);
-  const sessionStateRef = useRef<EditorState | null>(null);
-  const restoringRef = useRef(false);
-  const [draggedScheduleId, setDraggedScheduleId] = useState<string | null>(null);
-  const [dropScheduleId, setDropScheduleId] = useState<string | null>(null);
 
   const filteredVideos = useMemo(
     () => videosStore.value.filter((video) => filterType === "All" || video.type === filterType),
     [filterType, videosStore.value],
   );
 
-  type EditorState = {
-    categories: typeof categoriesStore.value;
-    videos: typeof videosStore.value;
-    copy: typeof copyStore.value;
-    schedule: typeof scheduleStore.value;
-  };
-
-  useEffect(() => {
-    const current: EditorState = { categories: categoriesStore.value, videos: videosStore.value, copy: copyStore.value, schedule: scheduleStore.value };
-    if (previousStateRef.current && isEditing && !restoringRef.current) setUndoState(previousStateRef.current);
-    previousStateRef.current = current;
-  }, [categoriesStore.value, copyStore.value, isEditing, scheduleStore.value, videosStore.value]);
-
-  function applyEditorState(state: EditorState) {
-    restoringRef.current = true;
-    previousStateRef.current = state;
-    categoriesStore.setValue(state.categories);
-    videosStore.setValue(state.videos);
-    copyStore.setValue(state.copy);
-    scheduleStore.setValue(state.schedule);
-    window.setTimeout(() => { restoringRef.current = false; }, 0);
-  }
-
-  function beginEditing() {
-    const current: EditorState = { categories: categoriesStore.value, videos: videosStore.value, copy: copyStore.value, schedule: scheduleStore.value };
-    restoringRef.current = true;
-    sessionStateRef.current = current;
-    previousStateRef.current = current;
-    setUndoState(null);
-    setIsEditing(true);
-    window.setTimeout(() => { restoringRef.current = false; }, 0);
-  }
-
   function notify(message: string) {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 2400);
-  }
-
-  function publishWatch() {
-    publishAdminKeys([
-      { draft: "aplus-admin-watch-categories", published: "aplus-published-watch-categories" },
-      { draft: "aplus-admin-watch-videos", published: "aplus-published-watch-videos" },
-      { draft: "aplus-admin-watch-copy", published: "aplus-published-watch-copy" },
-      { draft: "aplus-admin-watch-schedule", published: "aplus-published-watch-schedule" },
-    ]);
-    setUndoState(null);
-    setIsEditing(false);
-    notify("Watch page published. Returning to view mode.");
-    window.setTimeout(() => window.location.reload(), 450);
   }
 
   function saveVideo() {
@@ -156,34 +96,25 @@ export default function WatchAdmin() {
       notify("Add both time and program title.");
       return;
     }
-    if (scheduleYoutubeUrl.trim() && !getVideoId(scheduleYoutubeUrl)) {
-      notify("Add a valid YouTube URL or leave it empty.");
-      return;
-    }
     scheduleStore.setValue((week) => ({
       ...week,
       [activeScheduleDay]: editingScheduleId
-        ? week[activeScheduleDay].map((entry) => entry.id === editingScheduleId ? { ...entry, time: scheduleTime.trim(), title: scheduleTitle.trim(), youtubeUrl: scheduleYoutubeUrl.trim() || undefined } : entry)
-        : [...week[activeScheduleDay], { id: makeAdminId("slot"), time: scheduleTime.trim(), title: scheduleTitle.trim(), youtubeUrl: scheduleYoutubeUrl.trim() || undefined }],
+        ? week[activeScheduleDay].map((entry) => entry.id === editingScheduleId ? { ...entry, time: scheduleTime.trim(), title: scheduleTitle.trim() } : entry)
+        : [...week[activeScheduleDay], { id: makeAdminId("slot"), time: scheduleTime.trim(), title: scheduleTitle.trim() }],
     }));
     notify(editingScheduleId ? "Schedule entry updated." : "Schedule entry added.");
     setScheduleTime("");
     setScheduleTitle("");
-    setScheduleYoutubeUrl("");
     setEditingScheduleId(null);
   }
 
-  function reorderSchedule(sourceId: string, targetId: string) {
-    if (!isEditing || sourceId === targetId) return;
+  function moveScheduleEntry(index: number, direction: -1 | 1) {
     scheduleStore.setValue((week) => {
       const rows = [...week[activeScheduleDay]];
-      const slotTimes = rows.map((entry) => entry.time);
-      const sourceIndex = rows.findIndex((entry) => entry.id === sourceId);
-      const targetIndex = rows.findIndex((entry) => entry.id === targetId);
-      if (sourceIndex < 0 || targetIndex < 0) return week;
-      const [moved] = rows.splice(sourceIndex, 1);
-      rows.splice(targetIndex, 0, moved);
-      return { ...week, [activeScheduleDay]: rows.map((entry, index) => ({ ...entry, time: slotTimes[index] })) };
+      const target = index + direction;
+      if (target < 0 || target >= rows.length) return week;
+      [rows[index], rows[target]] = [rows[target], rows[index]];
+      return { ...week, [activeScheduleDay]: rows };
     });
   }
 
@@ -195,10 +126,10 @@ export default function WatchAdmin() {
           <h1 className="mt-1 text-[30px] font-semibold tracking-[-0.03em] tablet:text-[38px]">Watch Page</h1>
           <p className="mt-2 text-[14px] font-normal text-[#6E7C91]">Add, edit, remove and organise Watch page content drafts.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex gap-2">
           <a href="/watch?adminPreview=1" target="_blank" className="inline-flex h-11 items-center rounded-[12px] border border-[#D7E2EE] bg-white px-5 text-[13px] font-medium">Preview draft ↗</a>
-          {!isEditing ? <button type="button" onClick={beginEditing} className="h-11 rounded-[12px] bg-[#2488F4] px-5 text-[13px] font-medium text-white">Edit Page</button> : <><button type="button" disabled={!undoState} onClick={() => { if (undoState) { applyEditorState(undoState); setUndoState(null); notify("Last change undone."); } }} className="h-11 rounded-[12px] border border-[#D7E2EE] bg-white px-5 text-[13px] font-medium disabled:opacity-40">Undo</button><button type="button" onClick={() => { if (sessionStateRef.current) applyEditorState(sessionStateRef.current); setUndoState(null); setIsEditing(false); notify("Editing cancelled."); }} className="h-11 rounded-[12px] border border-[#E4C9C9] bg-white px-5 text-[13px] font-medium text-[#B34242]">Cancel Editing</button><button type="button" onClick={() => { setUndoState(null); setIsEditing(false); notify("Draft saved locally. Public website was not changed."); }} className="h-11 rounded-[12px] bg-[#2488F4] px-5 text-[13px] font-medium text-white">Save Draft</button></>}
-          <button type="button" onClick={publishWatch} className="h-11 rounded-[12px] bg-[#238A55] px-5 text-[13px] font-medium text-white">Publish</button>
+          <button type="button" onClick={() => notify("Draft saved locally. Public website was not changed.")} className="h-11 rounded-[12px] bg-[#2488F4] px-5 text-[13px] font-medium text-white">Save draft</button>
+          <button type="button" onClick={() => { publishAdminKeys([{ draft: "aplus-admin-watch-categories", published: "aplus-published-watch-categories" }, { draft: "aplus-admin-watch-videos", published: "aplus-published-watch-videos" }, { draft: "aplus-admin-watch-copy", published: "aplus-published-watch-copy" }, { draft: "aplus-admin-watch-schedule", published: "aplus-published-watch-schedule" }]); notify("Watch page published in this browser."); }} className="h-11 rounded-[12px] bg-[#238A55] px-5 text-[13px] font-medium text-white">Publish</button>
         </div>
       </div>
 
@@ -209,10 +140,6 @@ export default function WatchAdmin() {
           <button key={item} type="button" onClick={() => setTab(item)} className={`shrink-0 border-b-2 px-5 py-3 text-[14px] font-medium ${tab === item ? "border-[#2488F4] text-[#0877EF]" : "border-transparent text-[#718096]"}`}>{item}</button>
         ))}
       </div>
-
-      {!isEditing ? <div className="mt-5 rounded-[14px] border border-[#D8E8F7] bg-[#EDF6FF] px-4 py-3 text-[13px] text-[#55708F]">View mode is active. Click <strong>Edit Page</strong> to unlock forms, item actions and schedule drag-and-drop.</div> : null}
-
-      <fieldset disabled={!isEditing} className={!isEditing ? "opacity-75" : ""}>
 
       {tab === "Videos" ? (
         <section className="mt-6 grid gap-6 desktop:grid-cols-[360px_1fr]">
@@ -254,7 +181,7 @@ export default function WatchAdmin() {
         <section className="mt-6">
           <div className="flex gap-1.5 overflow-x-auto border-b border-[#DCE4ED] pb-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {scheduleDayNames.map((day) => (
-              <button key={day} type="button" onClick={() => { setActiveScheduleDay(day); setCopyTarget(scheduleDayNames.find((item) => item !== day) ?? "Monday"); setEditingScheduleId(null); setScheduleTime(""); setScheduleTitle(""); setScheduleYoutubeUrl(""); }} className={`shrink-0 rounded-t-[12px] border border-b-0 px-4 py-3 text-[13px] font-medium ${activeScheduleDay === day ? "border-[#2488F4] bg-[#2488F4] text-white" : "border-[#DCE4ED] bg-white text-[#68778D]"}`}>{day}</button>
+              <button key={day} type="button" onClick={() => { setActiveScheduleDay(day); setCopyTarget(scheduleDayNames.find((item) => item !== day) ?? "Monday"); setEditingScheduleId(null); setScheduleTime(""); setScheduleTitle(""); }} className={`shrink-0 rounded-t-[12px] border border-b-0 px-4 py-3 text-[13px] font-medium ${activeScheduleDay === day ? "border-[#2488F4] bg-[#2488F4] text-white" : "border-[#DCE4ED] bg-white text-[#68778D]"}`}>{day}</button>
             ))}
           </div>
 
@@ -265,8 +192,7 @@ export default function WatchAdmin() {
                 <p className="mt-1 text-[12px] font-normal text-[#8490A2]">Editing {activeScheduleDay}</p>
                 <label className="mt-5 block text-[12px] font-medium text-[#59687E]">Time<input value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)} className="mt-1.5 h-11 w-full rounded-[11px] border border-[#D8E2EC] px-3 text-[14px] font-normal" placeholder="06.00" /></label>
                 <label className="mt-4 block text-[12px] font-medium text-[#59687E]">Program title<input value={scheduleTitle} onChange={(e) => setScheduleTitle(e.target.value)} className="mt-1.5 h-11 w-full rounded-[11px] border border-[#D8E2EC] px-3 text-[14px] font-normal" placeholder="Program name" /></label>
-                <label className="mt-4 block text-[12px] font-medium text-[#59687E]">YouTube URL <span className="font-normal text-[#8A97A8]">(optional)</span><input value={scheduleYoutubeUrl} onChange={(e) => setScheduleYoutubeUrl(e.target.value)} className="mt-1.5 h-11 w-full rounded-[11px] border border-[#D8E2EC] px-3 text-[14px] font-normal" placeholder="https://youtube.com/watch?v=..." /></label>
-                <div className="mt-5 flex gap-2"><button type="button" onClick={saveScheduleEntry} className="h-11 flex-1 rounded-[11px] bg-[#2488F4] text-[13px] font-medium text-white">{editingScheduleId ? "Update slot" : "Add slot"}</button>{editingScheduleId ? <button type="button" onClick={() => { setEditingScheduleId(null); setScheduleTime(""); setScheduleTitle(""); setScheduleYoutubeUrl(""); }} className="h-11 rounded-[11px] border border-[#D8E2EC] px-4 text-[13px] font-medium">Cancel</button> : null}</div>
+                <div className="mt-5 flex gap-2"><button type="button" onClick={saveScheduleEntry} className="h-11 flex-1 rounded-[11px] bg-[#2488F4] text-[13px] font-medium text-white">{editingScheduleId ? "Update slot" : "Add slot"}</button>{editingScheduleId ? <button type="button" onClick={() => { setEditingScheduleId(null); setScheduleTime(""); setScheduleTitle(""); }} className="h-11 rounded-[11px] border border-[#D8E2EC] px-4 text-[13px] font-medium">Cancel</button> : null}</div>
               </div>
 
               <div className="rounded-[20px] border border-[#E0E7EF] bg-white p-5 shadow-sm">
@@ -281,11 +207,10 @@ export default function WatchAdmin() {
               <div className="flex items-center justify-between gap-3"><div><h2 className="text-[18px] font-semibold">{activeScheduleDay} schedule</h2><p className="mt-1 text-[12px] font-normal text-[#8490A2]">{scheduleStore.value[activeScheduleDay].length} program slots · displayed in this order</p></div><button type="button" onClick={() => { if (window.confirm(`Reset ${activeScheduleDay} schedule?`)) scheduleStore.setValue((week) => ({ ...week, [activeScheduleDay]: defaultWeeklySchedule[activeScheduleDay] })); }} className="text-[12px] font-medium text-[#D45B5B]">Reset day</button></div>
               <div className="mt-4 overflow-hidden rounded-[18px] border border-[#E0E7EF] bg-white shadow-sm">
                 {scheduleStore.value[activeScheduleDay].map((entry, index) => (
-                  <div key={entry.id} data-schedule-drag-id={entry.id} draggable={isEditing} onDragStart={() => { setDraggedScheduleId(entry.id); setDropScheduleId(entry.id); }} onDragOver={(event) => { event.preventDefault(); setDropScheduleId(entry.id); }} onDrop={(event) => { event.preventDefault(); if (draggedScheduleId) reorderSchedule(draggedScheduleId, entry.id); setDraggedScheduleId(null); setDropScheduleId(null); }} onDragEnd={() => { setDraggedScheduleId(null); setDropScheduleId(null); }} className={`grid grid-cols-[38px_70px_1fr_auto] items-center gap-3 px-4 py-3 transition-colors tablet:grid-cols-[38px_100px_1fr_auto] tablet:px-5 ${dropScheduleId === entry.id && draggedScheduleId !== entry.id ? "bg-[#E8F3FF] ring-2 ring-inset ring-[#2488F4]" : ""} ${index < scheduleStore.value[activeScheduleDay].length - 1 ? "border-b border-[#E7EDF3]" : ""}`}>
-                    <button type="button" aria-label={`Drag ${entry.title}`} onTouchStart={() => { setDraggedScheduleId(entry.id); setDropScheduleId(entry.id); }} onTouchMove={(event) => { const touch = event.touches[0]; const target = document.elementFromPoint(touch.clientX, touch.clientY)?.closest<HTMLElement>("[data-schedule-drag-id]")?.dataset.scheduleDragId; if (target) setDropScheduleId(target); }} onTouchEnd={() => { if (draggedScheduleId && dropScheduleId) reorderSchedule(draggedScheduleId, dropScheduleId); setDraggedScheduleId(null); setDropScheduleId(null); }} className="grid h-9 w-9 cursor-grab touch-none place-items-center rounded-[9px] bg-[#F1F5F9] text-[18px] text-[#718096] active:cursor-grabbing">⋮⋮</button>
+                  <div key={entry.id} className={`grid grid-cols-[70px_1fr_auto] items-center gap-3 px-4 py-3 tablet:grid-cols-[100px_1fr_auto] tablet:px-5 ${index < scheduleStore.value[activeScheduleDay].length - 1 ? "border-b border-[#E7EDF3]" : ""}`}>
                     <span className="text-[13px] font-semibold text-[#0877EF]">{entry.time}</span>
                     <span className="min-w-0 truncate text-[14px] font-normal text-[#263852]">{entry.title}</span>
-                    <div className="flex gap-1"><button type="button" onClick={() => { setEditingScheduleId(entry.id); setScheduleTime(entry.time); setScheduleTitle(entry.title); setScheduleYoutubeUrl(entry.youtubeUrl ?? ""); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="h-8 rounded-[8px] bg-[#EDF5FF] px-2.5 text-[11px] font-medium text-[#0877EF]">Edit</button><button type="button" onClick={() => { if (window.confirm(`Remove ${entry.title}?`)) scheduleStore.setValue((week) => ({ ...week, [activeScheduleDay]: week[activeScheduleDay].filter((item) => item.id !== entry.id) })); }} className="h-8 rounded-[8px] bg-[#FFF0F0] px-2.5 text-[11px] font-medium text-[#D84444]">Remove</button></div>
+                    <div className="flex gap-1"><button type="button" onClick={() => moveScheduleEntry(index, -1)} disabled={index === 0} aria-label="Move up" className="grid h-8 w-8 place-items-center rounded-[8px] bg-[#F1F4F7] text-[12px] disabled:opacity-30">↑</button><button type="button" onClick={() => moveScheduleEntry(index, 1)} disabled={index === scheduleStore.value[activeScheduleDay].length - 1} aria-label="Move down" className="grid h-8 w-8 place-items-center rounded-[8px] bg-[#F1F4F7] text-[12px] disabled:opacity-30">↓</button><button type="button" onClick={() => { setEditingScheduleId(entry.id); setScheduleTime(entry.time); setScheduleTitle(entry.title); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="h-8 rounded-[8px] bg-[#EDF5FF] px-2.5 text-[11px] font-medium text-[#0877EF]">Edit</button><button type="button" onClick={() => { if (window.confirm(`Remove ${entry.title}?`)) scheduleStore.setValue((week) => ({ ...week, [activeScheduleDay]: week[activeScheduleDay].filter((item) => item.id !== entry.id) })); }} className="h-8 rounded-[8px] bg-[#FFF0F0] px-2.5 text-[11px] font-medium text-[#D84444]">Remove</button></div>
                   </div>
                 ))}
               </div>
@@ -295,9 +220,8 @@ export default function WatchAdmin() {
       ) : null}
 
       {tab === "Titles" ? (
-        <section className="mt-6 max-w-4xl rounded-[20px] border border-[#E0E7EF] bg-white p-5 tablet:p-6"><h2 className="text-[18px] font-semibold">Watch hero, search and section copy</h2><p className="mt-1 text-[13px] font-normal text-[#7A879A]">Edit all public Watch labels and headings without changing layout or backend data.</p><div className="mt-6 grid gap-4 tablet:grid-cols-2">{(["pageTitle", "channelLabel", "searchPlaceholder", "youtubeChannelLabel", "latestVideosLabel", "programsTitle", "trailersTitle", "categoriesTitle", "scheduleTitle"] as const).map((field) => <label key={field} className="block text-[12px] font-medium capitalize text-[#59687E]">{field.replace(/([A-Z])/g, " $1")}<input value={copyStore.value[field] ?? defaultCopy[field]} onChange={(e) => copyStore.setValue({ ...defaultCopy, ...copyStore.value, [field]: e.target.value })} className="mt-1.5 h-11 w-full rounded-[11px] border border-[#D8E2EC] px-3 text-[14px] font-normal" /></label>)}<label className="block text-[12px] font-medium text-[#59687E] tablet:col-span-2">Page description<textarea value={copyStore.value.pageDescription ?? defaultCopy.pageDescription} onChange={(e) => copyStore.setValue({ ...defaultCopy, ...copyStore.value, pageDescription: e.target.value })} rows={3} className="mt-1.5 w-full rounded-[11px] border border-[#D8E2EC] p-3 text-[14px] font-normal" /></label><label className="block text-[12px] font-medium text-[#59687E] tablet:col-span-2">Schedule description<textarea value={copyStore.value.scheduleDescription ?? defaultCopy.scheduleDescription} onChange={(e) => copyStore.setValue({ ...defaultCopy, ...copyStore.value, scheduleDescription: e.target.value })} rows={3} className="mt-1.5 w-full rounded-[11px] border border-[#D8E2EC] p-3 text-[14px] font-normal" /></label></div><button type="button" onClick={() => notify("Watch page copy draft updated.")} className="mt-5 h-11 rounded-[11px] bg-[#2488F4] px-5 text-[13px] font-medium text-white">Update copy draft</button></section>
+        <section className="mt-6 max-w-3xl rounded-[20px] border border-[#E0E7EF] bg-white p-5 tablet:p-6"><h2 className="text-[18px] font-semibold">Watch page titles</h2><p className="mt-1 text-[13px] font-normal text-[#7A879A]">Edit important headings and introduction text without changing the public page yet.</p><div className="mt-6 grid gap-4 tablet:grid-cols-2">{(["pageTitle", "programsTitle", "trailersTitle", "categoriesTitle"] as const).map((field) => <label key={field} className="block text-[12px] font-medium capitalize text-[#59687E]">{field.replace(/([A-Z])/g, " $1")}<input value={copyStore.value[field]} onChange={(e) => copyStore.setValue({ ...copyStore.value, [field]: e.target.value })} className="mt-1.5 h-11 w-full rounded-[11px] border border-[#D8E2EC] px-3 text-[14px] font-normal" /></label>)}<label className="block text-[12px] font-medium text-[#59687E] tablet:col-span-2">Page description<textarea value={copyStore.value.pageDescription} onChange={(e) => copyStore.setValue({ ...copyStore.value, pageDescription: e.target.value })} rows={4} className="mt-1.5 w-full rounded-[11px] border border-[#D8E2EC] p-3 text-[14px] font-normal" /></label></div><button type="button" onClick={() => notify("Watch page title draft updated.")} className="mt-5 h-11 rounded-[11px] bg-[#2488F4] px-5 text-[13px] font-medium text-white">Update title draft</button></section>
       ) : null}
-      </fieldset>
     </>
   );
 }
