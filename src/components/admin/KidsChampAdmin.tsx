@@ -1,20 +1,157 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import {
-  attentionItems,
-  growthPoints,
-  participants,
-  recentActivity,
-  submissions,
-  upcomingTelecasts,
-  zipBatches,
-  type MockSubmission,
-} from "./kidsChampMockData";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Image from "next/image";
+import { apiFetch } from "@/utils/auth";
+import { KidsChampStatusBadge as StatusBadge } from "./KidsChampStatusBadge";
+import { KidsChampWhatsAppIcon as WhatsAppIcon } from "./KidsChampWhatsAppIcon";
+import { KidsChampConfirmationDialog as ConfirmationDialog } from "./KidsChampConfirmationDialog";
+type MockSubmission = {
+  id: string; participantId: string; phone: string; trackingCode: string; childName: string; initials: string; age: number; location: string; category: string;
+  participantType: "Guest" | "Registered"; reviewStatus: "New" | "Pending review" | "Under review" | "Approved" | "Rejected";
+  tvStatus: "Not selected" | "Selected" | "Scheduled" | "Telecasted"; fileStatus: "Ready" | "Missing" | "Processing failed";
+  reviewer: string; submittedAt: string; submittedDate: string; reviewedDate?: string; previewed: boolean; photoUrl?: string; photoFile?: File;
+};
+const submissions: MockSubmission[] = [];
+const upcomingTelecasts: Array<{episode:string;date:string;time:string;entries:number;status:string}> = [];
 
-type Workspace = "Overview" | "Submissions" | "ZIP" | "Participants";
-type ZipBatch = (typeof zipBatches)[number];
-type ParticipantRecord = (typeof participants)[number];
+type Workspace = "Overview" | "Submissions" | "ZIP" | "Participants" | "Account & Management";
+type OverviewSubmissionFilter = "approved" | "pending" | "today" | null;
+type OverviewZipView = "all" | "telecasted" | "whatsapp-attention";
+
+type AdminSubmissionResponse = {
+  id: string;
+  participantId: string;
+  phone: string;
+  trackingCode: string;
+  childName: string;
+  ageAtSubmission: number;
+  hometown: string;
+  category: string;
+  workTitle?: string;
+  reviewStatus: "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "REJECTED";
+  telecastStatus:
+    | "NOT_SELECTED"
+    | "SELECTED"
+    | "SCHEDULED"
+    | "TELECASTED"
+    | "CANCELLED";
+  participantType: "Guest" | "Registered";
+  reviewer: string;
+  submittedAt: string;
+  reviewedAt?: string;
+  previewed: boolean;
+  photoAvailable: boolean;
+};
+
+type AdminSubmissionPageResponse = {
+  items: AdminSubmissionResponse[];
+  page: number;
+  size: number;
+  totalItems: number;
+  totalPages: number;
+};
+
+const reviewStatusLabels: Record<AdminSubmissionResponse["reviewStatus"], MockSubmission["reviewStatus"]> = {
+  SUBMITTED: "New",
+  UNDER_REVIEW: "Under review",
+  APPROVED: "Approved",
+  REJECTED: "Rejected",
+};
+
+const telecastStatusLabels: Record<AdminSubmissionResponse["telecastStatus"], MockSubmission["tvStatus"]> = {
+  NOT_SELECTED: "Not selected",
+  SELECTED: "Selected",
+  SCHEDULED: "Scheduled",
+  TELECASTED: "Telecasted",
+  CANCELLED: "Not selected",
+};
+
+function toMockSubmission(item: AdminSubmissionResponse): MockSubmission {
+  const submitted = new Date(item.submittedAt);
+  return {
+    id: item.id,
+    participantId: item.participantId,
+    phone: item.phone,
+    trackingCode: item.trackingCode,
+    childName: item.childName,
+    initials: item.childName.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase(),
+    age: item.ageAtSubmission,
+    location: item.hometown,
+    category: item.category,
+    participantType: item.participantType,
+    reviewStatus: reviewStatusLabels[item.reviewStatus],
+    tvStatus: telecastStatusLabels[item.telecastStatus],
+    fileStatus: item.photoAvailable ? "Ready" : "Missing",
+    reviewer: item.reviewer,
+    submittedAt: submitted.toLocaleString(),
+    submittedDate: item.submittedAt.slice(0, 10),
+    reviewedDate: item.reviewedAt?.slice(0, 10),
+    previewed: item.previewed,
+  };
+}
+
+type AdminBatchResponse = {
+  id: string;
+  batchCode: string;
+  status: "READY" | "DOWNLOADED" | "DELETED";
+  photoCount: number;
+  firstDownloadedAt?: string;
+  editedAt?: string;
+  daysRemaining: number;
+  telecastDate?: string;
+  alternateTelecastDate?: string;
+  telecastCompletedAt?: string;
+  createdAt: string;
+  deletedAt?: string;
+  submissionIds: string[];
+};
+
+function toZipBatch(item: AdminBatchResponse): ZipBatch {
+  return {
+    id: item.id,
+    code: item.batchCode,
+    photos: item.photoCount,
+    size: "Server archive",
+    status: item.status === "DELETED" ? "Ready" : "Ready",
+    expires: `${item.daysRemaining} days`,
+    progress: 100,
+    telecastStatus: item.telecastCompletedAt ? "Telecast completed" : item.telecastDate ? "Scheduled" : "Not scheduled",
+    telecastDate: item.telecastDate || "",
+    telecastCompleted: Boolean(item.telecastCompletedAt),
+    recipientIds: item.submissionIds || [],
+    edited: Boolean(item.editedAt),
+    editedAt: item.editedAt ? item.editedAt.slice(0, 10) : "",
+    deleted: item.status === "DELETED",
+    deletedAt: item.deletedAt ? item.deletedAt.slice(0, 10) : "",
+    downloaded: Boolean(item.firstDownloadedAt),
+    downloadedAt: item.firstDownloadedAt ? item.firstDownloadedAt.slice(0, 10) : "",
+    createdAt: item.createdAt.slice(0, 10),
+  };
+}
+type ZipBatch = { id?: string; code:string;photos:number;size:string;status:string;expires:string;progress:number;telecastStatus:string;telecastDate:string;telecastCompleted:boolean;recipientIds:string[];edited:boolean;editedAt:string;deleted:boolean;deletedAt:string;downloaded:boolean;downloadedAt:string;createdAt:string };
+type ParticipantRecord = {
+  reference: string;
+  name: string;
+  age: number;
+  type: string;
+  location: string;
+  phone: string;
+  submissions: number;
+  approved: number;
+  telecasted: number;
+  whatsapp: string;
+  joinedDate: string;
+  lastSubmissionDate: string;
+};
+type DuplicateGuest = {
+  firstId: string; secondId: string; firstName: string; secondName: string;
+  firstPhone: string; secondPhone: string; firstHometown: string; secondHometown: string;
+  firstSubmissions: number; secondSubmissions: number; reasons: string[];
+  matchType: "GUEST_GUEST" | "REGISTERED_GUEST";
+};
+const zipBatches: ZipBatch[] = [];
+const participants: ParticipantRecord[] = [];
 type DrawerKind =
   | "submissions"
   | "reviews"
@@ -24,7 +161,6 @@ type DrawerKind =
   | "attention"
   | "activity"
   | "calendar"
-  | "settings"
   | "notifications";
 
 type DrawerState = {
@@ -39,12 +175,25 @@ type DrawerState = {
   onSaveParticipant?: (participant: ParticipantRecord) => void;
 } | null;
 
+type CalendarWorkspaceFilter = {
+  date: string;
+  mode: "submitted" | "reviewed";
+};
+
 const workspaces: Workspace[] = [
   "Overview",
   "Submissions",
   "ZIP",
   "Participants",
 ];
+
+function WorkspaceTabIcon({ workspace }: { workspace: Workspace }) {
+  const shared = { fill: "none", stroke: "currentColor", strokeWidth: 1.9, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (workspace === "Overview") return <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="4" width="9" height="9" rx="2" {...shared}/><rect x="19" y="4" width="9" height="9" rx="2" {...shared}/><rect x="4" y="19" width="9" height="9" rx="2" {...shared}/><rect x="19" y="19" width="9" height="9" rx="2" {...shared}/></svg>;
+  if (workspace === "Submissions") return <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 3.5h10l5 5v19H9z" {...shared}/><path d="M19 3.5v6h5M13 15h7M13 20h7M13 25h4" {...shared}/></svg>;
+  if (workspace === "ZIP") return <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="3" {...shared}/><path d="M10.7 10.7a7.5 7.5 0 0 0 0 10.6M21.3 10.7a7.5 7.5 0 0 1 0 10.6M6.7 6.7a13.2 13.2 0 0 0 0 18.6M25.3 6.7a13.2 13.2 0 0 1 0 18.6" {...shared}/></svg>;
+  return <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="13" cy="11" r="4.5" {...shared}/><path d="M4.5 27c.8-5.2 4-8 8.5-8s7.7 2.8 8.5 8M22.5 7.5a4 4 0 0 1 0 7.8M23 19.3c3 .6 4.6 3 5 6.2" {...shared}/></svg>;
+}
 
 const fieldClass =
   "h-10 w-full rounded-[10px] border border-[#D8E2EC] bg-white px-3 text-[13px] outline-none focus:border-[#2488F4] focus:ring-3 focus:ring-blue-100";
@@ -90,36 +239,6 @@ const defaultKidsChampSettings: KidsChampSettings = {
     "Hello {name}, thank you for being part of A+ Kids Champ. Reference: {reference}.",
 };
 
-function StatusBadge({ label }: { label: string }) {
-  const value = label.toLowerCase();
-  const style =
-    value.includes("approved") ||
-    value.includes("ready") ||
-    value.includes("consented") ||
-    value.includes("telecasted")
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : value.includes("rejected") ||
-          value.includes("failed") ||
-          value.includes("error") ||
-          value.includes("deleted") ||
-          value.includes("missing") ||
-          value.includes("opted")
-        ? "border-red-200 bg-red-50 text-red-700"
-        : value.includes("pending") ||
-            value.includes("review") ||
-            value.includes("creating") ||
-            value.includes("scheduled")
-          ? "border-amber-200 bg-amber-50 text-amber-700"
-          : "border-blue-200 bg-blue-50 text-blue-700";
-  return (
-    <span
-      className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${style}`}
-    >
-      {label}
-    </span>
-  );
-}
-
 function PrivateValue({
   enabled,
   children,
@@ -132,17 +251,14 @@ function PrivateValue({
   );
 }
 
-type GrowthMetric = "impressions" | "submissions" | "participants";
-type GrowthPeriod = "Day" | "Week" | "Month" | "Year" | "Custom";
+type GrowthMetric = "submissions" | "participants";
 type GrowthPoint = {
   label: string;
-  impressions: number;
   submissions: number;
   participants: number;
 };
 
 const growthSeries: { key: GrowthMetric; label: string; color: string }[] = [
-  { key: "impressions", label: "Page impressions", color: "#0877EF" },
   { key: "submissions", label: "Submissions", color: "#7C3AED" },
   { key: "participants", label: "Participants", color: "#059669" },
 ];
@@ -164,7 +280,7 @@ function InsightsGrowthChart({ points }: { points: GrowthPoint[] }) {
     selected.includes(series.key),
   );
   const indexedValues = activeSeries.flatMap((series) => {
-    const baseline = points[0][series.key];
+    const baseline = Math.max(points[0][series.key], 1);
     return points.map((point) => (point[series.key] / baseline) * 100);
   });
   const minimum = Math.min(...indexedValues, 90);
@@ -214,7 +330,7 @@ function InsightsGrowthChart({ points }: { points: GrowthPoint[] }) {
           viewBox={`0 0 ${width} ${height}`}
           className="w-full"
           role="img"
-          aria-label="Growth comparison for impressions, submissions and participants"
+          aria-label="Growth comparison for submissions and participants"
           onMouseLeave={() => setHovered(null)}
         >
           <defs>
@@ -260,7 +376,7 @@ function InsightsGrowthChart({ points }: { points: GrowthPoint[] }) {
             />
           ))}
           {activeSeries.map((series) => {
-            const baseline = points[0][series.key];
+            const baseline = Math.max(points[0][series.key], 1);
             const coordinates = points.map((point, index) => ({
               value: point[series.key],
               x:
@@ -417,343 +533,45 @@ function InsightsGrowthChart({ points }: { points: GrowthPoint[] }) {
   );
 }
 
-function getGrowthPoints(
-  period: GrowthPeriod,
-  start = "2026-07-25",
-  end = "2026-07-31",
-): GrowthPoint[] {
-  if (period === "Week") return growthPoints;
-  const labels =
-    period === "Day"
-      ? ["06:00", "09:00", "12:00", "15:00", "18:00", "21:00"]
-      : period === "Month"
-        ? ["Week 1", "Week 2", "Week 3", "Week 4", "Week 5"]
-        : period === "Year"
-          ? [
-              "Jan",
-              "Feb",
-              "Mar",
-              "Apr",
-              "May",
-              "Jun",
-              "Jul",
-              "Aug",
-              "Sep",
-              "Oct",
-              "Nov",
-              "Dec",
-            ]
-          : Array.from({ length: 7 }, (_, index) => {
-              const requestedFrom = new Date(`${start}T00:00:00`);
-              const requestedTo = new Date(`${end}T00:00:00`);
-              const safeFrom = Number.isNaN(requestedFrom.getTime())
-                ? new Date("2026-07-25T00:00:00")
-                : requestedFrom;
-              const safeTo =
-                Number.isNaN(requestedTo.getTime()) || requestedTo < safeFrom
-                  ? safeFrom
-                  : requestedTo;
-              const date = new Date(
-                safeFrom.getTime() +
-                  ((safeTo.getTime() - safeFrom.getTime()) * index) / 6,
-              );
-              return date.toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-              });
-            });
-  const scale =
-    period === "Day"
-      ? 0.22
-      : period === "Month"
-        ? 5.2
-        : period === "Year"
-          ? 21
-          : 1.4;
-  const movement = [
-    1, 1.18, 1.1, 1.42, 1.31, 1.58, 1.48, 1.72, 1.63, 1.91, 2.04, 1.96,
-  ];
-  return labels.map((label, index) => ({
-    label,
-    impressions: Math.round(820 * scale * movement[index]),
-    submissions: Math.round(
-      24 * scale * (movement[index] + (index % 3 === 0 ? 0.06 : 0)),
-    ),
-    participants: Math.round(
-      18 * scale * (movement[index] + (index % 4 === 2 ? 0.12 : 0)),
-    ),
-  }));
-}
 
-function GrowthExportModal({
-  initialPeriod,
-  onClose,
-  notify,
-}: {
-  initialPeriod: GrowthPeriod;
-  onClose: () => void;
-  notify: (message: string) => void;
-}) {
-  const [period, setPeriod] = useState<GrowthPeriod>(initialPeriod);
-  const [start, setStart] = useState("2026-07-25");
-  const [end, setEnd] = useState("2026-07-31");
-  const [fields, setFields] = useState<GrowthMetric[]>(
-    growthSeries.map((series) => series.key),
-  );
-  const points = useMemo(
-    () => getGrowthPoints(period, start, end),
-    [period, start, end],
-  );
-
-  function toggleField(field: GrowthMetric) {
-    setFields((current) =>
-      current.includes(field)
-        ? current.filter((item) => item !== field)
-        : [...current, field],
-    );
-  }
-
-  function exportExcel() {
-    if (!fields.length) return;
-    const escapeXml = (value: string | number) =>
-      String(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;");
-    const headers = [
-      "Period",
-      ...fields.map(
-        (field) => growthSeries.find((series) => series.key === field)!.label,
-      ),
-    ];
-    const rows = points.map((point) => [
-      point.label,
-      ...fields.map((field) => point[field]),
-    ]);
-    const xmlRows = [headers, ...rows]
-      .map(
-        (row, rowIndex) =>
-          `<Row>${row.map((cell) => `<Cell><Data ss:Type="${rowIndex && typeof cell === "number" ? "Number" : "String"}">${escapeXml(cell)}</Data></Cell>`).join("")}</Row>`,
-      )
-      .join("");
-    const workbook = `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Kids Champ Growth"><Table>${xmlRows}</Table></Worksheet></Workbook>`;
-    const url = URL.createObjectURL(
-      new Blob([`\uFEFF${workbook}`], { type: "application/vnd.ms-excel" }),
-    );
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `kids-champ-growth-${period.toLowerCase()}.xls`;
-    link.click();
-    URL.revokeObjectURL(url);
-    notify("Excel growth report downloaded.");
-    onClose();
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-[115] grid place-items-center bg-[#102A56]/45 p-4 backdrop-blur-[2px]"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="growth-export-title"
-      onMouseDown={onClose}
-    >
-      <section
-        className="w-full max-w-[620px] rounded-[20px] bg-white shadow-[0_28px_90px_rgba(16,42,86,.3)]"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header className="flex items-start justify-between border-b border-[#E3E9F0] p-5">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[#2488F4]">
-              Excel export
-            </p>
-            <h2
-              id="growth-export-title"
-              className="mt-1 text-[22px] font-semibold"
-            >
-              Export growth data
-            </h2>
-            <p className="mt-1 text-[12px] text-[#7A879A]">
-              Choose the reporting period and columns to include.
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="grid size-9 place-items-center rounded-full border border-[#D7E2EE] text-[#66758B]"
-            aria-label="Close export dialog"
-          >
-            x
-          </button>
-        </header>
-        <div className="p-5">
-          <p className="text-[12px] font-semibold text-[#526178]">
-            Export period
-          </p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {(["Day", "Week", "Month", "Year", "Custom"] as GrowthPeriod[]).map(
-              (item) => (
-                <button
-                  key={item}
-                  onClick={() => setPeriod(item)}
-                  className={`rounded-[9px] px-3 py-2 text-[11px] font-semibold ${period === item ? "bg-[#2488F4] text-white" : "bg-[#F0F3F7] text-[#65748A]"}`}
-                >
-                  {item}
-                </button>
-              ),
-            )}
-          </div>
-          {period === "Custom" ? (
-            <div className="mt-4 grid grid-cols-2 gap-3">
-              <label className="text-[11px] font-semibold text-[#65748A]">
-                From
-                <input
-                  type="date"
-                  value={start}
-                  onChange={(event) => setStart(event.target.value)}
-                  className={`${fieldClass} mt-1`}
-                />
-              </label>
-              <label className="text-[11px] font-semibold text-[#65748A]">
-                To
-                <input
-                  type="date"
-                  value={end}
-                  onChange={(event) => setEnd(event.target.value)}
-                  className={`${fieldClass} mt-1`}
-                />
-              </label>
-            </div>
-          ) : null}
-          <p className="mt-6 text-[12px] font-semibold text-[#526178]">
-            Data to include
-          </p>
-          <div className="mt-2 grid gap-2 tablet:grid-cols-3">
-            {growthSeries.map((series) => (
-              <label
-                key={series.key}
-                className={`flex cursor-pointer items-center gap-2 rounded-[11px] border p-3 text-[12px] font-semibold ${fields.includes(series.key) ? "border-blue-200 bg-blue-50" : "border-[#E1E7EE] bg-white"}`}
-              >
-                <input
-                  type="checkbox"
-                  checked={fields.includes(series.key)}
-                  onChange={() => toggleField(series.key)}
-                  className="size-4 accent-[#2488F4]"
-                />
-                <i
-                  className="size-2 rounded-full"
-                  style={{ backgroundColor: series.color }}
-                />
-                {series.label}
-              </label>
-            ))}
-          </div>
-          <div className="mt-6 flex items-center justify-between gap-3 border-t border-[#E7ECF2] pt-4">
-            <p className="text-[11px] text-[#7A879A]">
-              {points.length} rows · {fields.length} data columns
-            </p>
-            <div className="flex gap-2">
-              <button onClick={onClose} className={secondaryButton}>
-                Cancel
-              </button>
-              <button
-                onClick={exportExcel}
-                disabled={!fields.length}
-                className={`${primaryButton} disabled:cursor-not-allowed disabled:opacity-40`}
-              >
-                Download Excel
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
 
 function OverviewGrowthSection({
   notify,
 }: {
   notify: (message: string) => void;
 }) {
-  const [period, setPeriod] = useState<GrowthPeriod>("Week");
-  const [start, setStart] = useState("2026-07-25");
-  const [end, setEnd] = useState("2026-07-31");
-  const [exportOpen, setExportOpen] = useState(false);
-  const points = useMemo(
-    () => getGrowthPoints(period, start, end),
-    [period, start, end],
-  );
+  const [points, setPoints] = useState<GrowthPoint[]>([]);
+  useEffect(() => {
+    apiFetch("/api/v1/admin/kids-champ/growth").then(async (response) => {
+      if (!response.ok) throw new Error("Growth data could not be loaded.");
+      const body=await response.json() as Array<{date:string;submissions:number;participants:number}>;
+      setPoints(body.map((item)=>({label:new Date(`${item.date}T00:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric"}),submissions:item.submissions,participants:item.participants})));
+    }).catch((reason)=>notify(reason instanceof Error?reason.message:"Growth data could not be loaded."));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <>
       <section className="overflow-hidden rounded-[18px] border border-[#E0E7EF] bg-white">
-        <button
-          type="button"
-          onClick={() => setExportOpen(true)}
-          className="group flex w-full items-start justify-between gap-4 border-b border-[#E7ECF2] p-5 text-left tablet:p-6"
-        >
+        <div className="flex w-full items-start justify-between gap-4 border-b border-[#E7ECF2] p-5 text-left tablet:p-6">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[.1em] text-[#2488F4]">
-              Impressions and growth
+              Programme activity
             </p>
             <h2 className="mt-1 text-[21px] font-semibold">
-              Combined performance
+              Submission and participant growth
             </h2>
             <p className="mt-1 text-[12px] text-[#8490A2]">
-              Compare performance over any reporting period.
+              Daily activity for the last seven days.
             </p>
           </div>
-          <span className="rounded-[10px] border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] font-semibold text-[#0877EF] transition group-hover:bg-[#2488F4] group-hover:text-white">
-            Export Excel
-          </span>
-        </button>
+          <span className="rounded-[10px] border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] font-semibold text-[#0877EF]">Last 7 days</span>
+        </div>
         <div className="p-5 tablet:p-6">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-1 text-[11px] font-semibold text-[#69778C]">
-              View:
-            </span>
-            {(["Day", "Week", "Month", "Year", "Custom"] as GrowthPeriod[]).map(
-              (item) => (
-                <button
-                  key={item}
-                  onClick={() => setPeriod(item)}
-                  className={`rounded-[9px] px-3 py-2 text-[11px] font-semibold ${period === item ? "bg-[#17243D] text-white" : "bg-[#F0F3F7] text-[#65748A]"}`}
-                >
-                  {item}
-                </button>
-              ),
-            )}
-            {period === "Custom" ? (
-              <>
-                <input
-                  type="date"
-                  value={start}
-                  onChange={(event) => setStart(event.target.value)}
-                  className={`${fieldClass} ml-auto w-auto`}
-                  aria-label="Growth range start"
-                />
-                <span className="text-[11px] text-[#8A96A7]">to</span>
-                <input
-                  type="date"
-                  value={end}
-                  min={start}
-                  onChange={(event) => setEnd(event.target.value)}
-                  className={`${fieldClass} w-auto`}
-                  aria-label="Growth range end"
-                />
-              </>
-            ) : null}
-          </div>
           <div className="mt-5">
-            <InsightsGrowthChart points={points} />
+            {points.length ? <InsightsGrowthChart points={points} /> : <p className="py-12 text-center text-[12px] text-[#8490A2]">No growth data is available.</p>}
           </div>
         </div>
       </section>
-      {exportOpen ? (
-        <GrowthExportModal
-          initialPeriod={period}
-          onClose={() => setExportOpen(false)}
-          notify={notify}
-        />
-      ) : null}
     </>
   );
 }
@@ -781,110 +599,41 @@ function CalendarDayCell({
   metrics?: CalendarMetrics;
   onOpen: () => void;
 }) {
-  const dayStatus = !metrics
-    ? "inactive"
-    : metrics.warnings > 0
-      ? "warning"
-      : metrics.telecasts > 0 || metrics.zips > 0
-        ? "healthy"
-        : "normal";
-  const dayStyle =
-    dayStatus === "warning"
-      ? "border-red-300 bg-red-50 hover:border-red-400"
-      : dayStatus === "healthy"
-        ? "border-emerald-300 bg-emerald-50 hover:border-emerald-400"
-        : dayStatus === "normal"
-          ? "border-transparent bg-white hover:border-[#CBD5E1]"
-          : "border-transparent bg-white";
-  const counters = metrics
-    ? [
-        {
-          label: "Submissions",
-          value: metrics.submissions,
-          style: "bg-[#2488F4] text-white",
-        },
-        {
-          label: "Reviews",
-          value: metrics.reviews,
-          style: "bg-[#7B8797] text-white",
-        },
-        {
-          label: "Telecasts",
-          value: metrics.telecasts,
-          style: "bg-violet-500 text-white",
-        },
-        {
-          label: "ZIPs",
-          value: metrics.zips,
-          style: "bg-emerald-500 text-white",
-        },
-        {
-          label: "Warnings",
-          value: metrics.warnings,
-          style: metrics.warnings
-            ? "bg-red-500 text-white"
-            : "bg-red-50 text-red-500",
-        },
-      ]
-    : [];
+  const hasActivity = Boolean(metrics && (metrics.submissions || metrics.reviews || metrics.telecasts || metrics.zips || metrics.warnings));
+  const dots = metrics ? [
+    metrics.submissions ? "bg-sky-500" : null,
+    metrics.reviews ? "bg-amber-400" : null,
+    metrics.telecasts ? "bg-violet-500" : null,
+    metrics.zips ? "bg-emerald-500" : null,
+  ].filter(Boolean) : [];
 
   return (
     <button
       type="button"
       disabled={!current}
       onClick={onOpen}
-      aria-label={`${dateLabel}, ${dayStatus} status`}
-      className={`group relative min-h-[88px] overflow-hidden rounded-[8px] border p-2 transition tablet:min-h-[112px] ${dayStyle} ${current ? "hover:-translate-y-0.5 hover:shadow-sm" : "cursor-default"} ${selected ? "ring-2 ring-inset ring-[#F26B4D]" : ""}`}
+      aria-label={`${dateLabel}${metrics?.warnings ? `, ${metrics.warnings} items need attention` : ""}`}
+      className={`relative min-h-[52px] rounded-[10px] border p-2 text-left transition tablet:min-h-[66px] ${current ? "border-transparent bg-white hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-sm" : "border-transparent bg-white/45 text-slate-300"} ${selected ? "border-[#2488F4] bg-[#EFF8FF] ring-2 ring-[#2488F4]/25" : ""}`}
     >
       <span
-        className={`mx-auto grid size-10 place-items-center rounded-full text-[19px] font-bold ${selected ? "bg-[#F26B4D] text-white" : current ? "text-[#3F4A59]" : "text-[#D2D4D8]"}`}
+        className={`grid size-8 place-items-center rounded-full text-[13px] font-bold ${selected ? "bg-[#2488F4] text-white" : current ? "text-[#334155]" : "text-slate-300"}`}
       >
-        {String(day).padStart(2, "0")}
+        {day}
       </span>
-      {metrics ? (
-        <span className="absolute inset-x-2 bottom-2 grid grid-cols-5 gap-1">
-          {counters.map((counter) => (
-            <span
-              key={counter.label}
-              aria-label={`${counter.value} ${counter.label.toLowerCase()}`}
-              className={`grid h-5 place-items-center rounded-[5px] text-[9px] font-bold ${counter.style}`}
-            >
-              {counter.value}
-            </span>
-          ))}
-        </span>
-      ) : null}
-      {metrics ? (
-        <span className="pointer-events-none absolute inset-1 z-20 rounded-[7px] bg-[#17243D]/96 p-2.5 text-left text-white opacity-0 shadow-lg transition-opacity duration-150 delay-0 group-hover:opacity-100 group-hover:delay-[400ms]">
-          <span className="block text-center text-[11px] font-bold text-white/65">
-            {dateLabel}
-          </span>
-          <span className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
-            {counters.map((counter) => (
-              <span
-                key={counter.label}
-                className="flex items-center justify-between gap-2 text-[9px]"
-              >
-                <span className="text-white/70">{counter.label}</span>
-                <strong className="text-[10px] text-white">
-                  {counter.value}
-                </strong>
-              </span>
-            ))}
-          </span>
-          <span className="mt-2 block text-center text-[8px] font-medium text-[#7DC4FF]">
-            Click for the full day
-          </span>
-        </span>
-      ) : null}
+      {metrics?.warnings ? <span className="absolute right-2 top-2 grid min-w-5 place-items-center rounded-full bg-red-500 px-1 py-0.5 text-[9px] font-bold text-white">{metrics.warnings}</span> : null}
+      {hasActivity ? <span className="absolute bottom-2 left-2 flex gap-1">{dots.map((color, index) => <i key={`${color}-${index}`} className={`size-1.5 rounded-full ${color}`} />)}</span> : null}
     </button>
   );
 }
 
 function OverviewCalendar({
   openDay,
+  onNavigate,
+  notify,
 }: {
   openDay: (dateLabel: string) => void;
+  onNavigate: (section: "submissions" | "zips" | "telecasts" | "tasks" | "warnings", dateLabel: string) => void;
+  notify: (message: string) => void;
 }) {
   const monthNames = [
     "January",
@@ -902,10 +651,38 @@ function OverviewCalendar({
   ];
   const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const [view, setView] = useState<"Year" | "Month" | "Week">("Month");
-  const [displayMonth, setDisplayMonth] = useState(6);
-  const [displayYear, setDisplayYear] = useState(2026);
-  const [selectedDay, setSelectedDay] = useState(31);
-  const [manualDate, setManualDate] = useState("2026-07-31");
+  const [displayMonth, setDisplayMonth] = useState(() => new Date().getMonth());
+  const [displayYear, setDisplayYear] = useState(() => new Date().getFullYear());
+  const [selectedDay, setSelectedDay] = useState(() => new Date().getDate());
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const [jumpDate, setJumpDate] = useState(() => new Intl.DateTimeFormat("en-CA").format(new Date()));
+  const [calendarMetrics, setCalendarMetrics] = useState<Record<string, CalendarMetrics>>({});
+  useEffect(() => {
+    Promise.all([
+      apiFetch("/api/v1/admin/kids-champ/submissions"),
+      apiFetch("/api/v1/admin/kids-champ/batches"),
+      apiFetch("/api/v1/admin/kids-champ/calendar/tasks"),
+    ]).then(async ([submissionResponse, batchResponse, taskResponse]) => {
+      const submissionItems = submissionResponse.ok ? await submissionResponse.json() as AdminSubmissionResponse[] : [];
+      const batchItems = batchResponse.ok ? await batchResponse.json() as AdminBatchResponse[] : [];
+      const taskItems = taskResponse.ok ? await taskResponse.json() as Array<{ date: string; completedAt?: string }> : [];
+      const next: Record<string, CalendarMetrics> = {};
+      const metric = (date: string) => next[date] ??= { submissions: 0, reviews: 0, telecasts: 0, zips: 0, warnings: 0 };
+      submissionItems.forEach((item) => {
+        metric(item.submittedAt.slice(0, 10)).submissions += 1;
+        if (item.reviewedAt) metric(item.reviewedAt.slice(0, 10)).reviews += 1;
+      });
+      batchItems.forEach((item) => {
+        metric(item.createdAt.slice(0, 10)).zips += 1;
+        if (item.telecastDate) metric(item.telecastDate).telecasts += 1;
+        if (item.status !== "DELETED" && item.daysRemaining <= 0) metric(item.createdAt.slice(0, 10)).warnings += 1;
+      });
+      taskItems.forEach((item) => {
+        if (!item.completedAt) metric(item.date).warnings += 1;
+      });
+      setCalendarMetrics(next);
+    }).catch(() => setCalendarMetrics({}));
+  }, []);
   const daysInMonth = new Date(displayYear, displayMonth + 1, 0).getDate();
   const leadingDays = new Date(displayYear, displayMonth, 1).getDay();
   const previousMonthDays = new Date(displayYear, displayMonth, 0).getDate();
@@ -927,13 +704,10 @@ function OverviewCalendar({
       key: `next-${index}`,
     })),
   ];
-  const metricsForDay = (day: number): CalendarMetrics => ({
-    submissions: 18 + (day % 21),
-    reviews: 12 + (day % 17),
-    telecasts: day % 7 === 0 ? 1 : 0,
-    zips: day % 9 === 0 ? 1 : 0,
-    warnings: day % 13 === 0 ? 1 : 0,
-  });
+  const metricsForDay = (day: number): CalendarMetrics => {
+    const date = `${displayYear}-${String(displayMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    return calendarMetrics[date] ?? { submissions: 0, reviews: 0, telecasts: 0, zips: 0, warnings: 0 };
+  };
   const selectedDate = new Date(
     displayYear,
     displayMonth,
@@ -946,19 +720,48 @@ function OverviewCalendar({
     date.setDate(weekStart.getDate() + index);
     return date;
   });
+  const selectedDateKey = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`;
+  const selectedMetrics = calendarMetrics[selectedDateKey] ?? { submissions: 0, reviews: 0, telecasts: 0, zips: 0, warnings: 0 };
+  const selectedDateLabel = `${monthNames[selectedDate.getMonth()]} ${selectedDate.getDate()}, ${selectedDate.getFullYear()}`;
 
-  function goToDate() {
-    const [year, month, day] = manualDate.split("-").map(Number);
-    if (!year || !month || !day) return;
-    setDisplayYear(year);
-    setDisplayMonth(month - 1);
-    setSelectedDay(day);
+  function changeMonth(offset: number) {
+    const next = new Date(displayYear, displayMonth + offset, 1);
+    setDisplayYear(next.getFullYear());
+    setDisplayMonth(next.getMonth());
+    setSelectedDay(1);
     setView("Month");
   }
+  function goToToday() {
+    const today = new Date();
+    setDisplayYear(today.getFullYear());
+    setDisplayMonth(today.getMonth());
+    setSelectedDay(today.getDate());
+    setView("Month");
+  }
+  function applyJumpDate() {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(jumpDate)) return;
+    const next = new Date(`${jumpDate}T00:00:00`);
+    if (Number.isNaN(next.getTime())) return;
+    setDisplayYear(next.getFullYear());
+    setDisplayMonth(next.getMonth());
+    setSelectedDay(next.getDate());
+    setView("Month");
+    setJumpOpen(false);
+  }
+  useEffect(() => {
+    const handleCommand = (event: Event) => {
+      const command = (event as CustomEvent<string>).detail;
+      if (command === "today") goToToday();
+      if (command === "month") setView("Month");
+      if (command === "jump") setJumpOpen(true);
+    };
+    window.addEventListener("kids-champ-calendar-command", handleCommand);
+    return () => window.removeEventListener("kids-champ-calendar-command", handleCommand);
+  }, [displayMonth, displayYear, selectedDay]);
 
   return (
     <section
-      className="overflow-hidden rounded-[18px] border border-[#E0E7EF] bg-white"
+      className="relative flex h-full min-h-0 flex-col overflow-hidden rounded-[18px] border border-[#E0E7EF] bg-white"
       aria-labelledby="overview-calendar-title"
     >
       <div className="flex flex-col gap-4 border-b border-[#E7EBF0] px-4 py-4 tablet:px-5">
@@ -974,62 +777,17 @@ function OverviewCalendar({
               Select a day or enter a date to jump directly to it.
             </p>
           </div>
-          <div className="inline-flex w-fit rounded-[10px] bg-[#F3F4F6] p-1">
-            {(["Year", "Month", "Week"] as const).map((item) => (
-              <button
-                key={item}
-                onClick={() => setView(item)}
-                className={`h-8 rounded-[8px] px-3 text-[11px] font-semibold ${view === item ? "bg-[#F26B4D] text-white shadow-sm" : "text-[#7B8491]"}`}
-              >
-                {item}
-              </button>
-            ))}
-          </div>
+          <button type="button" onClick={goToToday} className="rounded-[9px] border border-[#D8E4F0] bg-white px-3 py-2 text-[11px] font-bold text-[#0877EF]">Today</button>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] font-medium text-[#87909C]">View:</span>
-          <select
-            value={displayMonth}
-            onChange={(event) => {
-              setDisplayMonth(Number(event.target.value));
-              setView("Month");
-            }}
-            className="h-9 rounded-[8px] border-0 bg-[#F3F4F6] px-3 text-[11px] font-semibold text-[#596473] outline-none"
-          >
-            {monthNames.map((month, index) => (
-              <option key={month} value={index}>
-                {month}
-              </option>
-            ))}
-          </select>
-          <select
-            value={displayYear}
-            onChange={(event) => setDisplayYear(Number(event.target.value))}
-            className="h-9 rounded-[8px] border-0 bg-[#F3F4F6] px-3 text-[11px] font-semibold text-[#596473] outline-none"
-          >
-            {[2024, 2025, 2026, 2027, 2028].map((year) => (
-              <option key={year}>{year}</option>
-            ))}
-          </select>
-          <span className="ml-auto text-[11px] font-medium text-[#87909C]">
-            Go to date:
-          </span>
-          <input
-            type="date"
-            value={manualDate}
-            onChange={(event) => setManualDate(event.target.value)}
-            className="h-9 rounded-[8px] border border-[#E0E3E7] bg-white px-3 text-[11px] font-semibold text-[#596473] outline-none focus:border-[#F26B4D]"
-          />
-          <button
-            onClick={goToDate}
-            className="h-9 rounded-[8px] bg-[#F26B4D] px-4 text-[11px] font-bold text-white"
-          >
-            Go
-          </button>
+        <div className="flex items-center justify-between gap-2 rounded-[13px] border border-[#E5EBF2] bg-[#FBFDFF] p-2">
+          <button type="button" onClick={() => changeMonth(-1)} className="grid size-9 place-items-center rounded-[9px] text-[18px] font-semibold text-[#526178] transition hover:bg-[#EAF4FF]" aria-label="Previous month">‹</button>
+          <div className="flex min-w-0 items-center gap-2"><div className="text-center"><p className="text-[15px] font-bold text-[#17243D]">{monthNames[displayMonth]}</p><p className="mt-0.5 text-[10px] font-medium text-[#718096]">Select a day to manage its work</p></div><select value={displayYear} onChange={(event) => { setDisplayYear(Number(event.target.value)); setSelectedDay(1); setView("Month"); }} className="h-8 rounded-[8px] border border-[#D8E4F0] bg-white px-2 text-[11px] font-bold text-[#334155] outline-none focus:border-[#2488F4]" aria-label="Calendar year">{[2024, 2025, 2026, 2027, 2028].map((year) => <option key={year}>{year}</option>)}</select></div>
+          <button type="button" onClick={() => changeMonth(1)} className="grid size-9 place-items-center rounded-[9px] text-[18px] font-semibold text-[#526178] transition hover:bg-[#EAF4FF]" aria-label="Next month">›</button>
         </div>
       </div>
 
-      <div className="bg-[#E9EAED] p-2 tablet:p-3">
+      <div className="grid min-h-0 flex-1 bg-[#F4F7FB] desktop:grid-cols-[minmax(0,1fr)_390px]">
+      <div className="min-w-0 p-3 tablet:p-4">
         {view === "Month" ? (
           <div className="overflow-x-auto">
             <div className="min-w-[650px]">
@@ -1057,10 +815,7 @@ function OverviewCalendar({
                       current={cell.current}
                       selected={cell.current && cell.day === selectedDay}
                       metrics={metrics}
-                      onOpen={() => {
-                        setSelectedDay(cell.day);
-                        openDay(dateLabel);
-                      }}
+                    onOpen={() => setSelectedDay(cell.day)}
                     />
                   );
                 })}
@@ -1082,7 +837,8 @@ function OverviewCalendar({
             </div>
             <div className="mt-1.5 grid grid-cols-7 gap-1.5">
               {weekCells.map((date) => {
-                const metrics = metricsForDay(date.getDate());
+                const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+                const metrics = calendarMetrics[dateKey] ?? { submissions: 0, reviews: 0, telecasts: 0, zips: 0, warnings: 0 };
                 const label = `${monthNames[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
                 return (
                   <CalendarDayCell
@@ -1095,7 +851,7 @@ function OverviewCalendar({
                       date.getMonth() === displayMonth
                     }
                     metrics={metrics}
-                    onOpen={() => openDay(label)}
+                    onOpen={() => { setDisplayMonth(date.getMonth()); setDisplayYear(date.getFullYear()); setSelectedDay(date.getDate()); }}
                   />
                 );
               })}
@@ -1127,14 +883,34 @@ function OverviewCalendar({
           </div>
         ) : null}
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-2 px-4 py-3 text-[11px] text-[#6E7C91] tablet:px-5">
+      <aside className="hidden min-h-0 overflow-hidden border-l border-[#E2EAF3] bg-white p-4 desktop:block">
+        <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 border-b border-[#E5EBF2] bg-white px-4 py-4"><p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#2488F4]">Selected-day agenda</p><h3 className="mt-1 text-[19px] font-semibold text-[#17243D]">{selectedDateLabel}</h3><p className="mt-1 text-[11px] text-[#718096]">Manage the day without leaving the calendar.</p></div>
+        <CalendarDayPanel key={selectedDateLabel} notify={notify} dateLabel={selectedDateLabel} onNavigate={onNavigate} />
+      </aside>
+      </div>
+      <div className="grid gap-4 border-t border-[#E5EBF2] bg-white p-4 desktop:hidden tablet:grid-cols-[1.15fr_.85fr] tablet:p-5">
+        <div className="relative z-10">
+          <p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#2488F4]">Selected day</p>
+          <div className="mt-1 flex flex-wrap items-center justify-between gap-3"><div><h3 className="text-[19px] font-semibold text-[#17243D]">{selectedDateLabel}</h3><p className="mt-1 text-[12px] text-[#718096]">A focused view of the work planned and received that day.</p></div><button type="button" onClick={() => openDay(selectedDateLabel)} className="rounded-[9px] bg-[#17243D] px-3 py-2 text-[11px] font-bold text-white">Open day workspace</button></div>
+          <div className="mt-4 grid grid-cols-2 gap-2 tablet:grid-cols-4">
+            {[{ label: "Submissions", value: selectedMetrics.submissions, color: "bg-sky-500" }, { label: "Approvals", value: selectedMetrics.reviews, color: "bg-amber-400" }, { label: "ZIP batches", value: selectedMetrics.zips, color: "bg-emerald-500" }, { label: "Telecasts", value: selectedMetrics.telecasts, color: "bg-violet-500" }].map((item) => <div key={item.label} className="rounded-[12px] border border-[#E4EBF3] bg-[#FBFDFF] p-3"><i className={`block size-2 rounded-full ${item.color}`} /><strong className="mt-3 block text-[20px] leading-none text-[#17243D]">{item.value}</strong><span className="mt-1 block text-[10px] font-semibold text-[#718096]">{item.label}</span></div>)}
+          </div>
+        </div>
+        <aside className={`rounded-[15px] border p-4 ${selectedMetrics.warnings ? "border-red-200 bg-red-50" : "border-emerald-200 bg-emerald-50"}`}>
+          <p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#64748B]">Day status</p>
+          <h3 className={`mt-2 text-[17px] font-semibold ${selectedMetrics.warnings ? "text-red-800" : "text-emerald-800"}`}>{selectedMetrics.warnings ? `${selectedMetrics.warnings} item${selectedMetrics.warnings === 1 ? "" : "s"} need attention` : "No unresolved tasks"}</h3>
+          <p className="mt-2 text-[12px] leading-5 text-[#526178]">{selectedMetrics.warnings ? "Open the day workspace to complete tasks and resolve expired or delayed work." : "Use this day to review its activity or add a new operations task."}</p>
+          <button type="button" onClick={() => openDay(selectedDateLabel)} className={`mt-4 text-[11px] font-bold ${selectedMetrics.warnings ? "text-red-700" : "text-emerald-700"}`}>{selectedMetrics.warnings ? "Resolve work →" : "Plan this day →"}</button>
+        </aside>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-2 border-t border-[#E5EBF2] px-4 py-3 text-[11px] text-[#6E7C91] tablet:px-5">
         <span>
           <i className="mr-1.5 inline-block size-2 rounded-full bg-[#2488F4]" />
           Submissions
         </span>
         <span>
           <i className="mr-1.5 inline-block size-2 rounded-full bg-[#7B8797]" />
-          Reviews
+          Approvals
         </span>
         <span>
           <i className="mr-1.5 inline-block size-2 rounded-full bg-violet-500" />
@@ -1148,19 +924,17 @@ function OverviewCalendar({
           <i className="mr-1.5 inline-block size-2 rounded-full bg-red-500" />
           Warnings
         </span>
-        <span className="ml-auto border-l border-[#DDE3EA] pl-4">
-          <i className="mr-1.5 inline-block size-2 rounded-full bg-white ring-1 ring-[#CBD5E1]" />
-          Normal day
-        </span>
-        <span>
-          <i className="mr-1.5 inline-block size-2 rounded-full bg-emerald-200 ring-1 ring-emerald-400" />
-          Healthy operation
-        </span>
-        <span>
-          <i className="mr-1.5 inline-block size-2 rounded-full bg-red-200 ring-1 ring-red-400" />
-          Needs attention
-        </span>
+        <span className="ml-auto">Red badge = work that needs attention</span>
       </div>
+      {jumpOpen ? (
+        <div className="absolute inset-0 z-30 grid place-items-center bg-[#102A56]/30 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-labelledby="calendar-jump-title">
+          <section className="w-full max-w-sm rounded-[18px] border border-[#DCE7F2] bg-white p-5 shadow-[0_20px_55px_rgba(20,52,93,.22)]">
+            <div className="flex items-start justify-between gap-4"><div><p className="text-[11px] font-semibold text-[#087BF1]">Operations calendar</p><h3 id="calendar-jump-title" className="mt-1 text-[18px] font-semibold text-[#17243D]">Jump to date</h3><p className="mt-1 text-[12px] text-[#718096]">Choose the day you want to review.</p></div><button type="button" onClick={() => setJumpOpen(false)} className="grid size-8 place-items-center rounded-full bg-[#F2F6FA] text-[#60708A]" aria-label="Close date picker">×</button></div>
+            <label className="mt-5 block text-[11px] font-semibold text-[#526178]">Date<input type="date" value={jumpDate} onChange={(event) => setJumpDate(event.target.value)} className={`${fieldClass} mt-1.5`} autoFocus /></label>
+            <div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setJumpOpen(false)} className={secondaryButton}>Cancel</button><button type="button" onClick={applyJumpDate} className={primaryButton}>Go to date</button></div>
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -1168,42 +942,38 @@ function OverviewCalendar({
 function CalendarModal({
   onClose,
   onOpenDay,
+  onNavigate,
+  notify,
 }: {
   onClose: () => void;
   onOpenDay: (dateLabel: string) => void;
+  onNavigate: (section: "submissions" | "zips" | "telecasts" | "tasks" | "warnings", dateLabel: string) => void;
+  notify: (message: string) => void;
 }) {
   return (
     <div
-      className="fixed inset-0 z-[110] grid place-items-center bg-[#102A56]/45 p-3 backdrop-blur-[2px] tablet:p-6"
+      className="fixed inset-0 z-[110] bg-[#F6F9FD]"
       role="dialog"
       aria-modal="true"
       aria-label="Operations calendar"
       onMouseDown={onClose}
     >
       <div
-        className="flex max-h-[94vh] w-full max-w-[1400px] flex-col overflow-hidden rounded-[20px] bg-white shadow-[0_28px_90px_rgba(16,42,86,.28)]"
+        className="flex h-screen w-full flex-col overflow-hidden bg-white"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-[#E2E8F0] px-5 py-4">
+        <div className="flex flex-col gap-4 border-b border-[#E2E8F0] px-5 py-4 tablet:flex-row tablet:items-center tablet:justify-between tablet:px-7">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[#F26B4D]">
-              Kids Champ
-            </p>
-            <h2 className="mt-1 text-[20px] font-semibold text-[#17243D]">
+            <p className="text-[11px] font-semibold text-[#087BF1]">Page manager</p>
+            <h2 className="mt-1 text-[24px] font-semibold tracking-[-.025em] text-[#17243D]">
               Calendar and daily operations
             </h2>
+            <p className="mt-1 text-[12px] text-[#718096]">Monitor submissions, ZIP batches, telecasts, and daily operations all in one place.</p>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="grid size-10 place-items-center rounded-full border border-[#D7E2EE] text-[18px] text-[#66758B]"
-            aria-label="Close calendar"
-          >
-            x
-          </button>
+          <div className="flex flex-wrap items-center gap-2"><button type="button" onClick={() => window.dispatchEvent(new CustomEvent("kids-champ-calendar-command", { detail: "today" }))} className={secondaryButton}>▣&nbsp; Today</button><button type="button" onClick={() => window.dispatchEvent(new CustomEvent("kids-champ-calendar-command", { detail: "jump" }))} className={secondaryButton}>▣&nbsp; Jump to date</button><button type="button" onClick={onClose} className="grid size-10 place-items-center rounded-full border border-[#D7E2EE] text-[18px] text-[#66758B]" aria-label="Close calendar">×</button></div>
         </div>
-        <div className="overflow-y-auto bg-[#F5F7FA] p-3 tablet:p-5">
-          <OverviewCalendar openDay={onOpenDay} />
+        <div className="min-h-0 flex-1 overflow-hidden bg-[#F6F9FD] p-3 tablet:p-5">
+          <OverviewCalendar openDay={onOpenDay} onNavigate={onNavigate} notify={notify} />
         </div>
       </div>
     </div>
@@ -1214,11 +984,15 @@ function SideDrawer({
   title,
   description,
   onClose,
+  onBack,
+  wide = false,
   children,
 }: {
   title: string;
   description?: string;
   onClose: () => void;
+  onBack?: () => void;
+  wide?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -1230,11 +1004,12 @@ function SideDrawer({
       onMouseDown={onClose}
     >
       <section
-        className="ml-auto flex h-full w-full max-w-[640px] flex-col bg-[#F5F7FA] shadow-[-24px_0_70px_rgba(16,42,86,.22)]"
+        className={`ml-auto flex h-full w-full flex-col bg-[#F5F7FA] shadow-[-24px_0_70px_rgba(16,42,86,.22)] ${wide ? "max-w-[900px]" : "max-w-[640px]"}`}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="flex items-start justify-between gap-4 border-b border-[#DFE6EF] bg-white px-5 py-5 tablet:px-6">
-          <div>
+          {onBack ? <button type="button" onClick={onBack} className="grid size-10 shrink-0 place-items-center rounded-full border border-[#D7E2EE] bg-white text-[18px] text-[#526178]" aria-label="Back to calendar">←</button> : null}
+          <div className="min-w-0 flex-1">
             <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[#2488F4]">
               Kids Champ
             </p>
@@ -1268,16 +1043,73 @@ function SideDrawer({
 function Overview({
   openDrawer,
   openCalendar,
+  goToWorkspace,
+  openSubmissions,
+  openZipView,
   notify,
 }: {
   openDrawer: (kind: DrawerKind, title: string) => void;
   openCalendar: () => void;
+  goToWorkspace: (workspace: Workspace) => void;
+  openSubmissions: (filter: OverviewSubmissionFilter) => void;
+  openZipView: (view: OverviewZipView) => void;
   notify: (message: string) => void;
 }) {
+  const [metrics, setMetrics] = useState({ totalSubmissions: 0, newToday: 0, pendingReviews: 0, approved: 0, selectedForTv: 0, telecasted: 0, uniqueParticipants: 0, activeBatches: 0 });
+  const [overviewState, setOverviewState] = useState<"loading" | "ready" | "error">("loading");
+  const [overviewReload, setOverviewReload] = useState(0);
+  const [whatsAppCampaigns, setWhatsAppCampaigns] = useState<CampaignQueueItem[]>([]);
+  const [liveActivity, setLiveActivity] = useState<Array<{id:string;title:string;detail:string;time:string;tone:"blue"|"green"|"red"|"violet";category:string}>>([]);
+  const [activityModalOpen, setActivityModalOpen] = useState(false);
+  const [activityFilter, setActivityFilter] = useState("All");
+  useEffect(() => {
+    apiFetch("/api/v1/admin/kids-champ/overview")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Overview metrics could not be loaded.");
+        setMetrics(await response.json());
+        setOverviewState("ready");
+      })
+      .catch((reason) => {
+        setOverviewState("error");
+        notify(reason instanceof Error ? reason.message : "Overview metrics could not be loaded.");
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overviewReload]);
+  useEffect(() => {
+    apiFetch("/api/v1/admin/kids-champ/activity").then(async (response) => {
+      if (!response.ok) return;
+      const body=await response.json() as Array<{action:string;entityType:string;entityId:string;details?:string;actor:string;createdAt:string}>;
+      const category=(type:string)=>type === "SUBMISSION" ? "Submissions" : type === "BATCH" ? "ZIP" : type === "GUEST" || type === "CHILD_PROFILE" ? "Participants" : type === "CALENDAR_TASK" ? "Calendar" : type === "SETTINGS" ? "Settings" : type === "CAMPAIGN" ? "Campaigns" : "Overview";
+      setLiveActivity(body.map((item)=>({id:`${item.entityId}-${item.createdAt}`,title:item.action.replaceAll("_"," ").toLowerCase(),detail:`${item.actor}${item.details?` · ${item.details}`:""}`,time:new Date(item.createdAt).toLocaleString(),tone:"blue",category:category(item.entityType)})));
+    }).catch(()=>undefined);
+  }, []);
+  useEffect(() => {
+    apiFetch("/api/v1/admin/kids-champ/campaigns")
+      .then(async (response) => {
+        if (response.ok) setWhatsAppCampaigns((await response.json() as CampaignQueueItem[]).filter((item) => item.channel === "WHATSAPP"));
+      })
+      .catch(() => undefined);
+  }, [overviewReload]);
+  const failedCampaigns = whatsAppCampaigns.filter((item) => item.status === "FAILED" || item.status === "PARTIAL").length;
+  const queuedCampaigns = whatsAppCampaigns.filter((item) => item.status === "QUEUED").length;
+  const liveAttention = [
+    {id:"pending",title:"Submissions waiting for approval",detail:"Open the approval queue",count:metrics.pendingReviews,severity:metrics.pendingReviews?"warning":"info",section:"submissions",icon:"◷",style:"border-l-[#FF4B4B] bg-[#FFF7F7]",iconStyle:"bg-[#FFE5E5] text-[#FF4141]",countStyle:"border-red-200 bg-[#FFE6E6] text-[#A52B2B]"},
+    {id:"production",title:"Active ZIP & telecast batches",detail:"Monitor delivery readiness and telecast dates",count:metrics.activeBatches,severity:"info",section:"zips",icon:"▣",style:"border-l-[#FF8A3D] bg-[#FFF9F4]",iconStyle:"bg-[#FFEBDD] text-[#F27022]",countStyle:"border-orange-200 bg-[#FFF0E5] text-[#A94B12]"},
+    {id:"whatsapp",title:"WhatsApp campaigns needing attention",detail:"Review failed or partially sent campaigns",count:failedCampaigns,severity:failedCampaigns?"warning":"info",section:"zips",icon:"◔",style:"border-l-[#FFB800] bg-[#FFFCF4]",iconStyle:"bg-[#FFF1C8] text-[#E6A400]",countStyle:"border-amber-200 bg-[#FFF3D8] text-[#976400]"},
+  ];
   const priorities = [
     {
+      label: "Review approvals",
+      value: String(metrics.pendingReviews),
+      detail: metrics.pendingReviews ? "New work is waiting now" : "Approval queue is clear",
+      tone: "coral",
+      status: metrics.pendingReviews ? "warning" : "success",
+      kind: "submissions" as DrawerKind,
+      calendar: false,
+    },
+    {
       label: "New submissions",
-      value: "38",
+      value: String(metrics.newToday),
       detail: "Received today",
       tone: "blue",
       status: "normal",
@@ -1285,70 +1117,52 @@ function Overview({
       calendar: false,
     },
     {
-      label: "Pending reviews",
-      value: "86",
-      detail: "14 waiting over 48 hours",
-      tone: "red",
-      status: "warning",
-      kind: "reviews" as DrawerKind,
-      calendar: false,
-    },
-    {
-      label: "Awaiting schedule",
-      value: "12",
-      detail: "Selected for television",
+      label: "ZIP & telecast",
+      value: String(metrics.activeBatches),
+      detail: "Batches currently in operation",
       tone: "violet",
       status: "normal",
-      kind: "telecast" as DrawerKind,
+      kind: "zips" as DrawerKind,
       calendar: false,
     },
     {
-      label: "Failed operations",
-      value: "19",
-      detail: "ZIP and message failures",
-      tone: "red",
-      status: "warning",
-      kind: "attention" as DrawerKind,
+      label: "WhatsApp queue",
+      value: String(queuedCampaigns + failedCampaigns),
+      detail: failedCampaigns ? `${failedCampaigns} campaign${failedCampaigns === 1 ? "" : "s"} need attention` : "No delivery errors",
+      tone: failedCampaigns ? "red" : "blue",
+      status: failedCampaigns ? "warning" : "success",
+      kind: "zips" as DrawerKind,
       calendar: false,
-    },
-    {
-      label: "Today’s calendar",
-      value: "31",
-      detail: "38 received · 31 reviewed · 4 tasks",
-      tone: "coral",
-      status: "normal",
-      kind: "calendar" as DrawerKind,
-      calendar: true,
     },
   ];
   const secondary = [
     {
       label: "Approved",
-      value: "742",
-      detail: "59.5% approval rate",
+      value: String(metrics.approved),
+      detail: `${metrics.totalSubmissions ? ((metrics.approved / metrics.totalSubmissions) * 100).toFixed(1) : "0.0"}% approval rate`,
       status: "success",
       kind: "submissions" as DrawerKind,
     },
     {
       label: "Telecasted",
-      value: "42",
-      detail: "+6 this month",
+      value: String(metrics.telecasted),
+      detail: "Recorded telecasts",
       status: "success",
       kind: "telecast" as DrawerKind,
     },
     {
       label: "Participants",
-      value: "903",
-      detail: "186 returning",
+      value: String(metrics.uniqueParticipants),
+      detail: "Registered and guest participants",
       status: "normal",
       kind: "participants" as DrawerKind,
     },
     {
-      label: "ZIPs ready",
-      value: "4",
-      detail: "2 expire soon",
-      status: "warning",
-      kind: "zips" as DrawerKind,
+      label: "Operations calendar",
+      value: String(new Date().getDate()).padStart(2, "0"),
+      detail: "Schedules, deadlines and telecasts",
+      status: "normal",
+      kind: "calendar" as DrawerKind,
     },
   ];
   const tone: Record<string, string> = {
@@ -1363,9 +1177,29 @@ function Overview({
     success: "border-emerald-300 bg-emerald-50/70 hover:border-emerald-500",
     warning: "border-red-300 bg-red-50/70 hover:border-red-500",
   };
+  const priorityIcons: Record<string, { src: string; alt: string }> = {
+    "Review approvals": { src: "/icons/kids-champ/review.png", alt: "Review approvals" },
+    "New submissions": { src: "/icons/kids-champ/new-submission.png", alt: "New submissions" },
+    "ZIP & telecast": { src: "/icons/kids-champ/zip.png", alt: "ZIP and telecast" },
+    "WhatsApp queue": { src: "/icons/kids-champ/whatsapp.gif", alt: "WhatsApp queue" },
+  };
+  const summaryIcons: Record<string, { src: string; alt: string }> = {
+    Approved: { src: "/icons/kids-champ/approved.png", alt: "Approved" },
+    Telecasted: { src: "/icons/kids-champ/telecast.png", alt: "Telecasted" },
+    Participants: { src: "/icons/kids-champ/participants.png", alt: "Participants" },
+    "Operations calendar": { src: "/icons/kids-champ/calendar.png", alt: "Operations calendar" },
+  };
+  const activityCategories = ["All", "Overview", "Submissions", "ZIP", "Participants", "Calendar", "Settings", "Campaigns"];
+  const filteredActivity = activityFilter === "All" ? liveActivity : liveActivity.filter((item) => item.category === activityFilter);
 
   return (
     <div className="space-y-7">
+      {overviewState === "error" ? (
+        <section className="flex flex-wrap items-center justify-between gap-3 rounded-[16px] border border-red-200 bg-red-50 px-4 py-3 text-[12px] text-red-900">
+          <span><strong>Overview data could not be loaded.</strong> No zero values are being shown as live data.</span>
+          <button type="button" onClick={() => { setOverviewState("loading"); setOverviewReload((value) => value + 1); }} className="rounded-[8px] bg-red-700 px-3 py-1.5 text-[11px] font-bold text-white">Retry</button>
+        </section>
+      ) : null}
       <section aria-labelledby="priority-heading">
         <div className="mb-4">
           <h2 id="priority-heading" className="text-[20px] font-semibold">
@@ -1375,32 +1209,33 @@ function Overview({
             Start with the work that needs attention now.
           </p>
         </div>
-        <div className="grid gap-4 tablet:grid-cols-2 desktop:grid-cols-5">
-          {priorities.map((item) => (
+        <div className="grid gap-4 tablet:grid-cols-2 desktop:grid-cols-4">
+          {overviewState === "loading" ? Array.from({ length: 4 }, (_, index) => <div key={index} className="h-[190px] animate-pulse rounded-[18px] border border-[#E0E7EF] bg-[#F3F6F9]" />) : priorities.map((item) => (
             <button
               key={item.label}
               type="button"
-              onClick={() =>
-                item.calendar
-                  ? openCalendar()
-                  : openDrawer(item.kind, item.label)
-              }
-              className={`group rounded-[18px] border p-5 text-left transition hover:-translate-y-0.5 ${statusCard[item.status]}`}
+              onClick={() => item.calendar ? openCalendar() : item.label === "Review approvals" ? openSubmissions("pending") : item.label === "New submissions" ? openSubmissions("today") : item.label === "WhatsApp queue" ? openZipView("whatsapp-attention") : openZipView("all")}
+              className={`group relative flex min-h-[205px] flex-col items-center justify-center rounded-[18px] border p-5 text-center transition hover:-translate-y-0.5 ${statusCard[item.status]}`}
             >
-              <div className="flex items-center justify-between">
-                <span
-                  className={`grid size-9 place-items-center rounded-[11px] text-[12px] font-bold ${tone[item.tone]}`}
-                >
-                  {item.calendar ? "TD" : item.label.slice(0, 2).toUpperCase()}
+              <div className="flex items-center justify-center">
+                <span className={`grid size-12 place-items-center rounded-[14px] ${tone[item.tone]}`}>
+                  <Image
+                    src={priorityIcons[item.label].src}
+                    alt={priorityIcons[item.label].alt}
+                    width={34}
+                    height={34}
+                    unoptimized={item.label === "WhatsApp queue"}
+                    className="size-[34px] object-contain"
+                  />
                 </span>
-                <span className="text-[#A2ADBA] group-hover:text-[#0877EF]">
+                <span className="absolute right-5 top-5 text-[#A2ADBA] group-hover:text-[#0877EF]">
                   -&gt;
                 </span>
               </div>
-              <p className="mt-5 text-[30px] font-semibold tracking-[-.04em]">
+              <p className="mt-4 text-[44px] font-semibold leading-none tracking-[-.055em]">
                 {item.value}
               </p>
-              <p className="mt-1 text-[13px] font-semibold text-[#354963]">
+              <p className="mt-3 text-[14px] font-bold text-[#354963]">
                 {item.label}
               </p>
               <p
@@ -1414,21 +1249,23 @@ function Overview({
       </section>
 
       <section>
-        <h2 className="mb-4 text-[18px] font-semibold">Programme summary</h2>
+        <h2 className="mb-4 flex items-center gap-2 text-[18px] font-semibold"><Image src="/icons/kids-champ/programme-summary.png" alt="" width={22} height={22} className="size-[22px] object-contain" />Programme summary</h2>
         <div className="grid gap-3 tablet:grid-cols-2 desktop:grid-cols-4">
           {secondary.map((item) => (
             <button
               key={item.label}
               type="button"
-              onClick={() => openDrawer(item.kind, item.label)}
-              className={`rounded-[15px] border px-4 py-4 text-left transition hover:-translate-y-0.5 ${statusCard[item.status]}`}
+              onClick={() => item.kind === "submissions" ? openSubmissions(item.label === "Approved" ? "approved" : null) : item.label === "Telecasted" ? openZipView("telecasted") : item.kind === "participants" ? goToWorkspace("Participants") : item.kind === "calendar" ? openCalendar() : openZipView("all")}
+              className={`group relative flex min-h-[150px] flex-col items-center justify-center rounded-[15px] border px-4 py-4 text-center transition hover:-translate-y-0.5 ${statusCard[item.status]}`}
             >
-              <div className="flex items-start justify-between">
-                <div>
-                  <p className="text-[23px] font-semibold tracking-[-.03em]">
+              <div>
+                  <span className="mx-auto grid size-10 place-items-center rounded-[12px] bg-white/70">
+                    <Image src={summaryIcons[item.label].src} alt={summaryIcons[item.label].alt} width={28} height={28} className="size-7 object-contain" />
+                  </span>
+                  <p className="mt-2 text-[34px] font-semibold leading-none tracking-[-.045em]">
                     {item.value}
                   </p>
-                  <p className="mt-1 text-[13px] font-semibold text-[#43556D]">
+                  <p className="mt-3 text-[13px] font-bold text-[#43556D]">
                     {item.label}
                   </p>
                   <p
@@ -1436,52 +1273,40 @@ function Overview({
                   >
                     {item.detail}
                   </p>
-                </div>
-                <span className="text-[#A2ADBA]">-&gt;</span>
               </div>
+                <span className="absolute right-4 top-4 text-[#A2ADBA] group-hover:text-[#0877EF]">-&gt;</span>
             </button>
           ))}
         </div>
       </section>
 
       <div className="grid gap-5 desktop:grid-cols-[1.15fr_.85fr]">
-        <section className="rounded-[18px] border border-[#E0E7EF] bg-white p-5 tablet:p-6">
+        <section className="overflow-hidden rounded-[18px] border border-[#E0E7EF] bg-white shadow-[0_8px_26px_rgba(30,72,123,.05)]">
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-[18px] font-semibold">Needs attention</h2>
+            <div className="p-5 tablet:p-6">
+              <h2 className="flex items-center gap-2 text-[18px] font-semibold"><span className="grid size-7 place-items-center rounded-full bg-red-500 text-[15px] text-white">!</span>Needs attention</h2>
               <p className="mt-1 text-[12px] text-[#8490A2]">
                 Prioritised by urgency and age.
               </p>
             </div>
             <button
-              onClick={() => openDrawer("attention", "Needs attention")}
-              className="text-[12px] font-semibold text-[#0877EF]"
+              onClick={() => openSubmissions("pending")}
+              className="mr-5 mt-6 text-[12px] font-semibold text-[#0877EF] tablet:mr-6"
             >
               View all
             </button>
           </div>
-          <div className="mt-5 divide-y divide-[#EDF1F5]">
-            {attentionItems.map((item) => (
+          <div className="border-t border-[#EDF1F5]">
+            {liveAttention.map((item) => (
               <button
                 key={item.id}
                 type="button"
-                onClick={() =>
-                  openDrawer(
-                    item.section === "reviews"
-                      ? "reviews"
-                      : item.section === "telecast"
-                        ? "telecast"
-                        : item.section === "zips"
-                          ? "zips"
-                          : "attention",
-                    item.title,
-                  )
-                }
-                className="flex w-full items-center gap-3 py-3 text-left"
+                onClick={() => item.id === "pending" ? openSubmissions("pending") : item.id === "whatsapp" ? openZipView("whatsapp-attention") : openZipView("all")}
+                className={`flex w-full items-center gap-3 border-b border-[#F0F2F5] border-l-[3px] px-4 py-3 text-left transition hover:brightness-[.98] tablet:px-5 ${item.style}`}
               >
                 <span
-                  className={`size-2.5 shrink-0 rounded-full ${item.severity === "critical" ? "bg-red-500" : item.severity === "warning" ? "bg-amber-500" : "bg-blue-500"}`}
-                />
+                  className={`grid size-10 shrink-0 place-items-center rounded-full text-[22px] ${item.iconStyle}`}
+                >{item.icon}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[13px] font-semibold text-[#344660]">
                     {item.title}
@@ -1490,7 +1315,7 @@ function Overview({
                     {item.detail}
                   </span>
                 </span>
-                <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[#F3F6F9] text-[11px] font-bold">
+                <span className={`grid size-8 shrink-0 place-items-center rounded-[9px] border text-[11px] font-bold ${item.countStyle}`}>
                   {item.count}
                 </span>
               </button>
@@ -1498,47 +1323,63 @@ function Overview({
           </div>
         </section>
 
-        <section className="rounded-[18px] border border-[#E0E7EF] bg-white p-5 tablet:p-6">
+        <section className="rounded-[18px] border border-[#E0E7EF] bg-white p-5 shadow-[0_8px_26px_rgba(30,72,123,.05)] tablet:p-6">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-[18px] font-semibold">Recent activity</h2>
+              <h2 className="flex items-center gap-2 text-[18px] font-semibold"><Image src="/icons/kids-champ/activity.gif" alt="" width={28} height={28} unoptimized className="size-7 object-contain" />Recent activity</h2>
               <p className="mt-1 text-[12px] text-[#8490A2]">
                 Latest operational changes.
               </p>
             </div>
             <button
-              onClick={() => openDrawer("activity", "Recent activity")}
+              onClick={() => setActivityModalOpen(true)}
               className="text-[12px] font-semibold text-[#0877EF]"
             >
-              History
+              Show all
             </button>
           </div>
-          <div className="mt-5 space-y-4">
-            {recentActivity.map((item) => (
+          <div className="relative mt-5 space-y-0 before:absolute before:bottom-3 before:left-[5px] before:top-3 before:w-px before:bg-[#DCEBFC]">
+            {liveActivity.slice(0, 10).map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => openDrawer("activity", item.title)}
-                className="flex w-full gap-3 text-left"
+                className="relative flex w-full gap-3 py-1.5 text-left"
               >
                 <span
-                  className={`mt-1.5 size-2.5 shrink-0 rounded-full ${item.tone === "green" ? "bg-emerald-500" : item.tone === "red" ? "bg-red-500" : item.tone === "violet" ? "bg-violet-500" : "bg-blue-500"}`}
+                  className={`z-10 mt-1.5 size-2.5 shrink-0 rounded-full ring-4 ring-white ${item.tone === "green" ? "bg-emerald-500" : item.tone === "red" ? "bg-red-500" : item.tone === "violet" ? "bg-violet-500" : "bg-[#1684F5]"}`}
                 />
                 <span>
-                  <span className="block text-[13px] font-semibold text-[#344660]">
+                  <span className="block text-[12px] font-bold text-[#344660]">
                     {item.title}
                   </span>
-                  <span className="mt-0.5 block text-[11px] text-[#8793A5]">
+                  <span className="mt-0.5 block text-[10px] text-[#8793A5]">
                     {item.detail} · {item.time}
                   </span>
                 </span>
               </button>
             ))}
+            {!liveActivity.length ? <p className="text-[12px] text-[#8490A2]">No recorded activity yet.</p> : null}
           </div>
         </section>
       </div>
 
       <OverviewGrowthSection notify={notify} />
+      {activityModalOpen ? (
+        <div className="fixed inset-0 z-[130] grid place-items-center bg-[#102A56]/45 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-labelledby="activity-history-title" onMouseDown={() => setActivityModalOpen(false)}>
+          <section className="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-[22px] bg-white shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <header className="flex items-start justify-between border-b border-[#E3E9F0] p-5">
+              <div><p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[#2488F4]">Kids Champ history</p><h2 id="activity-history-title" className="mt-1 text-[22px] font-semibold">All recent activity</h2><p className="mt-1 text-[12px] text-[#7A879A]">Up to the latest 500 recorded operational changes.</p></div>
+              <button type="button" onClick={() => setActivityModalOpen(false)} className="grid size-10 place-items-center rounded-full border border-[#D7E2EE] text-[#66758B]" aria-label="Close activity history">x</button>
+            </header>
+            <div className="flex gap-2 overflow-x-auto border-b border-[#E5EBF2] p-4">{activityCategories.map((category) => <button key={category} type="button" onClick={() => setActivityFilter(category)} className={`shrink-0 rounded-full px-3 py-2 text-[11px] font-semibold ${activityFilter === category ? "bg-[#2488F4] text-white" : "bg-[#F1F4F7] text-[#66758B]"}`}>{category}</button>)}</div>
+            <div className="flex-1 overflow-y-auto p-5">
+              <div className="space-y-2">{filteredActivity.map((item) => <article key={item.id} className="flex gap-3 rounded-[13px] border border-[#E5EBF2] p-4"><span className="mt-1.5 size-2.5 shrink-0 rounded-full bg-blue-500"/><span className="min-w-0 flex-1"><span className="flex flex-wrap items-center justify-between gap-2"><strong className="text-[13px] capitalize text-[#344660]">{item.title}</strong><span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-semibold text-blue-700">{item.category}</span></span><span className="mt-1 block text-[11px] text-[#8793A5]">{item.detail} · {item.time}</span></span></article>)}</div>
+              {!filteredActivity.length ? <p className="py-12 text-center text-[12px] text-[#8490A2]">No activity is available for this category.</p> : null}
+            </div>
+          </section>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1551,16 +1392,33 @@ function ArtworkThumbnail({
   onOpen: () => void;
 }) {
   const [pointer, setPointer] = useState<{ x: number; y: number } | null>(null);
+  const [photoUrl, setPhotoUrl] = useState(item.photoUrl);
+  useEffect(() => {
+    if (item.photoUrl || !/^[0-9a-f-]{36}$/i.test(item.id)) return;
+    let active = true;
+    let objectUrl = "";
+    apiFetch(`/api/v1/admin/kids-champ/submissions/${item.id}/photo`)
+      .then(async (response) => {
+        if (!response.ok) return;
+        objectUrl = URL.createObjectURL(await response.blob());
+        if (active) setPhotoUrl(objectUrl);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [item.id, item.photoUrl]);
   const artwork = (
     <div
       className={`relative grid h-full w-full place-items-center overflow-hidden bg-cover bg-center bg-no-repeat bg-gradient-to-br ${item.category === "Painting" ? "from-orange-200 via-rose-200 to-violet-300" : item.category === "Handcraft" ? "from-amber-100 via-emerald-200 to-cyan-300" : "from-blue-100 via-indigo-200 to-violet-300"}`}
       style={
-        item.photoUrl
-          ? { backgroundImage: `url("${item.photoUrl}")` }
+        photoUrl
+          ? { backgroundImage: `url("${photoUrl}")` }
           : undefined
       }
     >
-      {!item.photoUrl ? (
+      {!photoUrl ? (
         <>
           <span className="absolute -right-3 -top-3 size-12 rounded-full bg-white/35" />
           <span className="absolute -bottom-4 -left-3 size-14 rotate-12 rounded-[14px] bg-white/25" />
@@ -1634,21 +1492,22 @@ function SubmissionRow({
   item,
   privacy,
   selected,
-  previewed,
   onSelect,
-  onPreview,
   onOpen,
   notify,
 }: {
   item: MockSubmission;
   privacy: boolean;
   selected: boolean;
-  previewed: boolean;
   onSelect: () => void;
-  onPreview: () => void;
   onOpen: () => void;
   notify: (message: string) => void;
 }) {
+  const approvalPresentation = item.reviewStatus === "Approved"
+    ? { label: "Approved", style: "bg-emerald-50 text-emerald-700 ring-emerald-200" }
+    : item.reviewStatus === "Rejected"
+      ? { label: "Rejected", style: "bg-red-50 text-red-700 ring-red-200" }
+      : { label: item.reviewStatus === "Under review" ? "In review" : "Pending", style: "bg-amber-50 text-amber-800 ring-amber-200" };
   function copyCode() {
     void navigator.clipboard.writeText(item.trackingCode);
     notify(`${item.trackingCode} copied.`);
@@ -1708,532 +1567,147 @@ function SubmissionRow({
       </td>
       <td className="px-3 py-3">
         <OpenSubmissionField onOpen={onOpen}>
-          <StatusBadge label={item.reviewStatus} />
-        </OpenSubmissionField>
-      </td>
-      <td className="px-3 py-3">
-        <OpenSubmissionField onOpen={onOpen}>
-          <StatusBadge label={item.tvStatus} />
-        </OpenSubmissionField>
-      </td>
-      <td className="px-3 py-3">
-        <OpenSubmissionField onOpen={onOpen}>
           <span className="block">{item.submittedDate}</span>
           <span className="text-[10px] text-[#8793A5]">{item.submittedAt}</span>
         </OpenSubmissionField>
       </td>
       <td className="px-3 py-3 text-center">
-        <label className="inline-flex cursor-pointer items-center gap-2 rounded-[8px] px-2 py-1.5 text-[10px] font-semibold text-[#66758B] hover:bg-emerald-50 hover:text-emerald-700">
-          <input
-            type="checkbox"
-            checked={previewed}
-            onChange={onPreview}
-            aria-label={`Mark ${item.childName} artwork previewed`}
-            className="size-4 accent-emerald-600"
-          />
-          {previewed ? "Yes" : "No"}
-        </label>
+        <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold ring-1 ring-inset ${approvalPresentation.style}`}>{approvalPresentation.label}</span>
       </td>
       <td className="px-4 py-3 text-right">
         <button
           onClick={onOpen}
           className="rounded-[8px] bg-[#EDF5FF] px-3 py-2 font-semibold text-[#0877EF] hover:bg-[#2488F4] hover:text-white"
         >
-          View / edit
+          {item.reviewStatus === "Approved" ? "Open" : "Review"}
         </button>
       </td>
     </tr>
   );
 }
 
-function ReviewFocus({
-  privacy,
-  onBack,
-  notify,
-  items,
-  onUpdate,
-}: {
-  privacy: boolean;
-  onBack: () => void;
-  notify: (message: string) => void;
-  items: MockSubmission[];
-  onUpdate: (submission: MockSubmission) => void;
-}) {
-  const queue = items.filter(
-    (item) =>
-      item.reviewStatus !== "Approved" && item.reviewStatus !== "Rejected",
-  );
-  const [index, setIndex] = useState(0);
-  const [zoom, setZoom] = useState(1);
-  const [rotation, setRotation] = useState(0);
-  const [note, setNote] = useState("");
-  const [assigning, setAssigning] = useState(false);
-  const item = queue[Math.min(index, Math.max(queue.length - 1, 0))];
-  function move(direction: number) {
-    if (!queue.length) return;
-    setIndex((current) => (current + direction + queue.length) % queue.length);
-    setZoom(1);
-    setRotation(0);
-    setNote("");
-  }
-  function setDecision(reviewStatus: MockSubmission["reviewStatus"]) {
-    if (!item) return;
-    onUpdate({ ...item, reviewStatus });
-    notify(
-      `${item.trackingCode} marked ${reviewStatus.toLowerCase()}.${note.trim() ? " Internal note saved." : ""}`,
-    );
-    if (queue.length > 1) move(1);
-  }
-  if (!item)
-    return (
-      <section className="rounded-[18px] border border-emerald-200 bg-emerald-50 p-8 text-center">
-        <h2 className="text-[20px] font-semibold text-emerald-900">
-          Review queue complete
-        </h2>
-        <p className="mt-2 text-[13px] text-emerald-700">
-          There are no pending submissions in the current queue.
-        </p>
-        <button onClick={onBack} className={`${primaryButton} mt-5`}>
-          Back to submissions
-        </button>
-      </section>
-    );
-  return (
-    <section>
-      <button
-        onClick={onBack}
-        className="mb-5 text-[13px] font-semibold text-[#0877EF]"
-      >
-        &lt;- Back to submissions
-      </button>
-      <div className="grid gap-5 desktop:grid-cols-[1.35fr_.65fr]">
-        <div className="overflow-hidden rounded-[18px] border border-[#E0E7EF] bg-white">
-          <div className="flex items-center justify-between border-b border-[#E5EBF2] px-5 py-4">
-            <div>
-              <h2 className="text-[18px] font-semibold">Photo review</h2>
-              <p className="mt-1 text-[12px] text-[#8490A2]">
-                {index + 1} of {queue.length} review submissions
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => move(-1)} className={secondaryButton}>
-                Previous
-              </button>
-              <button onClick={() => move(1)} className={secondaryButton}>
-                Next
-              </button>
-            </div>
-          </div>
-          <div className="grid min-h-[470px] place-items-center bg-[#EAF1F7] p-8">
-            <div className="grid aspect-[4/3] w-full max-w-[680px] place-items-center overflow-hidden rounded-[14px] bg-white">
-              <div className="text-center">
-                <span
-                  style={{ transform: `scale(${zoom}) rotate(${rotation}deg)` }}
-                  className="mx-auto grid size-20 place-items-center rounded-full bg-blue-50 text-[22px] font-bold text-blue-700 transition-transform"
-                >
-                  <PrivateValue enabled={privacy}>{item.initials}</PrivateValue>
-                </span>
-                <p className="mt-4 text-[14px] font-semibold text-[#526178]">
-                  Submission photo preview
-                </p>
-                <p className="mt-1 text-[12px] text-[#8793A5]">
-                  Original photo will load from file storage.
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="flex flex-wrap justify-between gap-3 border-t border-[#E5EBF2] px-5 py-4">
-            <div className="flex gap-2">
-              <button
-                onClick={() =>
-                  setZoom((value) => (value >= 1.75 ? 1 : value + 0.25))
-                }
-                className={secondaryButton}
-              >
-                Zoom {Math.round(zoom * 100)}%
-              </button>
-              <button
-                onClick={() => setRotation((value) => (value + 90) % 360)}
-                className={secondaryButton}
-              >
-                Rotate
-              </button>
-            </div>
-            <StatusBadge label="File ready" />
-          </div>
-        </div>
-        <aside className="rounded-[18px] border border-[#E0E7EF] bg-white p-5">
-          <div className="flex items-center gap-3">
-            <span className="grid size-11 place-items-center rounded-[12px] bg-blue-50 text-[12px] font-bold text-blue-700">
-              <PrivateValue enabled={privacy}>{item.initials}</PrivateValue>
-            </span>
-            <div>
-              <h2 className="text-[17px] font-semibold">
-                <PrivateValue enabled={privacy}>{item.childName}</PrivateValue>
-              </h2>
-              <p className="mt-0.5 font-mono text-[11px] text-[#8490A2]">
-                <PrivateValue enabled={privacy}>
-                  {item.trackingCode}
-                </PrivateValue>
-              </p>
-            </div>
-          </div>
-          <dl className="mt-6 grid grid-cols-2 gap-4">
-            {[
-              ["Age", `${item.age} years`],
-              ["Location", item.location],
-              ["Category", item.category],
-              ["Participant", item.participantType],
-              ["Submitted", item.submittedAt],
-              ["Reviewer", item.reviewer],
-            ].map(([label, value]) => (
-              <div key={label}>
-                <dt className="text-[11px] font-semibold uppercase text-[#8793A5]">
-                  {label}
-                </dt>
-                <dd className="mt-1 text-[13px] font-semibold text-[#40516A]">
-                  {value}
-                </dd>
-              </div>
-            ))}
-          </dl>
-          <label className="mt-6 block text-[12px] font-semibold text-[#59687E]">
-            Internal note
-            <textarea
-              value={note}
-              onChange={(event) => setNote(event.target.value)}
-              className="mt-2 min-h-24 w-full rounded-[11px] border border-[#D8E2EC] p-3 text-[13px] outline-none focus:border-[#2488F4]"
-              placeholder="Add a note for the audit record"
-            />
-          </label>
-          {assigning ? (
-            <label className="mt-3 block text-[12px] font-semibold text-[#59687E]">
-              Assign reviewer
-              <select
-                value={item.reviewer}
-                onChange={(event) => {
-                  onUpdate({ ...item, reviewer: event.target.value });
-                  setAssigning(false);
-                  notify(
-                    `${item.trackingCode} assigned to ${event.target.value}.`,
-                  );
-                }}
-                className={`${fieldClass} mt-2`}
-              >
-                <option>Unassigned</option>
-                <option>Dinithi S.</option>
-                <option>Malith J.</option>
-                <option>Amara D.</option>
-              </select>
-            </label>
-          ) : null}
-          <div className="mt-5 grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setDecision("Approved")}
-              className="h-11 rounded-[10px] bg-emerald-600 text-[13px] font-semibold text-white"
-            >
-              Approve
-            </button>
-            <button
-              onClick={() => setDecision("Rejected")}
-              className="h-11 rounded-[10px] bg-red-600 text-[13px] font-semibold text-white"
-            >
-              Reject
-            </button>
-            <button onClick={() => move(1)} className={secondaryButton}>
-              Skip
-            </button>
-            <button
-              onClick={() => setAssigning((value) => !value)}
-              className={secondaryButton}
-            >
-              Assign
-            </button>
-          </div>
-        </aside>
-      </div>
-    </section>
-  );
-}
-
-function ConfirmationDialog({
-  title,
-  description,
-  confirmLabel,
-  onCancel,
-  onConfirm,
-}: {
-  title: string;
-  description: string;
-  confirmLabel: string;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-[125] grid place-items-center bg-[#102A56]/45 p-4 backdrop-blur-[2px]"
-      role="alertdialog"
-      aria-modal="true"
-      aria-labelledby="confirmation-title"
-      onMouseDown={onCancel}
-    >
-      <section
-        className="w-full max-w-[460px] rounded-[20px] bg-white p-6 shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <span className="grid size-12 place-items-center rounded-full bg-red-50 text-[22px] font-bold text-red-600">
-          !
-        </span>
-        <h2 id="confirmation-title" className="mt-4 text-[21px] font-semibold">
-          {title}
-        </h2>
-        <p className="mt-2 text-[13px] leading-6 text-[#6E7C91]">
-          {description}
-        </p>
-        <div className="mt-6 flex justify-end gap-2">
-          <button onClick={onCancel} className={secondaryButton}>
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            className="h-10 rounded-[10px] bg-red-600 px-4 text-[12px] font-semibold text-white hover:bg-red-700"
-          >
-            {confirmLabel}
-          </button>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function PhotoUploadModal({
-  onClose,
-  onAdd,
-  settings,
-}: {
-  onClose: () => void;
-  onAdd: (submission: MockSubmission) => void;
-  settings: KidsChampSettings;
-}) {
-  const [file, setFile] = useState<File | null>(null);
-  const [name, setName] = useState("");
-  const [age, setAge] = useState("");
-  const [location, setLocation] = useState("");
-  const [category, setCategory] = useState(settings.categories[0] ?? "General");
-  const [fileError, setFileError] = useState("");
-  const previewUrl = useMemo(
-    () => (file ? URL.createObjectURL(file) : ""),
-    [file],
-  );
-  function submit() {
-    if (!file || !name.trim() || !age || !location.trim()) return;
-    const stamp = Date.now();
-    onAdd({
-      id: `upload-${stamp}`,
-      trackingCode: settings.automaticTracking
-        ? `KC-2026-${String(stamp).slice(-6)}`
-        : `MANUAL-${String(stamp).slice(-6)}`,
-      childName: name.trim(),
-      initials: name
-        .trim()
-        .split(" ")
-        .map((part) => part[0])
-        .join("")
-        .slice(0, 2)
-        .toUpperCase(),
-      age: Number(age),
-      location: location.trim(),
-      category,
-      participantType: "Guest",
-      reviewStatus: "New",
-      tvStatus: "Not selected",
-      fileStatus: "Ready",
-      reviewer: "Unassigned",
-      submittedAt: "Just now",
-      submittedDate: "2026-08-01",
-      photoUrl: previewUrl,
-      photoFile: file,
-    });
-  }
-  return (
-    <div
-      className="fixed inset-0 z-[115] grid place-items-center bg-[#102A56]/45 p-4 backdrop-blur-[2px]"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="photo-upload-title"
-      onMouseDown={onClose}
-    >
-      <section
-        className="w-full max-w-[620px] overflow-hidden rounded-[20px] bg-white shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <header className="flex items-start justify-between border-b border-[#E3E9F0] p-5">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[#2488F4]">
-              New submission
-            </p>
-            <h2
-              id="photo-upload-title"
-              className="mt-1 text-[22px] font-semibold"
-            >
-              Upload a photo
-            </h2>
-            <p className="mt-1 text-[12px] text-[#7A879A]">
-              Add the artwork and the information needed for review.
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="grid size-9 place-items-center rounded-full border border-[#D7E2EE]"
-            aria-label="Close upload"
-          >
-            x
-          </button>
-        </header>
-        <div className="grid gap-5 p-5 tablet:grid-cols-[.8fr_1.2fr]">
-          <label
-            className={`grid min-h-56 cursor-pointer place-items-center overflow-hidden rounded-[15px] border-2 border-dashed bg-[#F5F8FB] bg-cover bg-center ${file ? "border-blue-300" : "border-[#CBD7E4]"}`}
-            style={
-              previewUrl
-                ? { backgroundImage: `url("${previewUrl}")` }
-                : undefined
-            }
-          >
-            <input
-              type="file"
-              accept="image/*"
-              className="sr-only"
-              onChange={(event) => {
-                const next = event.target.files?.[0] ?? null;
-                if (next && next.size > settings.maxFileSizeMb * 1024 * 1024) {
-                  setFile(null);
-                  setFileError(
-                    `File must be ${settings.maxFileSizeMb} MB or smaller.`,
-                  );
-                  return;
-                }
-                setFileError("");
-                setFile(next);
-              }}
-            />
-            {!file ? (
-              <span className="px-4 text-center">
-                <strong className="block text-[13px] text-[#40516A]">
-                  Choose photo
-                </strong>
-                <span className="mt-1 block text-[11px] text-[#8490A2]">
-                  {settings.allowedFileTypes} · up to {settings.maxFileSizeMb}{" "}
-                  MB
-                </span>
-              </span>
-            ) : (
-              <span className="self-end rounded-t-[8px] bg-[#17243D]/80 px-3 py-2 text-[10px] font-semibold text-white">
-                Click to replace
-              </span>
-            )}
-          </label>
-          {fileError ? (
-            <p className="text-[11px] font-semibold text-red-600">
-              {fileError}
-            </p>
-          ) : null}
-          <div className="space-y-3">
-            <label className="block text-[10px] font-semibold uppercase text-[#748197]">
-              Child name
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                className={`${fieldClass} mt-1`}
-              />
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="block text-[10px] font-semibold uppercase text-[#748197]">
-                Age
-                <input
-                  type="number"
-                  min={settings.minimumAge}
-                  max={settings.maximumAge}
-                  value={age}
-                  onChange={(event) => setAge(event.target.value)}
-                  className={`${fieldClass} mt-1`}
-                />
-              </label>
-              <label className="block text-[10px] font-semibold uppercase text-[#748197]">
-                Home town
-                <input
-                  value={location}
-                  onChange={(event) => setLocation(event.target.value)}
-                  className={`${fieldClass} mt-1`}
-                />
-              </label>
-            </div>
-            <label className="block text-[10px] font-semibold uppercase text-[#748197]">
-              Category
-              <select
-                value={category}
-                onChange={(event) => setCategory(event.target.value)}
-                className={`${fieldClass} mt-1`}
-              >
-                {settings.categories.map((item) => (
-                  <option key={item}>{item}</option>
-                ))}
-              </select>
-            </label>
-            <button
-              onClick={submit}
-              disabled={!file || !name.trim() || !age || !location.trim()}
-              className={`${primaryButton} mt-2 w-full disabled:cursor-not-allowed disabled:opacity-40`}
-            >
-              Add submission
-            </button>
-          </div>
-        </div>
-      </section>
-    </div>
-  );
-}
-
 function SubmissionsWorkspace({
   privacy,
-  reviewing,
-  setReviewing,
   openSubmission,
   notify,
-  createZipFromSelection,
-  settings,
+  calendarFilter,
+  clearCalendarFilter,
+  initialOverviewFilter,
 }: {
   privacy: boolean;
-  reviewing: boolean;
-  setReviewing: (value: boolean) => void;
   openSubmission: (
     item: MockSubmission,
     onSave: (submission: MockSubmission) => void,
   ) => void;
   notify: (message: string) => void;
-  createZipFromSelection: (submissionIds: string[]) => void;
-  settings: KidsChampSettings;
+  calendarFilter: CalendarWorkspaceFilter | null;
+  clearCalendarFilter: () => void;
+  initialOverviewFilter: OverviewSubmissionFilter;
 }) {
-  const [records, setRecords] = useState(submissions);
-  const [reviewFilter, setReviewFilter] = useState("All");
+  const [records, setRecords] = useState<MockSubmission[]>([]);
+  const [backendState, setBackendState] = useState<"loading" | "live" | "error">("loading");
+  const [approvalFilter, setApprovalFilter] = useState(initialOverviewFilter === "approved" ? "Approved" : initialOverviewFilter === "pending" ? "Not approved" : "All");
   const [search, setSearch] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [exactAge, setExactAge] = useState("");
   const [ageMin, setAgeMin] = useState("");
   const [ageMax, setAgeMax] = useState("");
-  const [tvFilter, setTvFilter] = useState("All");
   const [locationFilter, setLocationFilter] = useState("All");
-  const [dateMode, setDateMode] = useState("Any time");
-  const [specificDate, setSpecificDate] = useState("2026-08-01");
+  const [dateMode, setDateMode] = useState(calendarFilter || initialOverviewFilter === "today" ? "Specific date" : "Any time");
+  const [specificDate, setSpecificDate] = useState(calendarFilter?.date ?? (initialOverviewFilter === "today" ? new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Colombo" }).format(new Date()) : "2026-08-01"));
   const [dateFrom, setDateFrom] = useState("2026-07-25");
   const [dateTo, setDateTo] = useState("2026-08-01");
   const [month, setMonth] = useState("2026-08");
   const [year, setYear] = useState("2026");
   const [week, setWeek] = useState("2026-W31");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [previewed, setPreviewed] = useState<Set<string>>(new Set());
-  const [autoPreview, setAutoPreview] = useState(false);
-  const [uploadOpen, setUploadOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [submissionPage, setSubmissionPage] = useState(0);
+  const [submissionTotalItems, setSubmissionTotalItems] = useState(0);
+  const [submissionTotalPages, setSubmissionTotalPages] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const params = new URLSearchParams({ page: String(submissionPage), size: "50" });
+    if (search.trim()) params.set("search", search.trim());
+    if (approvalFilter !== "All" && approvalFilter !== "New") params.set("approval", approvalFilter);
+    if (locationFilter !== "All") params.set("location", locationFilter);
+    const toIsoDate = (value: Date) => value.toISOString().slice(0, 10);
+    const setDateWindow = (from: string, to: string) => {
+      params.set("dateFrom", from);
+      params.set("dateTo", to);
+    };
+    if (exactAge) {
+      params.set("minAge", exactAge);
+      params.set("maxAge", exactAge);
+    } else {
+      if (ageMin) params.set("minAge", ageMin);
+      if (ageMax) params.set("maxAge", ageMax);
+    }
+    if (dateMode === "Specific date" && specificDate) setDateWindow(specificDate, specificDate);
+    if (dateMode === "Date range" && dateFrom && dateTo) setDateWindow(dateFrom, dateTo);
+    if (dateMode === "Month" && /^\d{4}-\d{2}$/.test(month)) {
+      const [selectedYear, selectedMonth] = month.split("-").map(Number);
+      setDateWindow(`${month}-01`, toIsoDate(new Date(Date.UTC(selectedYear, selectedMonth, 0))));
+    }
+    if (dateMode === "Year" && /^\d{4}$/.test(year)) setDateWindow(`${year}-01-01`, `${year}-12-31`);
+    if (dateMode === "Week" && /^\d{4}-W\d{2}$/.test(week)) {
+      const [weekYear, weekNumber] = week.split("-W").map(Number);
+      const fourth = new Date(Date.UTC(weekYear, 0, 4));
+      const start = new Date(fourth);
+      start.setUTCDate(fourth.getUTCDate() - (fourth.getUTCDay() || 7) + 1 + (weekNumber - 1) * 7);
+      const end = new Date(start);
+      end.setUTCDate(start.getUTCDate() + 6);
+      setDateWindow(toIsoDate(start), toIsoDate(end));
+    }
+    apiFetch(`/api/v1/admin/kids-champ/submissions/page?${params}`)
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Backend submissions are unavailable.");
+        const body = (await response.json()) as AdminSubmissionPageResponse;
+        if (!cancelled) {
+          setRecords(body.items.map(toMockSubmission));
+          setSubmissionTotalItems(body.totalItems);
+          setSubmissionTotalPages(body.totalPages);
+          setSelected(new Set());
+          setBackendState("live");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRecords([]);
+          setBackendState("error");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [submissionPage, search, approvalFilter, locationFilter, exactAge, ageMin, ageMax, dateMode, specificDate, dateFrom, dateTo, month, year, week]);
+
+  async function saveSubmission(updated: MockSubmission) {
+    const current = records.find((item) => item.id === updated.id);
+    if (!current || backendState !== "live") {
+      notify("Submission changes cannot be saved while the backend is unavailable.");
+      return;
+    }
+    try {
+      let saved: AdminSubmissionResponse | null = null;
+      if (current.category !== updated.category) {
+        const response = await apiFetch(`/api/v1/admin/kids-champ/submissions/${updated.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({
+            category: updated.category,
+          }),
+        });
+        const body = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(body?.message || "The submission update could not be saved.");
+        saved = body as AdminSubmissionResponse;
+      }
+      setRecords((items) => items.map((item) => item.id === updated.id ? (saved ? toMockSubmission(saved) : updated) : item));
+      notify("Submission changes saved to the backend.");
+    } catch (reason) {
+      notify(reason instanceof Error ? reason.message : "The submission update could not be saved.");
+    }
+  }
   const locations = [...new Set(records.map((item) => item.location))].sort();
   const visible = useMemo(
     () =>
@@ -2243,18 +1717,24 @@ function SubmissionsWorkspace({
           !query ||
           item.childName.toLowerCase().includes(query) ||
           item.trackingCode.toLowerCase().includes(query);
-        const matchesReview =
-          reviewFilter === "All" || item.reviewStatus === reviewFilter;
+        const matchesApproval =
+          approvalFilter === "All" ||
+          (approvalFilter === "Not approved"
+            ? item.reviewStatus !== "Approved"
+            : approvalFilter === "New"
+              ? item.reviewStatus === "New"
+              : item.reviewStatus === approvalFilter);
         const matchesAge =
           (!exactAge || item.age === Number(exactAge)) &&
           (!ageMin || item.age >= Number(ageMin)) &&
           (!ageMax || item.age <= Number(ageMax));
-        const matchesTv = tvFilter === "All" || item.tvStatus === tvFilter;
         const matchesLocation =
           locationFilter === "All" || item.location === locationFilter;
         let matchesDate = true;
         if (dateMode === "Specific date")
-          matchesDate = item.submittedDate === specificDate;
+          matchesDate = calendarFilter?.mode === "reviewed"
+            ? item.reviewedDate === specificDate
+            : item.submittedDate === specificDate;
         if (dateMode === "Date range")
           matchesDate =
             item.submittedDate >= dateFrom && item.submittedDate <= dateTo;
@@ -2279,9 +1759,8 @@ function SubmissionsWorkspace({
         }
         return (
           matchesSearch &&
-          matchesReview &&
+          matchesApproval &&
           matchesAge &&
-          matchesTv &&
           matchesLocation &&
           matchesDate
         );
@@ -2289,11 +1768,10 @@ function SubmissionsWorkspace({
     [
       records,
       search,
-      reviewFilter,
+      approvalFilter,
       exactAge,
       ageMin,
       ageMax,
-      tvFilter,
       locationFilter,
       dateMode,
       specificDate,
@@ -2302,23 +1780,11 @@ function SubmissionsWorkspace({
       month,
       year,
       week,
+      calendarFilter,
     ],
   );
-  if (reviewing)
-    return (
-      <ReviewFocus
-        privacy={privacy}
-        onBack={() => setReviewing(false)}
-        notify={notify}
-        items={records}
-        onUpdate={(updated) =>
-          setRecords((current) =>
-            current.map((item) => (item.id === updated.id ? updated : item)),
-          )
-        }
-      />
-    );
-
+  const pendingVisible = visible.filter((item) => item.reviewStatus !== "Approved" && item.reviewStatus !== "Rejected").length;
+  const approvedVisible = visible.filter((item) => item.reviewStatus === "Approved").length;
   function toggleSelection(id: string) {
     setSelected((current) => {
       const next = new Set(current);
@@ -2340,33 +1806,56 @@ function SubmissionsWorkspace({
     });
   }
 
-  function togglePreview(id: string) {
-    setPreviewed((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function toggleAutoPreview() {
-    setAutoPreview((current) => {
-      const next = !current;
-      if (next) setPreviewed(new Set(records.map((item) => item.id)));
-      return next;
-    });
-  }
-
-  function deleteSelected() {
+  async function deleteSelected() {
     if (!selected.size) return;
-    setRecords((current) => current.filter((item) => !selected.has(item.id)));
-    setPreviewed(
-      (current) => new Set([...current].filter((id) => !selected.has(id))),
-    );
+    if (backendState !== "live") {
+      notify("Submissions cannot be deleted while the backend is unavailable.");
+      return;
+    }
+    const ids = [...selected];
+    const results = await Promise.all(ids.map(async (id) => {
+      const response = await apiFetch(`/api/v1/admin/kids-champ/submissions/${id}`, { method: "DELETE" });
+      return { id, response };
+    }));
+    const failed = results.filter(({ response }) => !response.ok);
+    if (failed.length) {
+      notify(`${failed.length} submission${failed.length === 1 ? "" : "s"} could not be deleted. Batched submissions are protected.`);
+    }
+    const deletedIds = new Set(results.filter(({ response }) => response.ok).map(({ id }) => id));
+    setRecords((current) => current.filter((item) => !deletedIds.has(item.id)));
     notify(
-      `${selected.size} submission${selected.size === 1 ? "" : "s"} deleted from this prototype.`,
+      `${deletedIds.size} submission${deletedIds.size === 1 ? "" : "s"} deleted from the database.`,
     );
     setSelected(new Set());
+  }
+
+  async function approveSubmissions(ids: string[]) {
+    if (!ids.length) return;
+    if (backendState !== "live") {
+      notify("Submissions cannot be approved while the backend is unavailable.");
+      return;
+    }
+    const response = await apiFetch("/api/v1/admin/kids-champ/submissions/approve", {
+      method: "POST",
+      body: JSON.stringify({ submissionIds: ids }),
+    });
+    const body = await response.json().catch(() => null) as { approvedCount?: number; alreadyApprovedCount?: number; message?: string } | null;
+    if (!response.ok) {
+      notify(body?.message || "The approval could not be saved.");
+      return;
+    }
+    const approvedIds = new Set(ids);
+    setRecords((current) => current.map((item) => approvedIds.has(item.id) ? { ...item, reviewStatus: "Approved" } : item));
+    const newlyApproved = body?.approvedCount ?? 0;
+    const alreadyApproved = body?.alreadyApprovedCount ?? 0;
+    notify(`${newlyApproved} approved${alreadyApproved ? `; ${alreadyApproved} already approved and ignored` : ""}. ZIP processing started automatically.`);
+    setSelected(new Set());
+  }
+
+  function approveSelected() { void approveSubmissions([...selected]); }
+
+  function approveAllVisible() {
+    void approveSubmissions(visible.filter((item) => item.reviewStatus !== "Approved").map((item) => item.id));
   }
 
   function exportVisible() {
@@ -2376,11 +1865,8 @@ function SubmissionsWorkspace({
       "Age",
       "Home town",
       "Category",
-      "Review",
-      "TV status",
-      "Reviewer",
+      "Approval",
       "Submitted date",
-      "Previewed",
     ];
     const rows = visible.map((item) => [
       item.childName,
@@ -2388,11 +1874,8 @@ function SubmissionsWorkspace({
       item.age,
       item.location,
       item.category,
-      item.reviewStatus,
-      item.tvStatus,
-      item.reviewer,
+      item.reviewStatus === "Approved" ? "Approved" : "Not approved",
       item.submittedDate,
-      previewed.has(item.id) ? "Yes" : "No",
     ]);
     const escapeXml = (value: string | number) =>
       String(value)
@@ -2417,91 +1900,42 @@ function SubmissionsWorkspace({
     notify(`${visible.length} filtered records exported.`);
   }
 
-  async function sendSelectedPhotos() {
-    const chosen = records.filter((item) => selected.has(item.id));
-    if (!chosen.length) return;
-    const files = chosen.flatMap((item) =>
-      item.photoFile ? [item.photoFile] : [],
-    );
-    const message = `Kids Champ photos: ${chosen.map((item) => item.trackingCode).join(", ")}`;
-    try {
-      if (
-        files.length &&
-        navigator.share &&
-        (!navigator.canShare || navigator.canShare({ files }))
-      ) {
-        await navigator.share({
-          title: "Kids Champ photos",
-          text: message,
-          files,
-        });
-        notify(`${files.length} photo${files.length === 1 ? "" : "s"} shared.`);
-      } else {
-        window.open(
-          `https://wa.me/?text=${encodeURIComponent(message)}`,
-          "_blank",
-          "noopener,noreferrer",
-        );
-        notify(
-          files.length
-            ? "WhatsApp opened. Attachments may need to be added on this device."
-            : "WhatsApp opened with the selected tracking codes.",
-        );
-      }
-    } catch {
-      notify("Photo sharing was cancelled.");
-    }
-  }
-
   return (
-    <section>
-      <div className="flex flex-col gap-4 tablet:flex-row tablet:items-end tablet:justify-between">
+    <section className="overflow-hidden rounded-[18px] border border-[#E0E8F1] bg-white shadow-[0_10px_28px_rgba(30,72,123,.05)]">
+      <div className="flex flex-col gap-4 p-5 tablet:flex-row tablet:items-end tablet:justify-between">
         <div>
-          <h2 className="text-[22px] font-semibold">Submission workspace</h2>
-          <p className="mt-1 text-[13px] text-[#7A879A]">
-            Search, preview, edit and manage every Kids Champ entry on one page.
-          </p>
+          <h2 className="text-[20px] font-semibold tracking-[-.025em]">Submission workspace</h2>
+          <p className="mt-1 text-[13px] text-[#7A879A]">Approve and manage every Kids Champ entry on one page. Approved photos are queued for ZIP processing automatically.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => setDeleteConfirmOpen(true)}
-            disabled={!selected.size}
-            className="h-10 rounded-[10px] border border-red-200 bg-red-50 px-4 text-[12px] font-semibold text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            Delete
-          </button>
-          <button
-            onClick={() => setUploadOpen(true)}
-            className={secondaryButton}
-          >
-            Add photo
-          </button>
-          <button onClick={() => setReviewing(true)} className={primaryButton}>
-            Start reviewing
-          </button>
-        </div>
+        <span className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-2 text-[11px] font-bold ${backendState === "live" ? "bg-emerald-50 text-emerald-700" : backendState === "loading" ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"}`}><i className={`size-2 rounded-full ${backendState === "live" ? "bg-emerald-500" : backendState === "loading" ? "bg-blue-500" : "bg-amber-500"}`} />{backendState === "live" ? "Database connected" : backendState === "loading" ? "Loading data" : "Database unavailable"}</span>
       </div>
-      <div className="mt-6 rounded-[18px] border border-[#E0E7EF] bg-white">
+      {calendarFilter ? (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-blue-200 bg-blue-50 px-4 py-3">
+          <p className="text-[13px] font-semibold text-blue-900">
+            Showing submissions {calendarFilter.mode === "reviewed" ? "reviewed" : "received"} on {calendarFilter.date}
+          </p>
+          <button type="button" onClick={clearCalendarFilter} className="text-[12px] font-semibold text-blue-700 hover:underline">
+            Show all submissions
+          </button>
+        </div>
+      ) : null}
+      <div className="border-t border-[#E5EBF2]">
+        <div className="grid gap-3 bg-[#FBFDFF] p-4 tablet:grid-cols-3">
+          {[{ icon: "◷", label: "Waiting for approval", value: pendingVisible, style: "border-[#FBD589] bg-[#FFFAEC] text-[#9A4F00]" }, { icon: "✓", label: "Approved on this page", value: approvedVisible, style: "border-[#A9E9CF] bg-[#F1FCF7] text-[#087D55]" }, { icon: "♧", label: "Matching records", value: submissionTotalItems, style: "border-[#B9D6FF] bg-[#F2F7FF] text-[#1154B5]" }].map((metric) => <div key={metric.label} className={`relative overflow-hidden rounded-[10px] border px-5 py-3.5 ${metric.style}`}><span className="absolute right-5 top-3 grid size-10 place-items-center rounded-full bg-current/10 text-[22px]">{metric.icon}</span><strong className="block text-[27px] leading-none">{metric.value}</strong><span className="mt-1.5 block text-[11px] font-semibold">{metric.label}</span></div>)}
+        </div>
         <div className="flex flex-col gap-3 border-b border-[#E5EBF2] p-4 tablet:flex-row tablet:items-center tablet:justify-between">
           <label className="relative w-full max-w-sm">
             <span className="sr-only">Search submissions</span>
             <input
               value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              onChange={(event) => { setSubmissionPage(0); setSearch(event.target.value); }}
               className={fieldClass}
-              placeholder="Search name or tracking code"
+              placeholder="Search child name or tracking code"
             />
           </label>
           <div className="flex flex-wrap gap-2">
-            <label className="flex h-10 cursor-pointer items-center gap-2 rounded-[10px] border border-emerald-200 bg-emerald-50 px-3 text-[12px] font-semibold text-emerald-800">
-              <input
-                type="checkbox"
-                checked={autoPreview}
-                onChange={toggleAutoPreview}
-                className="size-4 accent-emerald-600"
-              />
-              Automatically preview all
-            </label>
+            {(["All", "New", "Not approved", "Approved"] as const).map((filter) => <button key={filter} type="button" onClick={() => { setSubmissionPage(0); setApprovalFilter(filter); }} className={`h-9 rounded-[10px] border px-3 text-[11px] font-semibold ${approvalFilter === filter ? "border-[#9ED1FF] bg-[#EAF5FF] text-[#0877EF]" : "border-[#E1E8F0] bg-white text-[#68778C] hover:border-[#BDD8F5]"}`}>{filter === "Not approved" ? "Waiting" : filter === "New" ? "New submissions" : filter}</button>)}
+            <button onClick={approveAllVisible} disabled={!pendingVisible} className="h-10 rounded-[10px] border border-emerald-200 bg-emerald-50 px-3 text-[12px] font-semibold text-emerald-800 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-40">Approve {pendingVisible || "all"} shown</button>
             <button
               onClick={() => setFiltersOpen((value) => !value)}
               className={`${secondaryButton} ${filtersOpen ? "border-blue-300 bg-blue-50 text-blue-700" : ""}`}
@@ -2521,7 +1955,7 @@ function SubmissionsWorkspace({
                 type="number"
                 min="1"
                 value={exactAge}
-                onChange={(event) => setExactAge(event.target.value)}
+                onChange={(event) => { setSubmissionPage(0); setExactAge(event.target.value); }}
                 className={`${fieldClass} mt-1`}
                 placeholder="Any"
               />
@@ -2532,7 +1966,7 @@ function SubmissionsWorkspace({
                 type="number"
                 min="1"
                 value={ageMin}
-                onChange={(event) => setAgeMin(event.target.value)}
+                onChange={(event) => { setSubmissionPage(0); setAgeMin(event.target.value); }}
                 className={`${fieldClass} mt-1`}
                 placeholder="Min"
               />
@@ -2543,45 +1977,28 @@ function SubmissionsWorkspace({
                 type="number"
                 min="1"
                 value={ageMax}
-                onChange={(event) => setAgeMax(event.target.value)}
+                onChange={(event) => { setSubmissionPage(0); setAgeMax(event.target.value); }}
                 className={`${fieldClass} mt-1`}
                 placeholder="Max"
               />
             </label>
             <label className="text-[10px] font-semibold uppercase text-[#748197]">
-              Review
+              Approval
               <select
-                value={reviewFilter}
-                onChange={(event) => setReviewFilter(event.target.value)}
+                value={approvalFilter}
+                onChange={(event) => { setSubmissionPage(0); setApprovalFilter(event.target.value); }}
                 className={`${fieldClass} mt-1`}
               >
                 <option>All</option>
-                <option>New</option>
-                <option>Pending review</option>
-                <option>Under review</option>
                 <option>Approved</option>
-                <option>Rejected</option>
-              </select>
-            </label>
-            <label className="text-[10px] font-semibold uppercase text-[#748197]">
-              TV status
-              <select
-                value={tvFilter}
-                onChange={(event) => setTvFilter(event.target.value)}
-                className={`${fieldClass} mt-1`}
-              >
-                <option>All</option>
-                <option>Not selected</option>
-                <option>Selected</option>
-                <option>Scheduled</option>
-                <option>Telecasted</option>
+                <option>Not approved</option>
               </select>
             </label>
             <label className="text-[10px] font-semibold uppercase text-[#748197]">
               Home town
               <select
                 value={locationFilter}
-                onChange={(event) => setLocationFilter(event.target.value)}
+                onChange={(event) => { setSubmissionPage(0); setLocationFilter(event.target.value); }}
                 className={`${fieldClass} mt-1`}
               >
                 <option>All</option>
@@ -2594,7 +2011,7 @@ function SubmissionsWorkspace({
               Sent date
               <select
                 value={dateMode}
-                onChange={(event) => setDateMode(event.target.value)}
+                onChange={(event) => { setSubmissionPage(0); setDateMode(event.target.value); }}
                 className={`${fieldClass} mt-1`}
               >
                 <option>Any time</option>
@@ -2611,7 +2028,7 @@ function SubmissionsWorkspace({
                 <input
                   type="date"
                   value={specificDate}
-                  onChange={(event) => setSpecificDate(event.target.value)}
+                  onChange={(event) => { setSubmissionPage(0); setSpecificDate(event.target.value); }}
                   className={`${fieldClass} mt-1`}
                 />
               </label>
@@ -2623,7 +2040,7 @@ function SubmissionsWorkspace({
                   <input
                     type="date"
                     value={dateFrom}
-                    onChange={(event) => setDateFrom(event.target.value)}
+                    onChange={(event) => { setSubmissionPage(0); setDateFrom(event.target.value); }}
                     className={`${fieldClass} mt-1`}
                   />
                 </label>
@@ -2633,7 +2050,7 @@ function SubmissionsWorkspace({
                     type="date"
                     min={dateFrom}
                     value={dateTo}
-                    onChange={(event) => setDateTo(event.target.value)}
+                    onChange={(event) => { setSubmissionPage(0); setDateTo(event.target.value); }}
                     className={`${fieldClass} mt-1`}
                   />
                 </label>
@@ -2645,7 +2062,7 @@ function SubmissionsWorkspace({
                 <input
                   type="week"
                   value={week}
-                  onChange={(event) => setWeek(event.target.value)}
+                  onChange={(event) => { setSubmissionPage(0); setWeek(event.target.value); }}
                   className={`${fieldClass} mt-1`}
                 />
               </label>
@@ -2656,7 +2073,7 @@ function SubmissionsWorkspace({
                 <input
                   type="month"
                   value={month}
-                  onChange={(event) => setMonth(event.target.value)}
+                  onChange={(event) => { setSubmissionPage(0); setMonth(event.target.value); }}
                   className={`${fieldClass} mt-1`}
                 />
               </label>
@@ -2666,7 +2083,7 @@ function SubmissionsWorkspace({
                 Year
                 <select
                   value={year}
-                  onChange={(event) => setYear(event.target.value)}
+                  onChange={(event) => { setSubmissionPage(0); setYear(event.target.value); }}
                   className={`${fieldClass} mt-1`}
                 >
                   <option>2024</option>
@@ -2682,9 +2099,9 @@ function SubmissionsWorkspace({
                   setExactAge("");
                   setAgeMin("");
                   setAgeMax("");
-                  setReviewFilter("All");
-                  setTvFilter("All");
+                  setApprovalFilter("All");
                   setLocationFilter("All");
+                  setSubmissionPage(0);
                   setDateMode("Any time");
                 }}
                 className={`${secondaryButton} w-full`}
@@ -2694,46 +2111,22 @@ function SubmissionsWorkspace({
             </div>
           </div>
         ) : null}
-        <div className="flex gap-2 overflow-x-auto border-b border-[#E5EBF2] px-4 py-3">
-          {[
-            "All",
-            "New",
-            "Pending review",
-            "Under review",
-            "Approved",
-            "Rejected",
-          ].map((item) => (
-            <button
-              key={item}
-              onClick={() => setReviewFilter(item)}
-              className={`shrink-0 rounded-full px-3 py-2 text-[12px] font-semibold ${reviewFilter === item ? "bg-[#2488F4] text-white" : "bg-[#F1F4F7] text-[#66758B]"}`}
-            >
-              {item}
-            </button>
-          ))}
-        </div>
         {selected.size ? (
           <div className="sticky top-0 z-20 flex flex-wrap items-center gap-2 border-b border-blue-200 bg-blue-50 px-4 py-3 shadow-sm">
             <strong className="mr-2 text-[12px] text-blue-900">
               {selected.size} selected
             </strong>
             <button
+              onClick={() => void approveSelected()}
+              className="h-9 rounded-[9px] bg-emerald-600 px-3 text-[11px] font-semibold text-white hover:bg-emerald-700"
+            >
+              Approve selected
+            </button>
+            <button
               onClick={() => setDeleteConfirmOpen(true)}
               className="h-9 rounded-[9px] bg-red-600 px-3 text-[11px] font-semibold text-white"
             >
               Delete
-            </button>
-            <button
-              onClick={() => void sendSelectedPhotos()}
-              className="h-9 rounded-[9px] bg-emerald-600 px-3 text-[11px] font-semibold text-white"
-            >
-              Send photos
-            </button>
-            <button
-              onClick={() => createZipFromSelection([...selected])}
-              className="h-9 rounded-[9px] bg-violet-600 px-3 text-[11px] font-semibold text-white"
-            >
-              Create ZIP
             </button>
             <button
               onClick={() => setSelected(new Set())}
@@ -2744,7 +2137,7 @@ function SubmissionsWorkspace({
           </div>
         ) : null}
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1370px] text-left">
+          <table className="w-full min-w-[1120px] text-left">
             <thead className="sticky top-0 z-10 bg-[#F8FAFC] text-[11px] font-semibold uppercase tracking-[.04em] text-[#718096] shadow-[0_1px_0_#E5EBF2]">
               <tr>
                 <th className="w-12 px-4 py-3">
@@ -2764,10 +2157,8 @@ function SubmissionsWorkspace({
                 <th className="px-3 py-3">Tracking code</th>
                 <th className="px-3 py-3">Age / home town</th>
                 <th className="px-3 py-3">Category</th>
-                <th className="px-3 py-3">Review</th>
-                <th className="px-3 py-3">TV status</th>
                 <th className="px-3 py-3">Sent</th>
-                <th className="px-3 py-3 text-center">Previewed</th>
+                <th className="px-3 py-3 text-center">Approval</th>
                 <th className="px-4 py-3 text-right">Action</th>
               </tr>
             </thead>
@@ -2778,17 +2169,9 @@ function SubmissionsWorkspace({
                   item={item}
                   privacy={privacy}
                   selected={selected.has(item.id)}
-                  previewed={previewed.has(item.id)}
                   onSelect={() => toggleSelection(item.id)}
-                  onPreview={() => togglePreview(item.id)}
                   onOpen={() =>
-                    openSubmission(item, (updated) =>
-                      setRecords((current) =>
-                        current.map((record) =>
-                          record.id === updated.id ? updated : record,
-                        ),
-                      ),
-                    )
+                    openSubmission(item, (updated) => void saveSubmission(updated))
                   }
                   notify={notify}
                 />
@@ -2803,34 +2186,26 @@ function SubmissionsWorkspace({
         </div>
         <div className="flex items-center justify-between border-t border-[#E5EBF2] px-4 py-3">
           <p className="text-[12px] text-[#8490A2]">
-            Showing all {visible.length} matching records on this page
+            Showing {visible.length} matching records from {submissionTotalItems} submissions
           </p>
-          <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-[10px] font-semibold text-emerald-700">
-            All data loaded
-          </span>
+          <div className="flex items-center gap-3">
+            <button onClick={() => setSubmissionPage((page) => Math.max(0, page - 1))} disabled={submissionPage === 0 || backendState !== "live"} className="text-[11px] font-semibold text-[#0877EF] disabled:opacity-35">Previous</button>
+            <span className="text-[11px] text-[#66758B]">Page {submissionTotalPages ? submissionPage + 1 : 0} of {submissionTotalPages}</span>
+            <button onClick={() => setSubmissionPage((page) => Math.min(Math.max(0, submissionTotalPages - 1), page + 1))} disabled={backendState !== "live" || submissionPage >= submissionTotalPages - 1} className="text-[11px] font-semibold text-[#0877EF] disabled:opacity-35">Next</button>
+            <span className={`rounded-full px-3 py-1.5 text-[10px] font-semibold ${backendState === "live" ? "bg-emerald-50 text-emerald-700" : backendState === "loading" ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"}`}>
+              {backendState === "live" ? "Live backend data" : backendState === "loading" ? "Loading backend data" : "Backend unavailable"}
+            </span>
+          </div>
         </div>
       </div>
-      {uploadOpen ? (
-        <PhotoUploadModal
-          settings={settings}
-          onClose={() => setUploadOpen(false)}
-          onAdd={(submission) => {
-            setRecords((current) => [submission, ...current]);
-            if (autoPreview)
-              setPreviewed((current) => new Set(current).add(submission.id));
-            setUploadOpen(false);
-            notify("Photo submission added and ready for review.");
-          }}
-        />
-      ) : null}
       {deleteConfirmOpen ? (
         <ConfirmationDialog
           title={`Delete ${selected.size} submission${selected.size === 1 ? "" : "s"}?`}
-          description="The selected records will be removed from this working view. This action should be connected to the backend audit log before production use."
+          description="The selected records will be soft-deleted from the database and recorded in the backend audit log. Submissions already assigned to a ZIP batch are protected."
           confirmLabel="Delete submissions"
           onCancel={() => setDeleteConfirmOpen(false)}
           onConfirm={() => {
-            deleteSelected();
+            void deleteSelected();
             setDeleteConfirmOpen(false);
           }}
         />
@@ -2839,37 +2214,104 @@ function SubmissionsWorkspace({
   );
 }
 
-type CampaignStatus = "Unsent" | "Sending" | "Sent" | "Error";
+type CampaignStatus = "Unsent" | "Queued" | "Sending" | "Sent" | "Error" | "Ignored";
 type CampaignRecipient = {
   id: string;
+  participantId: string;
   name: string;
   phone: string;
   trackingCode: string;
   status: CampaignStatus;
   attempts: number;
   selected: boolean;
+  campaignId?: string;
+  deliveryId?: number;
+  failureReason?: string;
 };
 
-function WhatsAppIcon() {
-  return (
-    <span
-      className="grid size-7 place-items-center rounded-full bg-[#20D467] text-white shadow-sm"
-      aria-hidden="true"
-    >
-      <svg
-        viewBox="0 0 24 24"
-        className="size-4"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      >
-        <path d="M20 11.5a8 8 0 0 1-11.9 7L4 20l1.5-4A8 8 0 1 1 20 11.5Z" />
-        <path d="M8.7 8.2c.4 2.7 2.5 4.8 5.2 5.2l1.2-1.2c.3-.3.7-.4 1.1-.2l2 .8" />
-      </svg>
-    </span>
-  );
+type CampaignQueueItem = {
+  id: string;
+  channel: string;
+  status: string;
+  recipientCount: number;
+  messageTemplate: string;
+  createdAt: string;
+};
+
+type QueuedDelivery = {
+  id: number;
+  name: string;
+  destination: string;
+  status: string;
+  attempts: number;
+  failureReason?: string;
+};
+
+function WhatsAppQueueModal({ onClose, notify, initialFilter = "ALL" }: { onClose: () => void; notify: (message: string) => void; initialFilter?: string }) {
+  const [campaigns, setCampaigns] = useState<CampaignQueueItem[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [deliveries, setDeliveries] = useState<QueuedDelivery[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedCampaigns, setSelectedCampaigns] = useState<Set<string>>(new Set());
+  const [campaignFilter, setCampaignFilter] = useState(initialFilter);
+
+  useEffect(() => {
+    const load = async () => {
+      const response = await apiFetch("/api/v1/admin/kids-champ/campaigns");
+      if (!response.ok) { notify("Message queue could not be loaded."); setLoading(false); return; }
+      const items = await response.json() as CampaignQueueItem[];
+      setCampaigns(items.filter((item) => item.channel === "WHATSAPP"));
+      setLoading(false);
+    };
+    void load();
+  }, [notify]);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    const load = async () => {
+      const response = await apiFetch(`/api/v1/admin/kids-champ/campaigns/${selectedId}/recipients`);
+      if (response.ok) setDeliveries(await response.json() as QueuedDelivery[]);
+    };
+    void load();
+    const timer = window.setInterval(() => void load(), 3000);
+    return () => window.clearInterval(timer);
+  }, [selectedId]);
+
+  async function actOnSelectedCampaigns(action: "retry" | "ignore" | "delete") {
+    const campaignIds = [...selectedCampaigns];
+    if (!campaignIds.length) return;
+    const records = await Promise.all(campaignIds.map(async (id) => { const response = await apiFetch(`/api/v1/admin/kids-champ/campaigns/${id}/recipients`); return response.ok ? await response.json() as QueuedDelivery[] : []; }));
+    const recipientIds = records.flat().filter((item) => item.status === "FAILED").map((item) => item.id);
+    if (!recipientIds.length) { notify("The selected campaigns have no failed messages to process."); return; }
+    const response = await apiFetch(`/api/v1/admin/kids-champ/campaign-recipients/${action}`, { method: "POST", body: JSON.stringify({ recipientIds }) });
+    if (!response.ok) { notify("Selected campaigns could not be updated."); return; }
+    setSelectedCampaigns(new Set());
+    if (selectedId && campaignIds.includes(selectedId)) setDeliveries((current) => current.map((item) => item.status === "FAILED" ? { ...item, status: action === "retry" ? "QUEUED" : action === "ignore" ? "SKIPPED" : "DELETED", failureReason: action === "retry" ? undefined : item.failureReason } : item));
+    notify(`${recipientIds.length} failed message${recipientIds.length === 1 ? "" : "s"} ${action === "retry" ? "queued for retry" : action === "ignore" ? "ignored" : "deleted from the queue"}.`);
+  }
+  const visibleCampaigns = campaigns.filter((item) => {
+    if (campaignFilter === "ALL") return true;
+    if (campaignFilter === "ATTENTION") return item.status === "FAILED" || item.status === "PARTIAL";
+    return item.status === campaignFilter;
+  });
+  const queueStats = [
+    { label: "Needs attention", value: campaigns.filter((item) => item.status === "FAILED" || item.status === "PARTIAL").reduce((sum, item) => sum + item.recipientCount, 0), detail: "Requires action", style: "border-orange-100 bg-orange-50 text-orange-700", icon: "!" },
+    { label: "Retry ready", value: campaigns.filter((item) => item.status === "FAILED").reduce((sum, item) => sum + item.recipientCount, 0), detail: "Ready to resend", style: "border-blue-100 bg-blue-50 text-blue-700", icon: "↻" },
+    { label: "Delivered", value: campaigns.filter((item) => item.status === "COMPLETED").reduce((sum, item) => sum + item.recipientCount, 0), detail: "Successfully sent", style: "border-emerald-100 bg-emerald-50 text-emerald-700", icon: "✓" },
+    { label: "Errors", value: campaigns.filter((item) => item.status === "FAILED").reduce((sum, item) => sum + item.recipientCount, 0), detail: "Delivery failed", style: "border-red-100 bg-red-50 text-red-600", icon: "×" },
+  ];
+
+  return <div className="fixed inset-0 z-[115] grid place-items-center bg-[#102A56]/45 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-labelledby="wp-queue-title">
+    <section className="flex h-[88vh] w-full max-w-[1280px] flex-col overflow-hidden rounded-[18px] bg-white shadow-2xl">
+      <header className="border-b border-[#E3E9F0] p-5"><div className="flex items-start justify-between"><div className="flex gap-3"><span className="grid size-9 place-items-center rounded-full bg-[#20B65B] text-lg text-white">◔</span><div><p className="text-[11px] font-semibold uppercase tracking-[.12em] text-[#20A45A]">WhatsApp</p><h2 id="wp-queue-title" className="mt-1 text-[22px] font-semibold">Message queue</h2><p className="mt-1 text-[12px] text-[#7A879A]">Live delivery status. Select a campaign to view each recipient.</p></div></div><button onClick={onClose} className="grid size-9 place-items-center rounded-[10px] border border-[#D7E2EE]" aria-label="Close message queue">×</button></div><div className="mt-5 grid gap-3 tablet:grid-cols-4">{queueStats.map((item) => <div key={item.label} className={`flex items-center gap-3 rounded-[10px] border p-3 ${item.style}`}><span className="grid size-8 place-items-center rounded-full bg-white/70 text-[20px] font-bold">{item.icon}</span><span><strong className="block text-[19px] leading-none">{item.value.toLocaleString()}</strong><span className="mt-1 block text-[10px] font-bold">{item.label}</span><span className="block text-[9px] opacity-70">{item.detail}</span></span></div>)}</div></header>
+      <div className="grid min-h-0 flex-1 tablet:grid-cols-[390px_1fr]">
+        <div className="min-h-0 overflow-y-auto border-b border-[#E3E9F0] p-4 tablet:border-b-0 tablet:border-r">
+          <div className="mb-3 flex flex-wrap items-center gap-2"><select value={campaignFilter} onChange={(event) => { setSelectedCampaigns(new Set()); setCampaignFilter(event.target.value); }} className="rounded-[8px] border border-[#D8E2EC] px-2 py-1 text-[11px]"><option value="ALL">All campaigns</option><option value="ATTENTION">Needs attention</option><option value="FAILED">Failed only</option><option value="QUEUED">Queued</option><option value="COMPLETED">Sent</option><option value="PARTIAL">Partially sent</option></select><button onClick={() => setSelectedCampaigns(new Set(visibleCampaigns.map((item) => item.id)))} className="text-[11px] font-semibold text-[#0877EF]">Select filtered</button><button onClick={() => void actOnSelectedCampaigns("retry")} disabled={!selectedCampaigns.size} className="rounded-[8px] bg-emerald-600 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-40">Retry selected</button><button onClick={() => void actOnSelectedCampaigns("ignore")} disabled={!selectedCampaigns.size} className="rounded-[8px] border border-slate-300 px-2 py-1 text-[10px] font-semibold disabled:opacity-40">Ignore selected</button><button onClick={() => void actOnSelectedCampaigns("delete")} disabled={!selectedCampaigns.size} className="rounded-[8px] border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-700 disabled:opacity-40">Delete selected</button></div>{loading ? <p className="p-3 text-[12px] text-[#7A879A]">Loading queue…</p> : visibleCampaigns.length ? visibleCampaigns.map((item) => <div key={item.id} className={`mb-2 flex items-start gap-2 rounded-[12px] border p-3 ${selectedId === item.id ? "border-emerald-300 bg-emerald-50" : "border-[#E1E7EE]"}`}><input type="checkbox" checked={selectedCampaigns.has(item.id)} onChange={() => setSelectedCampaigns((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })} className="mt-1 size-4 accent-emerald-600" aria-label={`Select campaign ${item.id}`} /><button onClick={() => { setDeliveries([]); setSelectedId(item.id); }} className="min-w-0 flex-1 text-left"><div className="flex justify-between gap-2"><strong className="text-[12px]">{item.recipientCount} recipient{item.recipientCount === 1 ? "" : "s"}</strong><StatusBadge label={item.status === "COMPLETED" ? "Sent" : item.status === "PARTIAL" ? "Partial" : item.status === "FAILED" ? "Error" : "Queued"} /></div><p className="mt-1 truncate text-[10px] text-[#7A879A]">{item.messageTemplate}</p></button></div>) : <p className="p-3 text-[12px] text-[#7A879A]">No WhatsApp campaigns match this filter.</p>}
+        </div>
+        <div className="min-h-0 overflow-y-auto p-4">{selectedId ? <>{["Queued", "Sending", "Sent", "Failed", "Ignored"].map((label) => <span key={label} className="mr-2 text-[11px] text-[#66758B]">{label}: {deliveries.filter((item) => (label === "Failed" ? item.status === "FAILED" : item.status === label.toUpperCase())).length}</span>)}<div className="mt-4 divide-y divide-[#EDF1F5] rounded-[12px] border border-[#E1E7EE]">{deliveries.map((item) => <div key={item.id} className="flex items-center gap-3 p-3"><div className="min-w-0 flex-1"><strong className="block text-[12px]">{item.name}</strong><p className="text-[10px] text-[#8490A2]">{item.destination} · attempt {item.attempts}</p>{item.failureReason ? <p className="mt-1 text-[10px] text-red-700">{item.failureReason}</p> : null}</div><StatusBadge label={item.status === "FAILED" ? "Error" : item.status === "SKIPPED" ? "Ignored" : item.status === "READ" ? "Read" : item.status === "DELIVERED" ? "Delivered" : item.status === "SENT" ? "Accepted" : item.status === "SENDING" ? "Sending" : item.status === "DELETED" ? "Deleted" : "Queued"} /></div>)}</div></> : <p className="pt-8 text-center text-[12px] text-[#7A879A]">Select a campaign to see its messages.</p>}</div>
+      </div>
+    </section>
+  </div>;
 }
 
 function WhatsAppCampaignModal({
@@ -2885,26 +2327,30 @@ function WhatsAppCampaignModal({
   onClose: () => void;
   notify: (message: string) => void;
 }) {
+  const englishTemplate = `Hello {name}, your Kids Champ artwork ({trackingCode}) is scheduled for telecast on {telecastDate}. Thank you for participating!`;
+  const sinhalaTemplate = `ආයුබෝවන් {name}, ${zipCode} හි ඔබගේ Kids Champ නිර්මාණය ({trackingCode}) {telecastDate} දින රූපවාහිනියේ විකාශය කිරීමට නියමිතයි. සහභාගී වූ ඔබට ස්තූතියි!`;
   const [step, setStep] = useState<"Compose" | "Preview" | "Progress">(
     "Compose",
   );
-  const [message, setMessage] = useState(
-    `Hello {name}, your Kids Champ artwork ({trackingCode}) in ${zipCode} is scheduled for telecast on {telecastDate}. Thank you for participating!`,
-  );
+  const [language, setLanguage] = useState<"English" | "Sinhala">("Sinhala");
+  const [message, setMessage] = useState(sinhalaTemplate);
   const [filter, setFilter] = useState<"All" | CampaignStatus>("All");
   const [sending, setSending] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [recipients, setRecipients] = useState<CampaignRecipient[]>(() =>
-    members.map((item, index) => ({
+    members.map((item) => ({
       id: item.id,
+      participantId: item.participantId,
       name: item.childName,
-      phone: `+94 77 ${String(2400000 + index * 13791).slice(0, 7)}`,
+      phone: item.phone,
       trackingCode: item.trackingCode,
       status: "Unsent",
       attempts: 0,
       selected: true,
     })),
   );
+  const recipientsRef = useRef(recipients);
+  useEffect(() => { recipientsRef.current = recipients; }, [recipients]);
   const personalize = (recipient: CampaignRecipient) =>
     message
       .replaceAll("{name}", recipient.name)
@@ -2912,12 +2358,12 @@ function WhatsAppCampaignModal({
       .replaceAll("{telecastDate}", telecastDate || "the date to be announced");
   const counts = recipients.reduce(
     (result, item) => ({ ...result, [item.status]: result[item.status] + 1 }),
-    { Sent: 0, Error: 0, Unsent: 0, Sending: 0 } as Record<
+    { Queued: 0, Error: 0, Unsent: 0, Sending: 0, Sent: 0, Ignored: 0 } as Record<
       CampaignStatus,
       number
     >,
   );
-  const completed = counts.Sent + counts.Error;
+  const completed = counts.Sent + counts.Error + counts.Ignored;
   const visible = recipients.filter(
     (item) => filter === "All" || item.status === filter,
   );
@@ -2935,30 +2381,63 @@ function WhatsAppCampaignModal({
     if (!targets.length) return;
     setStep("Progress");
     setSending(true);
-    for (const [index, id] of targets.entries()) {
-      setRecipients((current) =>
-        current.map((item) =>
-          item.id === id ? { ...item, status: "Sending" } : item,
-        ),
-      );
-      await new Promise((resolve) => window.setTimeout(resolve, 260));
-      setRecipients((current) =>
-        current.map((item) => {
-          if (item.id !== id) return item;
-          const failed = item.attempts === 0 && index % 4 === 1;
-          return {
-            ...item,
-            status: failed ? "Error" : "Sent",
-            attempts: item.attempts + 1,
-            selected: false,
-          };
+    setRecipients((current) => current.map((item) => targets.includes(item.id) ? { ...item, status: "Sending" } : item));
+    const targetRecipients = recipients.filter((item) => targets.includes(item.id));
+    const results = await Promise.all(targetRecipients.map(async (recipient) => {
+      const response = await apiFetch("/api/v1/admin/kids-champ/campaigns", {
+        method: "POST",
+        body: JSON.stringify({
+          channel: "WHATSAPP",
+          messageTemplate: personalize(recipient),
+          participantIds: [recipient.participantId],
+          templateName: language === "Sinhala" ? "kids_champ_telecast_si" : "kids_champ_telecast_en",
+          languageCode: language === "Sinhala" ? "si_LK" : "en_US",
+          templateParameters: language === "Sinhala"
+            ? [recipient.name, zipCode, recipient.trackingCode, telecastDate]
+            : [recipient.name, recipient.trackingCode, telecastDate],
         }),
-      );
-    }
+      });
+      const body = await response.json().catch(() => null) as { id?: string; message?: string } | null;
+      return { id: recipient.id, ok: response.ok, campaignId: body?.id, message: response.ok ? undefined : body?.message };
+    }));
+    const resultById = new Map(results.map((result) => [result.id, result]));
+    setRecipients((current) => current.map((item) => {
+      const result = resultById.get(item.id);
+      return result ? { ...item, status: result.ok ? "Queued" : "Error", campaignId: result.campaignId, attempts: item.attempts + 1, selected: !result.ok, failureReason: result.message } : item;
+    }));
     setSending(false);
-    notify(
-      "WhatsApp delivery run completed. Failed numbers did not stop the remaining messages.",
-    );
+    const failed = results.filter((result) => !result.ok);
+    notify(failed.length ? `${results.length - failed.length} messages queued; ${failed.length} could not be queued${failed[0].message ? `: ${failed[0].message}` : "."}` : `${results.length} personalized WhatsApp messages queued for delivery.`);
+  }
+
+  useEffect(() => {
+    if (step !== "Progress") return;
+    const refresh = async () => {
+      const tracked = recipientsRef.current.filter((item) => item.campaignId);
+      const updates = await Promise.all(tracked.map(async (item) => {
+        const response = await apiFetch(`/api/v1/admin/kids-champ/campaigns/${item.campaignId}/recipients`);
+        const body = response.ok ? await response.json() as Array<{ id:number; status:string; attempts:number; failureReason?:string }> : [];
+        return { recipientId: item.id, delivery: body[0] };
+      }));
+      setRecipients((current) => current.map((item) => {
+        const update = updates.find((value) => value.recipientId === item.id)?.delivery;
+        if (!update) return item;
+        const status: CampaignStatus = update.status === "SENT" || update.status === "DELIVERED" || update.status === "READ" ? "Sent" : update.status === "FAILED" ? "Error" : update.status === "SKIPPED" ? "Ignored" : update.status === "SENDING" ? "Sending" : "Queued";
+        return { ...item, status, attempts: update.attempts, deliveryId: update.id, failureReason: update.failureReason };
+      }));
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 3000);
+    return () => window.clearInterval(timer);
+  }, [step]);
+
+  async function actionSelectedFailures(action: "retry" | "ignore") {
+    const ids = recipients.filter((item) => item.selected && item.status === "Error" && item.deliveryId).map((item) => item.deliveryId as number);
+    if (!ids.length) return;
+    const response = await apiFetch(`/api/v1/admin/kids-champ/campaign-recipients/${action}`, { method: "POST", body: JSON.stringify({ recipientIds: ids }) });
+    if (!response.ok) { notify(`Selected failed messages could not be ${action === "retry" ? "retried" : "ignored"}.`); return; }
+    setRecipients((current) => current.map((item) => ids.includes(item.deliveryId ?? -1) ? { ...item, status: action === "retry" ? "Queued" : "Ignored", selected: false, failureReason: undefined } : item));
+    notify(`${ids.length} failed message${ids.length === 1 ? "" : "s"} ${action === "retry" ? "queued for retry" : "ignored"}.`);
   }
 
   function toggleRecipient(id: string) {
@@ -2999,7 +2478,7 @@ function WhatsAppCampaignModal({
           />
         </div>
         <div className="mt-2 flex justify-between text-[10px] font-semibold">
-          <span className="text-emerald-700">{counts.Sent} sent</span>
+          <span className="text-emerald-700">{counts.Queued} queued</span>
           <span className="text-red-600">{counts.Error} errors</span>
           <span className="text-[#7A879A]">{counts.Unsent} unsent</span>
         </div>
@@ -3068,6 +2547,24 @@ function WhatsAppCampaignModal({
           {step === "Compose" ? (
             <div className="grid gap-5 tablet:grid-cols-[1fr_280px]">
               <div>
+                <div className="mb-4">
+                  <p className="text-[12px] font-semibold text-[#526178]">Message language</p>
+                  <div className="mt-2 inline-flex rounded-[10px] bg-[#F0F3F7] p-1">
+                    {(["English", "Sinhala"] as const).map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => {
+                          setLanguage(item);
+                          setMessage(item === "Sinhala" ? sinhalaTemplate : englishTemplate);
+                        }}
+                        className={`rounded-[8px] px-4 py-2 text-[11px] font-semibold ${language === item ? "bg-white text-[#17243D] shadow-sm" : "text-[#7A879A]"}`}
+                      >
+                        {item === "Sinhala" ? "සිංහල" : "English"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <label className="text-[12px] font-semibold text-[#526178]">
                   Message template
                   <textarea
@@ -3087,6 +2584,8 @@ function WhatsAppCampaignModal({
                 <p className="mt-1 text-[14px] font-semibold">
                   {telecastDate || "Not scheduled"}
                 </p>
+                <p className="mt-4 text-[11px] text-[#7A879A]">Language</p>
+                <p className="mt-1 text-[14px] font-semibold">{language === "Sinhala" ? "සිංහල" : "English"}</p>
                 <p className="mt-4 text-[11px] text-[#7A879A]">Recipients</p>
                 <p className="mt-1 text-[24px] font-semibold">
                   {recipients.filter((item) => item.selected).length}
@@ -3140,10 +2639,12 @@ function WhatsAppCampaignModal({
           ) : null}
           {step === "Progress" ? (
             <div>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-3 gap-3 tablet:grid-cols-6">
                 {[
+                  ["Queued", counts.Queued, "text-blue-700 bg-blue-50"],
                   ["Sent", counts.Sent, "text-emerald-700 bg-emerald-50"],
                   ["Errors", counts.Error, "text-red-700 bg-red-50"],
+                  ["Ignored", counts.Ignored, "text-slate-700 bg-slate-100"],
                   ["Unsent", counts.Unsent, "text-slate-700 bg-slate-50"],
                   ["Sending", counts.Sending, "text-blue-700 bg-blue-50"],
                 ].map(([label, value, style]) => (
@@ -3170,7 +2671,7 @@ function WhatsAppCampaignModal({
                 </p>
               </div>
               <div className="mt-5 flex flex-wrap gap-2">
-                {(["All", "Sent", "Error", "Unsent"] as const).map((item) => (
+                {(["All", "Queued", "Sending", "Sent", "Error", "Ignored", "Unsent"] as const).map((item) => (
                   <button
                     key={item}
                     onClick={() => setFilter(item)}
@@ -3249,46 +2750,23 @@ function WhatsAppCampaignModal({
               disabled={!recipients.some((item) => item.selected)}
               className="h-10 rounded-[10px] bg-[#20B15A] px-4 text-[12px] font-semibold text-white"
             >
-              Confirm and start sending
+              Confirm and queue campaign
             </button>
           ) : (
             <div className="flex gap-2">
               <button
-                onClick={() =>
-                  void startSending(
-                    recipients
-                      .filter((item) => item.status === "Error")
-                      .map((item) => item.id),
-                  )
-                }
-                disabled={sending || !counts.Error}
+                onClick={() => void actionSelectedFailures("retry")}
+                disabled={sending || !recipients.some((item) => item.selected && item.status === "Error")}
                 className="h-10 rounded-[10px] border border-red-200 bg-red-50 px-4 text-[12px] font-semibold text-red-700 disabled:opacity-40"
               >
-                Retry all errors
+                Retry selected failed
               </button>
               <button
-                onClick={() =>
-                  void startSending(
-                    recipients
-                      .filter(
-                        (item) =>
-                          item.selected &&
-                          (item.status === "Error" || item.status === "Unsent"),
-                      )
-                      .map((item) => item.id),
-                  )
-                }
-                disabled={
-                  sending ||
-                  !recipients.some(
-                    (item) =>
-                      item.selected &&
-                      (item.status === "Error" || item.status === "Unsent"),
-                  )
-                }
-                className={`${primaryButton} disabled:opacity-40`}
+                onClick={() => void actionSelectedFailures("ignore")}
+                disabled={sending || !recipients.some((item) => item.selected && item.status === "Error")}
+                className="h-10 rounded-[10px] border border-slate-300 bg-white px-4 text-[12px] font-semibold text-slate-700 disabled:opacity-40"
               >
-                Retry selected
+                Ignore selected failed
               </button>
             </div>
           )}
@@ -3413,6 +2891,7 @@ function TvZipWorkspace({
   onSettingsChange,
   createRequest,
   onCreateRequestHandled,
+  initialOverviewView,
 }: {
   openZip: (
     item: ZipBatch,
@@ -3424,46 +2903,50 @@ function TvZipWorkspace({
   onSettingsChange: (settings: ZipCommonSettings) => void;
   createRequest: string[];
   onCreateRequestHandled: () => void;
+  initialOverviewView: OverviewZipView;
 }) {
-  const [zipRecords, setZipRecords] = useState(zipBatches);
+  const [zipRecords, setZipRecords] = useState<ZipBatch[]>([]);
   const [zipSearch, setZipSearch] = useState("");
+  const [editingZipId, setEditingZipId] = useState<string | null>(null);
   const [zipStatus, setZipStatus] = useState("All");
   const [campaignZip, setCampaignZip] = useState<ZipBatch | null>(null);
+  const [queueOpen, setQueueOpen] = useState(initialOverviewView === "whatsapp-attention");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [deleteCode, setDeleteCode] = useState("");
+  const [batchSubmissions, setBatchSubmissions] = useState<MockSubmission[]>([]);
+  const [pendingZipSubmissions, setPendingZipSubmissions] = useState<MockSubmission[]>([]);
+  const [pendingZipSelected, setPendingZipSelected] = useState<Set<string>>(new Set());
+  const [creatingPendingZip, setCreatingPendingZip] = useState(false);
+  const [advancedZipRecoveryOpen, setAdvancedZipRecoveryOpen] = useState(false);
+  const [zipRecoveryReason, setZipRecoveryReason] = useState("");
+  const [zipProgress, setZipProgress] = useState({ readyPhotos: 0, activeTargetSize: commonSettings.batchSize, nextTargetSize: commonSettings.batchSize });
+  const loadBatches = () => apiFetch("/api/v1/admin/kids-champ/batches")
+    .then(async (response) => {
+      if (!response.ok) throw new Error("ZIP batches could not be loaded.");
+      setZipRecords(((await response.json()) as AdminBatchResponse[]).map(toZipBatch));
+    })
+    .catch((reason) => notify(reason instanceof Error ? reason.message : "ZIP batches could not be loaded."));
+  useEffect(() => {
+    void loadBatches();
+    apiFetch("/api/v1/admin/kids-champ/batches/progress").then(async(response)=>{if(response.ok)setZipProgress(await response.json());}).catch(()=>undefined);
+    apiFetch("/api/v1/admin/kids-champ/submissions").then(async(response)=>{if(response.ok){const submissions=((await response.json()) as AdminSubmissionResponse[]).map(toMockSubmission);setBatchSubmissions(submissions);const pending=submissions.filter((item)=>item.reviewStatus==="Approved"&&item.fileStatus==="Ready");setPendingZipSubmissions(pending);setPendingZipSelected(new Set());}}).catch(()=>undefined);
+  // load once when this workspace mounts
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     if (!createRequest.length) return;
     const requestedCount = createRequest.length;
-    const timer = window.setTimeout(() => {
-      setZipRecords((current) => {
-        const sequence = String(74 + current.length).padStart(3, "0");
-        return [
-          {
-            code: `KC-ZIP-2026-${sequence}`,
-            photos: requestedCount,
-            size: "--",
-            status: "Queued" as const,
-            telecastStatus: "Not telecasted" as const,
-            telecastDate: "",
-            expires: `${commonSettings.expiryDays} days`,
-            progress: 0,
-            edited: false,
-            editedAt: "",
-            deleted: false,
-            deletedAt: "",
-            downloaded: false,
-            downloadedAt: "",
-            recipientIds: createRequest,
-          },
-          ...current,
-        ];
-      });
-      onCreateRequestHandled();
-      notify(
-        `ZIP batch created with ${requestedCount} selected submission${requestedCount === 1 ? "" : "s"}.`,
-      );
-    }, 0);
-    return () => window.clearTimeout(timer);
+    const requestedIds = [...createRequest];
+    onCreateRequestHandled();
+    apiFetch("/api/v1/admin/kids-champ/batches/selected", {
+      method: "POST",
+      body: JSON.stringify({ submissionIds: requestedIds }),
+    }).then(async (response) => {
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.message || "The selected ZIP could not be created.");
+      setZipRecords((current) => [{ ...toZipBatch(body as AdminBatchResponse), recipientIds: requestedIds }, ...current]);
+      notify(`ZIP batch created with ${requestedCount} selected submission${requestedCount === 1 ? "" : "s"}.`);
+    }).catch((reason) => notify(reason instanceof Error ? reason.message : "The selected ZIP could not be created."));
   }, [
     createRequest,
     commonSettings.expiryDays,
@@ -3474,96 +2957,86 @@ function TvZipWorkspace({
     (item) =>
       (!zipSearch ||
         item.code.toLowerCase().includes(zipSearch.toLowerCase())) &&
+      (initialOverviewView !== "telecasted" || item.telecastCompleted) &&
       (zipStatus === "All" ||
         (zipStatus === "Deleted"
           ? item.deleted
           : !item.deleted && item.status === zipStatus)),
   );
-  function deleteZip(code: string) {
-    setZipRecords((current) =>
-      current.map((item) =>
-        item.code === code
-          ? {
-              ...item,
-              deleted: true,
-              deletedAt: "2026-08-01",
-              edited: true,
-              editedAt: "2026-08-01",
-            }
-          : item,
-      ),
-    );
+  async function deleteZip(code: string) {
+    const item = zipRecords.find((record) => record.code === code);
+    if (!item?.id) return;
+    if (!item.downloaded) {
+      notify("Download this ZIP before deleting its archive.");
+      return;
+    }
+    const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${item.id}`, { method: "DELETE" });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) { notify(body?.message || "The ZIP archive could not be deleted."); return; }
+    await loadBatches();
     notify(`${code} archive deleted. Its audit record has been retained.`);
   }
-  function createZip() {
-    const sequence = String(74 + zipRecords.length).padStart(3, "0");
-    setZipRecords((current) => [
-      {
-        code: `KC-ZIP-2026-${sequence}`,
-        photos: commonSettings.batchSize,
-        size: "--",
-        status: "Queued",
-        expires: `${commonSettings.expiryDays} days`,
-        progress: 0,
-        telecastStatus: "Not telecasted",
-        telecastDate: "",
-        recipientIds: [],
-        edited: false,
-        editedAt: "",
-        deleted: false,
-        deletedAt: "",
-        downloaded: false,
-        downloadedAt: "",
-      },
-      ...current,
-    ]);
-    notify("A new ZIP batch was created and queued.");
+
+  async function createPendingZip() {
+    const submissionIds=[...pendingZipSelected];
+    if(!submissionIds.length)return;
+    if(!zipRecoveryReason.trim()){notify("Add a recovery reason before creating a manual ZIP.");return;}
+    setCreatingPendingZip(true);
+    const response=await apiFetch("/api/v1/admin/kids-champ/batches/selected",{method:"POST",body:JSON.stringify({submissionIds,reason:zipRecoveryReason.trim()})});
+    const body=await response.json().catch(()=>null);
+    setCreatingPendingZip(false);
+    if(!response.ok){notify(body?.message||"The selected ZIP could not be created.");return;}
+    setZipRecords((current)=>[{...toZipBatch(body as AdminBatchResponse),recipientIds:submissionIds},...current]);
+    setPendingZipSubmissions((current)=>current.filter((item)=>!pendingZipSelected.has(item.id)));
+    setPendingZipSelected(new Set());
+    setZipRecoveryReason("");
+    setZipProgress((current)=>({...current,readyPhotos:Math.max(0,current.readyPhotos-submissionIds.length)}));
+    notify(`ZIP batch created with ${submissionIds.length} approved submission${submissionIds.length===1?"":"s"}.`);
   }
-  function updateZip(updated: ZipBatch) {
-    const telecastStatus = !updated.telecastDate
-      ? "Not telecasted"
-      : updated.telecastDate <= "2026-08-01"
-        ? "Telecasted"
-        : "Scheduled";
-    setZipRecords((current) =>
-      current.map((item) =>
-        item.code === updated.code
-          ? {
-              ...updated,
-              telecastStatus,
-              edited: item.edited,
-              editedAt: item.editedAt,
-            }
-          : item,
-      ),
-    );
+  async function updateZip(updated: ZipBatch) {
+    if (!updated.id || !updated.telecastDate) return;
+    const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${updated.id}/schedule`, {
+      method: "PATCH",
+      body: JSON.stringify({ telecastDate: updated.telecastDate, alternateTelecastDate: null }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) { notify(body?.message || "The telecast schedule could not be saved."); return; }
+    setZipRecords((current) => current.map((item) => item.id === updated.id ? toZipBatch(body as AdminBatchResponse) : item));
     notify(`${updated.code} updated.`);
   }
-  function toggleEdited(code: string) {
-    setZipRecords((current) =>
-      current.map((item) =>
-        item.code === code && item.downloaded
-          ? {
-              ...item,
-              edited: !item.edited,
-              editedAt: !item.edited ? "2026-08-01" : "",
-            }
-          : item,
-      ),
-    );
+  async function completeTelecast(item: ZipBatch) {
+    if (!item.id || !item.telecastDate || item.telecastCompleted) return;
+    const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${item.id}/telecast-complete`, { method: "POST" });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) { notify(body?.message || "The telecast could not be marked complete."); return; }
+    setZipRecords((current) => current.map((record) => record.id === item.id ? toZipBatch(body as AdminBatchResponse) : record));
+    notify(`${item.code} marked as telecast completed.`);
   }
-  function downloadZip(item: ZipBatch) {
+  async function toggleEdited(item: ZipBatch) {
+    if (!item.id || !item.downloaded || editingZipId) return;
+    setEditingZipId(item.id);
+    const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${item.id}/edited`, {
+      method: "PATCH",
+      body: JSON.stringify({ edited: !item.edited }),
+    });
+    const body = await response.json().catch(() => null);
+    setEditingZipId(null);
+    if (!response.ok) { notify(body?.message || "The edited status could not be saved."); return; }
+    setZipRecords((current) => current.map((record) => record.id === item.id ? toZipBatch(body as AdminBatchResponse) : record));
+    notify(`${item.code} edited status saved to the database.`);
+  }
+  async function downloadZip(item: ZipBatch) {
     if (item.deleted || item.status !== "Ready" || item.progress !== 100) {
       notify("This ZIP must be fully generated and Ready before downloading.");
       return;
     }
-    const content = `Kids Champ ZIP manifest\nBatch: ${item.code}\nPhotos: ${item.photos}\nSize: ${item.size}\nStatus: ${item.status}\nTelecast: ${item.telecastStatus}\nDate: ${item.telecastDate || "Not scheduled"}`;
-    const url = URL.createObjectURL(
-      new Blob([content], { type: "text/plain" }),
-    );
+    if (!item.id) return;
+    const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${item.id}/download`);
+    if (!response.ok) { notify("The ZIP archive could not be downloaded."); return; }
+    const url = URL.createObjectURL(await response.blob());
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${item.code}-manifest.txt`;
+    link.download = `${item.code}.zip`;
     link.click();
     URL.revokeObjectURL(url);
     setZipRecords((current) =>
@@ -3576,7 +3049,7 @@ function TvZipWorkspace({
     notify(`${item.code} manifest downloaded.`);
   }
   return (
-    <section>
+    <section className="space-y-3">
       <div className="flex flex-col gap-4 tablet:flex-row tablet:items-end tablet:justify-between">
         <div>
           <h2 className="text-[22px] font-semibold">ZIP operations</h2>
@@ -3584,34 +3057,73 @@ function TvZipWorkspace({
             Manage ZIP details, telecast dates and participant notifications.
           </p>
         </div>
-        <button onClick={createZip} className={primaryButton}>
-          Create ZIP
-        </button>
+        <span className="rounded-full bg-emerald-50 px-4 py-2 text-[12px] font-semibold text-emerald-700">Automatic ZIP: {zipProgress.readyPhotos} / {zipProgress.activeTargetSize} photos</span>
       </div>
       <button
         onClick={() => setSettingsOpen(true)}
-        className="mt-6 flex w-full items-center justify-between rounded-[16px] border border-[#DCE5EF] bg-white p-5 text-left transition hover:border-[#BFDDFB] hover:shadow-sm"
+        className="flex w-full items-center justify-between rounded-[16px] border border-[#DCE5EF] bg-white p-4 text-left shadow-[0_8px_20px_rgba(35,69,118,.03)] transition hover:border-[#BFDDFB] hover:shadow-sm"
       >
-        <span>
+        <span className="flex items-center gap-4">
+          <span className="grid size-10 place-items-center rounded-full bg-[#EDF6FF] text-[24px] text-[#0877EF]">◷</span>
+          <span>
           <strong className="text-[14px] text-[#263852]">ZIP retention</strong>
           <span className="mt-1 block text-[11px] text-[#7A879A]">
             Batch size, default expiry and warning periods.
           </span>
+          </span>
         </span>
         <span className="flex flex-wrap items-center justify-end gap-2">
-          <span className="rounded-full bg-blue-50 px-3 py-1.5 text-[10px] font-semibold text-blue-700">
+          <span className="rounded-[8px] border border-blue-200 bg-blue-50 px-3 py-2 text-[10px] font-semibold text-blue-700">
             {commonSettings.batchSize} photos / batch
           </span>
-          <span className="rounded-full bg-slate-100 px-3 py-1.5 text-[10px] font-semibold text-slate-700">
+          <span className="rounded-[8px] border border-violet-200 bg-violet-50 px-3 py-2 text-[10px] font-semibold text-violet-700">
             {commonSettings.expiryDays}-day expiry
           </span>
-          <span className="rounded-full bg-amber-50 px-3 py-1.5 text-[10px] font-semibold text-amber-700">
+          <span className="rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-semibold text-amber-700">
             Warn {commonSettings.warningDays} days before
           </span>
           <span className="ml-2 text-[#9AA5B5]">-&gt;</span>
         </span>
       </button>
-      <section className="mt-6 overflow-hidden rounded-[18px] border border-[#E0E7EF] bg-white">
+      <section className="overflow-hidden rounded-[14px] border border-emerald-200 bg-[#F4FFF9]">
+        <div className="flex flex-col gap-3 p-5 tablet:flex-row tablet:items-center tablet:justify-between">
+          <div>
+            <h3 className="flex items-center gap-2 text-[18px] font-semibold text-emerald-950"><span className="grid size-9 place-items-center rounded-full bg-emerald-100 text-xl text-emerald-600">☁</span>Automatic ZIP queue</h3>
+            <p className="mt-1 text-[12px] text-emerald-800">Approved photos are added automatically. The ZIP starts when the configured batch size is reached.</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setAdvancedZipRecoveryOpen((value) => !value)} className={secondaryButton}>
+              {advancedZipRecoveryOpen ? "Close advanced recovery" : "Advanced ZIP recovery"}
+            </button>
+            <button type="button" onClick={()=>setPendingZipSelected(new Set(pendingZipSelected.size===pendingZipSubmissions.length?[]:pendingZipSubmissions.map((item)=>item.id)))} disabled={!pendingZipSubmissions.length} className={advancedZipRecoveryOpen ? secondaryButton : "hidden"}>
+              {pendingZipSelected.size===pendingZipSubmissions.length&&pendingZipSubmissions.length?"Clear all":"Select all"}
+            </button>
+            <button type="button" onClick={()=>void createPendingZip()} disabled={!pendingZipSelected.size||creatingPendingZip} className={advancedZipRecoveryOpen ? `${primaryButton} disabled:cursor-not-allowed disabled:opacity-40` : "hidden"}>
+              {creatingPendingZip?"Creating ZIP…":`Create ZIP (${pendingZipSelected.size})`}
+            </button>
+          </div>
+        </div>
+        {advancedZipRecoveryOpen ? <div className="mx-5 mt-5 rounded-[10px] border border-amber-200 bg-amber-50 p-3">
+          <label className="block text-[10px] font-semibold uppercase text-amber-900">Recovery reason
+            <input value={zipRecoveryReason} onChange={(event) => setZipRecoveryReason(event.target.value)} className={`${fieldClass} mt-1`} placeholder="Why must this ZIP be created manually?" />
+          </label>
+        </div> : null}
+        <p className="mx-5 mb-5 rounded-[10px] border border-emerald-100 bg-white px-4 py-3 text-[12px] text-emerald-800">
+          {zipProgress.readyPhotos} of {zipProgress.activeTargetSize} approved photos are in the automatic ZIP queue. {Math.max(0, zipProgress.activeTargetSize - zipProgress.readyPhotos)} more photo{Math.max(0, zipProgress.activeTargetSize - zipProgress.readyPhotos) === 1 ? "" : "s"} needed before the next ZIP begins.
+        </p>
+        {advancedZipRecoveryOpen && pendingZipSubmissions.length ? (
+          <div className="max-h-80 overflow-y-auto divide-y divide-[#E7EDF3]">
+            {pendingZipSubmissions.map((item)=>(
+              <label key={item.id} className="flex cursor-pointer items-center gap-4 px-5 py-3 hover:bg-[#F8FAFC]">
+                <input type="checkbox" checked={pendingZipSelected.has(item.id)} onChange={()=>setPendingZipSelected((current)=>{const next=new Set(current);if(next.has(item.id))next.delete(item.id);else next.add(item.id);return next;})} className="size-4 accent-emerald-600"/>
+                <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-semibold">{item.childName}</p><p className="mt-0.5 text-[10px] text-[#7A879A]">{item.trackingCode} · {item.category} · {item.location}</p></div>
+                <StatusBadge label="Approved"/>
+              </label>
+            ))}
+          </div>
+        ) : advancedZipRecoveryOpen ? <p className="px-5 pb-5 text-[12px] text-[#7A879A]">No approved photos are waiting for ZIP recovery.</p> : null}
+      </section>
+      <section className="overflow-hidden rounded-[18px] border border-[#E0E7EF] bg-white shadow-[0_10px_28px_rgba(30,72,123,.05)]">
         <div className="flex flex-col gap-4 border-b border-[#E5EBF2] p-5 tablet:flex-row tablet:items-end tablet:justify-between">
           <div>
             <h3 className="text-[18px] font-semibold">ZIP records</h3>
@@ -3620,6 +3132,9 @@ function TvZipWorkspace({
             </p>
           </div>
           <div className="flex gap-2">
+            <button type="button" onClick={() => setQueueOpen(true)} className={secondaryButton}>
+              Message queue
+            </button>
             <input
               value={zipSearch}
               onChange={(event) => setZipSearch(event.target.value)}
@@ -3643,7 +3158,7 @@ function TvZipWorkspace({
           {visibleZips.map((item) => (
             <article
               key={item.code}
-              className={`grid items-center gap-3 px-5 py-4 transition hover:bg-[#F8FAFC] tablet:grid-cols-[1fr_125px_150px_100px_90px_270px] ${item.deleted ? "bg-red-50/35" : ""}`}
+              className={`grid items-center gap-3 px-5 py-4 transition hover:bg-[#F8FAFC] tablet:grid-cols-[1fr_110px_170px_100px_90px_270px] ${item.deleted ? "bg-red-50/35" : ""}`}
             >
               <button
                 onClick={() => openZip(item, deleteZip, updateZip)}
@@ -3653,7 +3168,8 @@ function TvZipWorkspace({
                   <strong className="text-[13px]">{item.code}</strong>
                 </span>
                 <span className="mt-1 block text-[11px] text-[#8490A2]">
-                  {item.photos} photos · {item.size}
+                  {item.photos} photos · {item.size} · created {item.createdAt}
+                  {item.downloadedAt ? ` · downloaded ${item.downloadedAt}` : ""}
                   {item.deleted ? ` · file deleted ${item.deletedAt}` : ""}
                 </span>
               </button>
@@ -3664,17 +3180,24 @@ function TvZipWorkspace({
               >
                 <StatusBadge label={item.deleted ? "Deleted" : item.status} />
               </button>
-              <button
-                onClick={() => openZip(item, deleteZip, updateZip)}
-                title={
-                  item.telecastDate
-                    ? `Telecast date: ${item.telecastDate}`
-                    : "Click to set telecast date"
-                }
-                className="flex items-center justify-center gap-2 text-left [&>span:first-child]:min-w-[112px] [&>span:first-child]:justify-center"
-              >
-                <StatusBadge label={item.telecastStatus} />
-              </button>
+              <label className="block text-[9px] font-semibold uppercase tracking-wide text-[#748197]">
+                Telecast date
+                <input
+                  type="date"
+                  value={item.telecastDate}
+                  disabled={item.deleted || item.telecastCompleted}
+                  onChange={(event) => {
+                    const telecastDate = event.target.value;
+                    setZipRecords((current) => current.map((record) => record.id === item.id
+                      ? { ...record, telecastDate, telecastStatus: telecastDate ? "Scheduled" : "Not telecasted" }
+                      : record));
+                    if (telecastDate) void updateZip({ ...item, telecastDate, telecastStatus: "Scheduled" });
+                  }}
+                  className="mt-1 h-9 w-full rounded-[8px] border border-[#D8E2EC] bg-white px-2 text-[11px] font-medium normal-case tracking-normal text-[#344660] outline-none focus:border-[#2488F4] disabled:cursor-not-allowed disabled:bg-[#F3F5F8] disabled:text-[#A5AFBC]"
+                  aria-label={`Telecast date for ${item.code}`}
+                />
+                <span className="mt-1 block normal-case tracking-normal"><StatusBadge label={item.telecastStatus} /></span>
+              </label>
               <button
                 onClick={() => openZip(item, deleteZip, updateZip)}
                 className="text-left text-[12px] text-[#66758B]"
@@ -3695,16 +3218,25 @@ function TvZipWorkspace({
                 <input
                   type="checkbox"
                   checked={item.edited}
-                  disabled={!item.downloaded}
-                  onChange={() => toggleEdited(item.code)}
+                  onChange={() => void toggleEdited(item)}
+                  disabled={!item.downloaded || editingZipId === item.id}
                   className="size-4 accent-violet-600 disabled:cursor-not-allowed"
                 />
                 Edited
               </label>
               <div className="flex items-center justify-end gap-2">
                 <button
+                  onClick={() => void completeTelecast(item)}
+                  disabled={!item.telecastDate || item.telecastCompleted || item.deleted}
+                  title={!item.telecastDate ? "Schedule the telecast first" : item.telecastCompleted ? "Telecast already completed" : "Mark this scheduled telecast as completed"}
+                  className="rounded-[8px] border border-violet-200 bg-violet-50 px-2 py-2 text-[10px] font-semibold text-violet-700 disabled:opacity-35"
+                >
+                  {item.telecastCompleted ? "Completed" : "Complete"}
+                </button>
+                <button
                   onClick={() => setCampaignZip(item)}
                   disabled={!item.telecastDate || !item.recipientIds.length}
+                  title={!item.telecastDate ? "Set the telecast date first" : !item.recipientIds.length ? "This ZIP has no message recipients" : `Notify every participant about the ${item.telecastDate} telecast`}
                   className="grid size-9 place-items-center rounded-[9px] border border-emerald-200 bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-35"
                   aria-label={`Message participants in ${item.code}`}
                 >
@@ -3737,7 +3269,8 @@ function TvZipWorkspace({
                 </button>
                 <button
                   onClick={() => setDeleteCode(item.code)}
-                  disabled={item.deleted}
+                  disabled={item.deleted || !item.downloaded}
+                  title={!item.downloaded ? "Download this ZIP before deleting it" : "Delete ZIP archive"}
                   className="w-[58px] rounded-[8px] border border-red-200 bg-red-50 px-2 py-2 text-[10px] font-semibold text-red-700 disabled:opacity-35"
                 >
                   {item.deleted ? "Deleted" : "Delete"}
@@ -3756,13 +3289,24 @@ function TvZipWorkspace({
         <WhatsAppCampaignModal
           zipCode={campaignZip.code}
           telecastDate={campaignZip.telecastDate}
-          members={submissions.filter((item) =>
+          members={batchSubmissions.filter((item) =>
             campaignZip.recipientIds.includes(item.id),
           )}
           onClose={() => setCampaignZip(null)}
           notify={notify}
         />
       ) : null}
+      <button
+        type="button"
+        onClick={() => setQueueOpen(true)}
+        className="fixed bottom-5 right-5 z-[105] flex items-center gap-2 rounded-full bg-[#17243D] px-4 py-3 text-[12px] font-semibold text-white shadow-xl transition hover:bg-[#243553]"
+        aria-label="Open WhatsApp message queue"
+        title="Open WhatsApp message queue"
+      >
+        <WhatsAppIcon />
+        Message queue
+      </button>
+      {queueOpen ? <WhatsAppQueueModal onClose={() => setQueueOpen(false)} notify={notify} initialFilter={initialOverviewView === "whatsapp-attention" ? "ATTENTION" : "ALL"} /> : null}
       {settingsOpen ? (
         <ZipCommonSettingsModal
           settings={commonSettings}
@@ -3789,58 +3333,9 @@ function TvZipWorkspace({
   );
 }
 
-function ParticipantDeleteConfirmation({
-  count,
-  onCancel,
-  onConfirm,
-}: {
-  count: number;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <div
-      className="fixed inset-0 z-[115] grid place-items-center bg-[#102A56]/45 p-4 backdrop-blur-[2px]"
-      role="alertdialog"
-      aria-modal="true"
-      aria-labelledby="participant-delete-title"
-      onMouseDown={onCancel}
-    >
-      <section
-        className="w-full max-w-[460px] rounded-[20px] bg-white p-6 shadow-2xl"
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <span className="grid size-12 place-items-center rounded-full bg-red-50 text-[22px] text-red-600">
-          !
-        </span>
-        <h2
-          id="participant-delete-title"
-          className="mt-4 text-[21px] font-semibold"
-        >
-          Delete {count} participant{count === 1 ? "" : "s"}?
-        </h2>
-        <p className="mt-2 text-[13px] leading-6 text-[#6E7C91]">
-          This removes the selected participant records from the current
-          prototype. Their submission files are not affected.
-        </p>
-        <div className="mt-6 flex justify-end gap-2">
-          <button onClick={onCancel} className={secondaryButton}>
-            Keep records
-          </button>
-          <button
-            onClick={onConfirm}
-            className="h-10 rounded-[10px] bg-red-600 px-4 text-[12px] font-semibold text-white hover:bg-red-700"
-          >
-            Confirm delete
-          </button>
-        </div>
-      </section>
-    </div>
-  );
-}
 
 type ParticipantDelivery = ParticipantRecord & {
-  delivery: "Unsent" | "Sending" | "Sent" | "Error";
+  delivery: "Unsent" | "Sending" | "Queued" | "Error";
 };
 
 function ParticipantMessageCampaign({
@@ -3868,7 +3363,7 @@ function ParticipantMessageCampaign({
       .replaceAll("{name}", item.name)
       .replaceAll("{reference}", item.reference)
       .replaceAll("{homeTown}", item.location);
-  const sent = deliveries.filter((item) => item.delivery === "Sent").length;
+  const sent = deliveries.filter((item) => item.delivery === "Queued").length;
   const errors = deliveries.filter((item) => item.delivery === "Error").length;
   const processed = sent + errors;
   const current = deliveries.find((item) => item.reference === currentId);
@@ -3876,28 +3371,13 @@ function ParticipantMessageCampaign({
   async function startSending() {
     setStep("Sending");
     setRunning(true);
-    for (const [index, member] of deliveries.entries()) {
-      if (member.delivery === "Sent") continue;
-      setCurrentId(member.reference);
-      setDeliveries((items) =>
-        items.map((item) =>
-          item.reference === member.reference
-            ? { ...item, delivery: "Sending" }
-            : item,
-        ),
-      );
-      await new Promise((resolve) => window.setTimeout(resolve, 420));
-      setDeliveries((items) =>
-        items.map((item) =>
-          item.reference === member.reference
-            ? { ...item, delivery: index % 5 === 3 ? "Error" : "Sent" }
-            : item,
-        ),
-      );
-    }
+    const response=await apiFetch("/api/v1/admin/kids-champ/campaigns",{method:"POST",body:JSON.stringify({channel:"WHATSAPP",messageTemplate:template,participantIds:deliveries.map((item)=>item.reference)})});
+    const body=await response.json().catch(()=>null);
+    if(response.ok)setDeliveries((items)=>items.map((item)=>({...item,delivery:"Queued"})));
+    else {setDeliveries((items)=>items.map((item)=>({...item,delivery:"Error"})));notify(body?.message||"Campaign could not be queued.");}
     setCurrentId("");
     setRunning(false);
-    notify("Participant message campaign completed.");
+    if(response.ok)notify("Participant campaign queued. Delivery will begin when a messaging provider is configured.");
   }
 
   return (
@@ -4020,7 +3500,7 @@ function ParticipantMessageCampaign({
                 <p className="mt-2 text-[12px] text-[#7A879A]">
                   {current
                     ? personalize(current)
-                    : `${sent} messages sent successfully.`}
+                    : `${sent} messages queued for delivery.`}
                 </p>
               </div>
               <div className="mt-6 h-3 overflow-hidden rounded-full bg-[#E7ECF2]">
@@ -4033,7 +3513,7 @@ function ParticipantMessageCampaign({
               </div>
               <div className="mt-4 grid grid-cols-3 gap-3">
                 {[
-                  ["Sent", sent, "bg-emerald-50 text-emerald-700"],
+                  ["Queued", sent, "bg-emerald-50 text-emerald-700"],
                   ["Errors", errors, "bg-red-50 text-red-700"],
                   [
                     "Remaining",
@@ -4125,7 +3605,8 @@ function ParticipantsWorkspace({
   notify: (message: string) => void;
   settings: KidsChampSettings;
 }) {
-  const [records, setRecords] = useState(participants);
+  const [records, setRecords] = useState<ParticipantRecord[]>([]);
+  const [duplicateGuests, setDuplicateGuests] = useState<DuplicateGuest[]>([]);
   const [search, setSearch] = useState("");
   const [segment, setSegment] = useState("All");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -4143,10 +3624,89 @@ function ParticipantsWorkspace({
   const [year, setYear] = useState("2026");
   const [week, setWeek] = useState("2026-W31");
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
   const [campaignTargets, setCampaignTargets] = useState<
     ParticipantRecord[] | null
   >(null);
+  useEffect(() => {
+    apiFetch("/api/v1/admin/kids-champ/participants")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Participants could not be loaded.");
+        const body = await response.json() as Array<{
+          id: string; name: string; age: number; type: string; location: string; phone: string;
+          submissions: number; approved: number; telecasted: number; joinedAt: string; lastSubmissionAt: string; whatsappConsented:boolean;
+        }>;
+        setRecords(body.map((item) => ({
+          reference: item.id,
+          name: item.name,
+          age: item.age,
+          type: item.type,
+          location: item.location,
+          phone: item.phone,
+          submissions: item.submissions,
+          approved: item.approved,
+          telecasted: item.telecasted,
+          whatsapp: item.whatsappConsented ? "Consented" : "Not provided",
+          joinedDate: item.joinedAt.slice(0, 10),
+          lastSubmissionDate: item.lastSubmissionAt.slice(0, 10),
+        })));
+      })
+      .catch((reason) => notify(reason instanceof Error ? reason.message : "Participants could not be loaded."));
+  // The parent callback is intentionally excluded: this request runs once per mount.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    Promise.all([
+      apiFetch("/api/v1/admin/kids-champ/guests/duplicates"),
+      apiFetch("/api/v1/admin/kids-champ/guests/registered-matches"),
+    ]).then(async ([guestResponse, registeredResponse]) => {
+      const guestMatches = guestResponse.ok ? await guestResponse.json() as DuplicateGuest[] : [];
+      const registeredMatches = registeredResponse.ok ? await registeredResponse.json() as DuplicateGuest[] : [];
+      setDuplicateGuests([...registeredMatches, ...guestMatches]);
+    })
+      .catch(() => undefined);
+  }, []);
+
+  async function mergeGuestRecords(candidate: DuplicateGuest) {
+    const registeredMatch = candidate.matchType === "REGISTERED_GUEST";
+    const response = await apiFetch(`/api/v1/admin/kids-champ/guests/${registeredMatch ? "merge-registered" : "merge"}`, {
+      method: "POST",
+      body: JSON.stringify(registeredMatch
+        ? { childId: candidate.firstId, guestId: candidate.secondId }
+        : { targetId: candidate.firstId, sourceId: candidate.secondId }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      notify(body?.message || "Guest records could not be merged.");
+      return;
+    }
+    setRecords((current) => current
+      .filter((item) => item.reference !== candidate.secondId)
+      .map((item) => item.reference === candidate.firstId
+        ? { ...item, submissions: candidate.firstSubmissions + candidate.secondSubmissions }
+        : item));
+    setDuplicateGuests((current) => current.filter((item) =>
+      ![candidate.firstId, candidate.secondId].includes(item.firstId) &&
+      ![candidate.firstId, candidate.secondId].includes(item.secondId)));
+    notify("Guest histories merged. All submissions were preserved.");
+  }
+
+  async function resolveGuestMatch(candidate: DuplicateGuest, action: "delete" | "ignore") {
+    const registeredMatch = candidate.matchType === "REGISTERED_GUEST";
+    const endpoint = action === "ignore" ? "ignore-match" : registeredMatch ? "delete-registered-duplicate" : "delete-duplicate";
+    const response = await apiFetch(`/api/v1/admin/kids-champ/guests/${endpoint}`, {
+      method: "POST",
+      body: JSON.stringify(action === "delete"
+        ? registeredMatch ? { childId: candidate.firstId, guestId: candidate.secondId } : { keepId: candidate.firstId, duplicateId: candidate.secondId }
+        : { firstId: candidate.firstId, secondId: candidate.secondId }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) { notify(body?.message || "The duplicate decision could not be saved."); return; }
+    if (action === "delete") {
+      setRecords((current) => current.filter((item) => item.reference !== candidate.secondId).map((item) => item.reference === candidate.firstId ? { ...item, submissions: candidate.firstSubmissions + candidate.secondSubmissions } : item));
+    }
+    setDuplicateGuests((current) => current.filter((item) => item !== candidate));
+    notify(action === "delete" ? "Duplicate identity deleted; its submissions were preserved." : "This possible match will be ignored.");
+  }
   const locations = [...new Set(records.map((item) => item.location))].sort();
   const visible = useMemo(
     () =>
@@ -4250,16 +3810,6 @@ function ParticipantsWorkspace({
       return next;
     });
   }
-  function deleteSelected() {
-    if (!selected.size) return;
-    setRecords((current) =>
-      current.filter((item) => !selected.has(item.reference)),
-    );
-    notify(
-      `${selected.size} participant record${selected.size === 1 ? "" : "s"} deleted from this prototype.`,
-    );
-    setSelected(new Set());
-  }
   function clearFilters() {
     setExactAge("");
     setAgeMin("");
@@ -4341,7 +3891,7 @@ function ParticipantsWorkspace({
   }
 
   return (
-    <section>
+    <section className="space-y-3">
       <div className="flex flex-col gap-4 tablet:flex-row tablet:items-end tablet:justify-between">
         <div>
           <h2 className="text-[22px] font-semibold">Participants</h2>
@@ -4350,13 +3900,6 @@ function ParticipantsWorkspace({
           </p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => setConfirmDeleteOpen(true)}
-            disabled={!selected.size}
-            className="h-10 rounded-[10px] border border-red-200 bg-red-50 px-4 text-[12px] font-semibold text-red-700 disabled:opacity-40"
-          >
-            Delete
-          </button>
           <button
             onClick={() => setCampaignTargets(filteredCampaignMembers)}
             disabled={!filteredCampaignMembers.length}
@@ -4367,14 +3910,42 @@ function ParticipantsWorkspace({
           </button>
         </div>
       </div>
-      <div className="mt-6 overflow-hidden rounded-[18px] border border-[#E0E7EF] bg-white">
+      <section className="rounded-[14px] border border-amber-200 bg-[#FFF9EA] p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-[#FFE9AE] text-lg text-amber-700">!</span>
+            <div><h3 className="text-[16px] font-semibold text-amber-950">Possible duplicate guests</h3>
+            <p className="mt-1 text-[12px] text-amber-800">Review the matching reasons before merging guest histories with another guest or a registered child profile.</p>
+            </div>
+          </div>
+          <span className="rounded-full bg-white px-3 py-1 text-[11px] font-semibold text-amber-800">{duplicateGuests.length} matches</span>
+        </div>
+        {duplicateGuests.length ? <div className="mt-4 space-y-3">{duplicateGuests.map((candidate) => (
+          <article key={`${candidate.firstId}-${candidate.secondId}`} className="rounded-[14px] border border-amber-200 bg-white p-4">
+            <div className="flex flex-col gap-4 tablet:flex-row tablet:items-center tablet:justify-between">
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-[#263852]">{candidate.firstName} ({candidate.firstSubmissions}) and {candidate.secondName} ({candidate.secondSubmissions})</p>
+                <span className={`mt-1 inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold ${candidate.matchType === "REGISTERED_GUEST" ? "bg-blue-100 text-blue-800" : "bg-slate-100 text-slate-700"}`}>{candidate.matchType === "REGISTERED_GUEST" ? "Registered profile + guest submission" : "Guest + guest"}</span>
+                <p className="mt-1 text-[11px] text-[#738096]">{candidate.firstPhone} · {candidate.firstHometown} / {candidate.secondPhone} · {candidate.secondHometown}</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">{candidate.reasons.map((reason) => <span key={reason} className="rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-semibold text-amber-900">{reason}</span>)}</div>
+              </div>
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <button type="button" onClick={() => void mergeGuestRecords(candidate)} className="rounded-[10px] bg-emerald-600 px-3 py-2.5 text-[11px] font-semibold text-white hover:bg-emerald-700">Merge</button>
+                <button type="button" onClick={() => void resolveGuestMatch(candidate, "delete")} className="rounded-[10px] bg-red-600 px-3 py-2.5 text-[11px] font-semibold text-white hover:bg-red-700" title="Delete only the duplicate identity; preserve and transfer every submission">Delete duplicate</button>
+                <button type="button" onClick={() => void resolveGuestMatch(candidate, "ignore")} className="rounded-[10px] border border-slate-300 bg-white px-3 py-2.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">Ignore</button>
+              </div>
+            </div>
+          </article>
+        ))}</div> : <p className="mt-4 rounded-xl bg-white p-4 text-[12px] text-[#738096]">No likely duplicate guest records were found.</p>}
+      </section>
+      <div className="overflow-hidden rounded-[18px] border border-[#E0E7EF] bg-white shadow-[0_10px_28px_rgba(30,72,123,.05)]">
         <div className="flex flex-col gap-3 border-b border-[#E5EBF2] p-4 tablet:flex-row tablet:items-center tablet:justify-between">
-          <input
+          <label className="relative w-full max-w-sm"><span className="pointer-events-none absolute left-3 top-2.5 text-[16px] text-[#6E83A3]">⌕</span><input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            className={`${fieldClass} max-w-sm`}
+            className={`${fieldClass} pl-9`}
             placeholder="Search child, reference or phone"
-          />
+          /></label>
           <div className="flex gap-2">
             <button
               onClick={() => setFiltersOpen((value) => !value)}
@@ -4583,12 +4154,6 @@ function ParticipantsWorkspace({
               Send WhatsApp ({selectedCampaignMembers.length})
             </button>
             <button
-              onClick={() => setConfirmDeleteOpen(true)}
-              className="rounded-[8px] bg-red-600 px-3 py-2 text-[10px] font-semibold text-white"
-            >
-              Delete selected
-            </button>
-            <button
               onClick={() => setSelected(new Set())}
               className="ml-auto text-[10px] font-semibold text-blue-700"
             >
@@ -4742,16 +4307,6 @@ function ParticipantsWorkspace({
           </span>
         </div>
       </div>
-      {confirmDeleteOpen ? (
-        <ParticipantDeleteConfirmation
-          count={selected.size}
-          onCancel={() => setConfirmDeleteOpen(false)}
-          onConfirm={() => {
-            deleteSelected();
-            setConfirmDeleteOpen(false);
-          }}
-        />
-      ) : null}
       {campaignTargets ? (
         <ParticipantMessageCampaign
           members={campaignTargets}
@@ -4778,9 +4333,14 @@ function ParticipantDetailsEditor({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item);
   function save() {
-    onSave?.(draft);
+    if (!onSave) {
+      setDraft(item);
+      setEditing(false);
+      notify("Participant identity is read-only and was not changed.");
+      return;
+    }
+    onSave(draft);
     setEditing(false);
-    notify("Participant changes saved in this prototype.");
   }
   return (
     <div>
@@ -4971,29 +4531,7 @@ function ParticipantDetailsEditor({
             </button>
           </>
         ) : (
-          <>
-            <button onClick={() => setEditing(true)} className={primaryButton}>
-              Edit participant
-            </button>
-            <button
-              onClick={() => {
-                const phone = draft.phone.replace(/\D/g, "");
-                const message = encodeURIComponent(
-                  `Hello ${draft.name}, this is A+ Kids Champ regarding participant reference ${draft.reference}.`,
-                );
-                window.open(
-                  `https://wa.me/${phone}?text=${message}`,
-                  "_blank",
-                  "noopener,noreferrer",
-                );
-                notify(`WhatsApp opened for ${draft.name}.`);
-              }}
-              disabled={draft.whatsapp !== "Consented"}
-              className="h-10 rounded-[10px] bg-[#20B15A] px-4 text-[12px] font-semibold text-white disabled:opacity-40"
-            >
-              Send WhatsApp
-            </button>
-          </>
+          <p className="col-span-2 rounded-[10px] bg-blue-50 p-3 text-[11px] leading-5 text-blue-800">Participant identity is derived from account and submission records. Use the Participants workspace to queue an audited message campaign.</p>
         )}
       </div>
     </div>
@@ -5018,6 +4556,12 @@ function SubmissionDetailsEditor({
     value: MockSubmission[K],
   ) => setDraft((current) => ({ ...current, [key]: value }));
   function save() {
+    if (!onSave) {
+      setDraft(item);
+      setEditing(false);
+      notify("Open the Submissions workspace to save audited changes.");
+      return;
+    }
     const initials = draft.childName
       .split(" ")
       .map((part) => part[0])
@@ -5026,9 +4570,8 @@ function SubmissionDetailsEditor({
       .toUpperCase();
     const updated = { ...draft, initials };
     setDraft(updated);
-    onSave?.(updated);
+    onSave(updated);
     setEditing(false);
-    notify("Submission changes saved in this prototype.");
   }
   return (
     <div>
@@ -5134,43 +4677,6 @@ function SubmissionDetailsEditor({
             </select>
           </label>
           <label className="text-[10px] font-semibold uppercase text-[#8793A5]">
-            Review
-            <select
-              value={draft.reviewStatus}
-              onChange={(event) =>
-                update(
-                  "reviewStatus",
-                  event.target.value as MockSubmission["reviewStatus"],
-                )
-              }
-              className={`${fieldClass} mt-1`}
-            >
-              <option>New</option>
-              <option>Pending review</option>
-              <option>Under review</option>
-              <option>Approved</option>
-              <option>Rejected</option>
-            </select>
-          </label>
-          <label className="text-[10px] font-semibold uppercase text-[#8793A5]">
-            TV status
-            <select
-              value={draft.tvStatus}
-              onChange={(event) =>
-                update(
-                  "tvStatus",
-                  event.target.value as MockSubmission["tvStatus"],
-                )
-              }
-              className={`${fieldClass} mt-1`}
-            >
-              <option>Not selected</option>
-              <option>Selected</option>
-              <option>Scheduled</option>
-              <option>Telecasted</option>
-            </select>
-          </label>
-          <label className="text-[10px] font-semibold uppercase text-[#8793A5]">
             Reviewer
             <input
               value={draft.reviewer}
@@ -5195,8 +4701,7 @@ function SubmissionDetailsEditor({
             ["Home town", draft.location],
             ["Category", draft.category],
             ["Participant", draft.participantType],
-            ["Reviewer", draft.reviewer],
-            ["TV status", draft.tvStatus],
+            ["Approval", draft.reviewStatus],
             ["Sent", draft.submittedDate],
             ["File", draft.fileStatus],
           ].map(([label, value]) => (
@@ -5427,33 +4932,8 @@ function ZipBatchDetailsEditor({
             </button>
             <button
               onClick={() => {
-                const manifest = JSON.stringify(
-                  {
-                    code: draft.code,
-                    photos: draft.photos,
-                    size: draft.size,
-                    telecastDate: draft.telecastDate,
-                    expires: draft.expires,
-                  },
-                  null,
-                  2,
-                );
-                const url = URL.createObjectURL(
-                  new Blob([manifest], { type: "application/json" }),
-                );
-                const link = document.createElement("a");
-                link.href = url;
-                link.download = `${draft.code}-manifest.json`;
-                link.click();
-                URL.revokeObjectURL(url);
-                const updated = {
-                  ...draft,
-                  downloaded: true,
-                  downloadedAt: "2026-08-01",
-                };
-                setDraft(updated);
-                onSave?.(updated);
-                notify(`${draft.code} manifest downloaded.`);
+                close();
+                notify("Use the Download button in ZIP records to download the archive.");
               }}
               disabled={
                 draft.status !== "Ready" ||
@@ -5466,7 +4946,8 @@ function ZipBatchDetailsEditor({
             </button>
             <button
               onClick={() => setConfirmDelete(true)}
-              disabled={draft.deleted}
+              disabled={draft.deleted || !draft.downloaded}
+              title={!draft.downloaded ? "Download this ZIP before deleting it" : "Delete ZIP archive"}
               className="h-10 rounded-[10px] border border-red-200 bg-red-50 px-4 text-[12px] font-semibold text-red-700 disabled:opacity-40"
             >
               {draft.deleted ? "Archive deleted" : "Delete archive"}
@@ -5499,6 +4980,8 @@ type SettingsSection =
   | "Participants"
   | "Messaging";
 
+// Configuration is retained in the backend model for the page-specific controls.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function KidsChampSettingsPanel({
   settings,
   onSave,
@@ -5792,152 +5275,164 @@ type CalendarTask = {
   complete: boolean;
 };
 
-function CalendarDayPanel({ notify }: { notify: (message: string) => void }) {
-  const [tasks, setTasks] = useState<CalendarTask[]>([
-    {
-      id: "review",
-      time: "09:00",
-      title: "Review queue check",
-      detail: "14 submissions overdue",
-      complete: false,
-    },
-    {
-      id: "meeting",
-      time: "10:30",
-      title: "Kids Champ production meeting",
-      detail: "Telecast planning",
-      complete: true,
-    },
-    {
-      id: "episode",
-      time: "15:00",
-      title: "Episode KC-EP-088",
-      detail: "6 scheduled entries",
-      complete: false,
-    },
-    {
-      id: "retention",
-      time: "17:00",
-      title: "ZIP retention check",
-      detail: "2 batches expiring soon",
-      complete: false,
-    },
-  ]);
-  const [adding, setAdding] = useState(false);
-  const [time, setTime] = useState("09:00");
-  const [title, setTitle] = useState("");
-  const [detail, setDetail] = useState("");
-  function addTask() {
-    if (!title.trim()) return;
-    setTasks((current) =>
-      [
-        ...current,
-        {
-          id: crypto.randomUUID(),
-          time,
-          title: title.trim(),
-          detail: detail.trim() || "No additional details",
-          complete: false,
-        },
-      ].sort((a, b) => a.time.localeCompare(b.time)),
-    );
-    setTitle("");
-    setDetail("");
-    setAdding(false);
-    notify("Calendar task added.");
+function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message: string) => void; dateLabel: string; onNavigate?: (section: "submissions" | "zips" | "telecasts" | "tasks" | "warnings", dateLabel: string) => void }) {
+  const [tasks, setTasks] = useState<CalendarTask[]>([]);
+  const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
+  const [moveDate, setMoveDate] = useState("");
+  const [daySubmissions, setDaySubmissions] = useState<AdminSubmissionResponse[]>([]);
+  const [dayBatches, setDayBatches] = useState<AdminBatchResponse[]>([]);
+  const [activeSection, setActiveSection] = useState<"submissions" | "zips" | "telecasts" | "warnings" | "tasks">("submissions");
+  const [photoPreview, setPhotoPreview] = useState<{ id: string; url: string } | null>(null);
+  const taskDate = (() => {
+    const match = dateLabel.match(/^([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})$/);
+    if (match) {
+      const month = new Date(`${match[1]} 1, 2000`).getMonth() + 1;
+      return `${match[3]}-${String(month).padStart(2, "0")}-${String(Number(match[2])).padStart(2, "0")}`;
+    }
+    const value = new Date(dateLabel);
+    if (Number.isNaN(value.getTime())) {
+      const today = new Date();
+      return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    }
+    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
+  })();
+  useEffect(() => {
+    apiFetch("/api/v1/admin/kids-champ/calendar/tasks").then(async (response) => {
+      if (!response.ok) throw new Error("Calendar tasks could not be loaded.");
+      const body = await response.json() as Array<{id:string;date:string;title:string;details?:string;completedAt?:string}>;
+      setTasks(body.filter((item) => item.date === taskDate).map((item) => ({id:item.id,time:"--:--",title:item.title,detail:item.details||"No additional details",complete:Boolean(item.completedAt)})));
+    }).catch((reason) => notify(reason instanceof Error ? reason.message : "Calendar tasks could not be loaded."));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskDate]);
+  useEffect(() => {
+    Promise.all([
+      apiFetch("/api/v1/admin/kids-champ/submissions"),
+      apiFetch("/api/v1/admin/kids-champ/batches"),
+    ]).then(async ([submissionResponse, batchResponse]) => {
+      const submissionItems = submissionResponse.ok ? await submissionResponse.json() as AdminSubmissionResponse[] : [];
+      const batchItems = batchResponse.ok ? await batchResponse.json() as AdminBatchResponse[] : [];
+      setDaySubmissions(submissionItems.filter((item) => item.submittedAt.slice(0, 10) === taskDate));
+      setDayBatches(batchItems.filter((item) => item.createdAt.slice(0, 10) === taskDate || item.telecastDate === taskDate));
+    }).catch(() => notify("Daily operations could not be loaded."));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taskDate]);
+  async function approveSubmission(item: AdminSubmissionResponse) {
+    const response = await apiFetch("/api/v1/admin/kids-champ/submissions/approve", {
+      method: "POST",
+      body: JSON.stringify({ submissionIds: [item.id] }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) { notify(body?.message || "Approval could not be saved."); return; }
+    setDaySubmissions((current) => current.map((entry) => entry.id === item.id ? { ...entry, reviewStatus: "APPROVED" } : entry));
+    notify("Submission approved and ZIP processing started.");
+  }
+  async function previewPhoto(item: AdminSubmissionResponse) {
+    if (photoPreview?.id === item.id) { setPhotoPreview(null); return; }
+    const response = await apiFetch(`/api/v1/admin/kids-champ/submissions/${item.id}/photo`);
+    if (!response.ok) { notify("Photo preview could not be loaded."); return; }
+    const url = URL.createObjectURL(await response.blob());
+    if (photoPreview) URL.revokeObjectURL(photoPreview.url);
+    setPhotoPreview({ id: item.id, url });
+  }
+  async function moveTask(task: CalendarTask) {
+    if (!moveDate) return;
+    const response = await apiFetch(`/api/v1/admin/kids-champ/calendar/tasks/${task.id}/reschedule`, { method: "POST", body: JSON.stringify({ date: moveDate }) });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) { notify(body?.message || "Task could not be rescheduled."); return; }
+    setTasks((current) => current.filter((item) => item.id !== task.id));
+    setMovingTaskId(null);
+    setMoveDate("");
+    notify("Task moved to the selected day.");
   }
   return (
     <div>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 tablet:grid-cols-3">
         {[
-          ["Submissions", "38"],
-          ["Reviewed", "31"],
-          ["Open tasks", String(tasks.filter((item) => !item.complete).length)],
-        ].map(([label, value]) => (
-          <div
+          ["Submissions", String(daySubmissions.length), "submissions"],
+          ["ZIPs created", String(dayBatches.filter((item) => item.createdAt.slice(0, 10) === taskDate).length), "zips"],
+          ["Telecasts", String(dayBatches.filter((item) => item.telecastDate === taskDate).length), "telecasts"],
+          ["Open tasks", String(tasks.filter((item) => !item.complete).length), "tasks"],
+          ["Warnings", String(dayBatches.filter((item) => item.status !== "DELETED" && item.daysRemaining <= 0).length), "warnings"],
+        ].map(([label, value, action]) => (
+          <button
+            type="button"
             key={label}
-            className="rounded-[13px] border border-[#E0E7EF] bg-white p-4"
+            onClick={() => { setActiveSection(action as typeof activeSection); onNavigate?.(action as "submissions" | "zips" | "telecasts" | "tasks" | "warnings", dateLabel); }}
+            className={`rounded-[16px] border p-5 text-left transition hover:border-blue-300 ${activeSection === action ? "border-blue-400 bg-blue-50" : "border-[#E0E7EF] bg-white"}`}
           >
-            <p className="text-[21px] font-semibold">{value}</p>
-            <p className="mt-1 text-[11px] text-[#7A879A]">{label}</p>
-          </div>
+            <p className="text-[25px] font-semibold">{value}</p>
+            <p className="mt-1 text-[12px] text-[#7A879A]">{label} →</p>
+          </button>
         ))}
       </div>
-      <div className="mt-6 flex items-center justify-between">
-        <h3 className="text-[16px] font-semibold">Day schedule</h3>
-        <button
-          onClick={() => setAdding((value) => !value)}
-          className="text-[11px] font-semibold text-[#0877EF]"
-        >
-          {adding ? "Cancel" : "+ Add task"}
-        </button>
-      </div>
-      {adding ? (
-        <div className="mt-3 rounded-[14px] border border-blue-200 bg-blue-50/50 p-3">
-          <div className="grid grid-cols-[110px_1fr] gap-2">
-            <input
-              type="time"
-              value={time}
-              onChange={(event) => setTime(event.target.value)}
-              className={fieldClass}
-            />
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              className={fieldClass}
-              placeholder="Task title"
-            />
+      {activeSection === "submissions" ? (
+        <div className="mt-5 rounded-[16px] border border-[#E0E7EF] bg-white p-4">
+          <h3 className="text-[15px] font-semibold">Received on this day</h3>
+          <div className="mt-3 space-y-2">
+            {daySubmissions.map((item) => (
+              <article key={item.id} className="flex flex-wrap items-center gap-3 rounded-[12px] border border-[#E5EBF2] p-3">
+                <div className="min-w-0 flex-1">
+                  <strong className="block truncate text-[13px] text-[#263650]">{item.childName}</strong>
+                  <span className="text-[11px] text-[#7A879A]">{item.trackingCode} · {item.hometown} · age {item.ageAtSubmission} · {item.reviewStatus.replaceAll("_", " ")}</span>
+                </div>
+                <button type="button" onClick={() => void approveSubmission(item)} disabled={item.reviewStatus === "APPROVED"} className="rounded-[8px] bg-emerald-600 px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-40">{item.reviewStatus === "APPROVED" ? "Approved" : "Approve"}</button>
+                <button type="button" onClick={() => void previewPhoto(item)} className="rounded-[8px] border border-blue-200 px-3 py-2 text-[11px] font-semibold text-blue-700">Photo</button>
+                {photoPreview?.id === item.id ? <Image src={photoPreview.url} alt={`Artwork submitted by ${item.childName}`} width={1200} height={440} unoptimized className="mt-2 max-h-[440px] w-full rounded-[12px] bg-[#F2F5F8] object-contain" /> : null}
+              </article>
+            ))}
+            {!daySubmissions.length ? <p className="py-5 text-center text-[12px] text-[#7A879A]">No records for this day.</p> : null}
           </div>
-          <input
-            value={detail}
-            onChange={(event) => setDetail(event.target.value)}
-            className={`${fieldClass} mt-2`}
-            placeholder="Details"
-          />
-          <button
-            onClick={addTask}
-            disabled={!title.trim()}
-            className={`${primaryButton} mt-2 w-full disabled:opacity-40`}
-          >
-            Save task
-          </button>
         </div>
       ) : null}
-      <div className="mt-3 space-y-3">
+      {activeSection === "zips" || activeSection === "telecasts" || activeSection === "warnings" ? (
+        <div className="mt-5 rounded-[16px] border border-[#E0E7EF] bg-white p-4">
+          <h3 className="text-[15px] font-semibold">{activeSection === "zips" ? "ZIPs created" : activeSection === "telecasts" ? "Telecasts scheduled" : "Warnings and deadlines"}</h3>
+          <div className="mt-3 space-y-2">
+            {dayBatches.filter((item) => activeSection === "zips" ? item.createdAt.slice(0, 10) === taskDate : activeSection === "telecasts" ? item.telecastDate === taskDate : item.status !== "DELETED" && item.daysRemaining <= 0).map((item) => (
+              <article key={item.id} className="rounded-[12px] border border-[#E5EBF2] p-3 text-[12px]">
+                <strong className="text-[#263650]">{item.batchCode}</strong>
+                <p className="mt-1 text-[#7A879A]">{item.photoCount} photos · {item.status} · {item.telecastDate ? `telecast ${item.telecastDate}` : `${item.daysRemaining} days remaining`}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      <div className="mt-6">
+        <h3 className="text-[16px] font-semibold">Automatic operations checklist</h3>
+        <p className="mt-1 text-[11px] text-[#7A879A]">Work generated from this day&apos;s submissions, ZIPs and telecast schedule.</p>
+        <div className="mt-3 grid gap-2 tablet:grid-cols-3">
+          {[
+            { label: "Approve new submissions", count: daySubmissions.filter((item) => item.reviewStatus === "SUBMITTED" || item.reviewStatus === "UNDER_REVIEW").length, section: "submissions" },
+            { label: "Download ready ZIPs", count: dayBatches.filter((item) => item.createdAt.slice(0, 10) === taskDate && !item.firstDownloadedAt && item.status !== "DELETED").length, section: "zips" },
+            { label: "Prepare telecasts", count: dayBatches.filter((item) => item.telecastDate === taskDate && item.status !== "DELETED").length, section: "telecasts" },
+          ].map((operation) => (
+            <button key={operation.label} type="button" onClick={() => setActiveSection(operation.section as typeof activeSection)} className="flex items-center justify-between rounded-[12px] border border-[#E0E7EF] bg-white p-3 text-left hover:border-blue-300">
+              <span className="text-[12px] font-semibold text-[#344660]">{operation.label}</span>
+              <span className={`grid size-7 place-items-center rounded-full text-[11px] font-bold ${operation.count ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-700"}`}>{operation.count}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <div id="calendar-day-schedule" className="hidden">
+        <h3 className="text-[16px] font-semibold">Day schedule</h3>
+      </div>
+      <div className="hidden">
         {tasks.map((task) => (
           <article
             key={task.id}
-            className={`flex items-start gap-3 rounded-[14px] border p-4 ${task.complete ? "border-emerald-200 bg-emerald-50/50" : "border-[#E0E7EF] bg-white"}`}
+            className={`flex flex-wrap items-start gap-3 rounded-[14px] border p-4 ${task.complete ? "border-emerald-200 bg-emerald-50/50" : "border-[#E0E7EF] bg-white"}`}
           >
             <input
               type="checkbox"
               checked={task.complete}
-              onChange={() =>
-                setTasks((current) =>
-                  current.map((item) =>
-                    item.id === task.id
-                      ? { ...item, complete: !item.complete }
-                      : item,
-                  ),
-                )
-              }
+              onChange={() => { void apiFetch(`/api/v1/admin/kids-champ/calendar/tasks/${task.id}`,{method:"PATCH",body:JSON.stringify({completed:!task.complete})}).then((response)=>{if(response.ok)setTasks((current)=>current.map((item)=>item.id===task.id?{...item,complete:!item.complete}:item));else notify("Task status could not be saved.");}); }}
               className="mt-0.5 size-4 accent-emerald-600"
             />
             <span className="w-14 shrink-0 text-[12px] font-semibold text-[#0877EF]">
               {task.time}
             </span>
             <button
-              onClick={() => {
-                const next = window.prompt("Edit task title", task.title);
-                if (next?.trim())
-                  setTasks((current) =>
-                    current.map((item) =>
-                      item.id === task.id
-                        ? { ...item, title: next.trim() }
-                        : item,
-                    ),
-                  );
-              }}
+              type="button"
               className="min-w-0 flex-1 text-left"
             >
               <strong
@@ -5950,24 +5445,16 @@ function CalendarDayPanel({ notify }: { notify: (message: string) => void }) {
               </span>
             </button>
             <button
-              onClick={() =>
-                setTasks((current) =>
-                  current.filter((item) => item.id !== task.id),
-                )
-              }
+              onClick={() => { void apiFetch(`/api/v1/admin/kids-champ/calendar/tasks/${task.id}`,{method:"DELETE"}).then((response)=>{if(response.ok)setTasks((current)=>current.filter((item)=>item.id!==task.id));else notify("Task could not be deleted.");}); }}
               className="text-[11px] font-semibold text-red-600"
             >
               Delete
             </button>
+            <button onClick={() => { setMovingTaskId((current) => current === task.id ? null : task.id); setMoveDate(taskDate); }} className="text-[11px] font-semibold text-[#0877EF]">Move</button>
+            {movingTaskId === task.id ? <div className="mt-3 flex w-full gap-2 border-t border-[#E5EBF2] pt-3"><input type="date" value={moveDate} onChange={(event) => setMoveDate(event.target.value)} className={`${fieldClass} flex-1`} /><button type="button" onClick={() => void moveTask(task)} disabled={!moveDate || moveDate === taskDate} className="rounded-[8px] bg-[#17243D] px-3 text-[11px] font-semibold text-white disabled:opacity-40">Move task</button></div> : null}
           </article>
         ))}
       </div>
-      <button
-        onClick={() => setAdding(true)}
-        className={`${primaryButton} mt-5 w-full`}
-      >
-        Add task for this day
-      </button>
     </div>
   );
 }
@@ -5978,16 +5465,12 @@ function DrawerContent({
   setWorkspace,
   close,
   notify,
-  settings,
-  onSaveSettings,
 }: {
   drawer: NonNullable<DrawerState>;
   privacy: boolean;
   setWorkspace: (workspace: Workspace) => void;
   close: () => void;
   notify: (message: string) => void;
-  settings: KidsChampSettings;
-  onSaveSettings: (settings: KidsChampSettings) => void;
 }) {
   if (drawer.submission) {
     return drawer.submission.photoUrl ? (
@@ -6036,16 +5519,7 @@ function DrawerContent({
       />
     );
   }
-  if (drawer.kind === "calendar") return <CalendarDayPanel notify={notify} />;
-  if (drawer.kind === "settings")
-    return (
-      <KidsChampSettingsPanel
-        settings={settings}
-        onSave={onSaveSettings}
-        notify={notify}
-      />
-    );
-
+  if (drawer.kind === "calendar") return <CalendarDayPanel notify={notify} dateLabel={drawer.title} />;
   const workspace: Workspace =
     drawer.kind === "participants"
       ? "Participants"
@@ -6081,6 +5555,12 @@ function DrawerContent({
 
   return (
     <div>
+      {records.length === 0 ? (
+        <p className="rounded-[14px] border border-[#E0E7EF] bg-[#F8FAFC] p-4 text-[13px] leading-6 text-[#607089]">
+          Live records for this area are available in the full workspace, with
+          its current filters and backend data.
+        </p>
+      ) : null}
       <div className="space-y-3">
         {records.map((record) => (
           <button
@@ -6118,29 +5598,99 @@ function DrawerContent({
   );
 }
 
+type WhatsAppAdminConfig = { graphApiVersion:string;phoneNumberId:string;businessAccountId:string;tokenConfigured:boolean;maskedToken:string;lastTestStatus?:string;lastTestMessage?:string;lastTestedAt?:string };
+
+export function AccountManagementWorkspace({notify}:{notify:(message:string)=>void}) {
+  const [config,setConfig]=useState<WhatsAppAdminConfig|null>(null);
+  const [draft,setDraft]=useState({graphApiVersion:"v25.0",phoneNumberId:"",businessAccountId:"",accessToken:""});
+  const [testPhone,setTestPhone]=useState("0782940117");
+  const [saving,setSaving]=useState(false);
+  const [testing,setTesting]=useState(false);
+  useEffect(()=>{apiFetch("/api/v1/admin/kids-champ/whatsapp/config").then(async response=>{if(!response.ok)throw new Error("WhatsApp configuration could not be loaded.");const body=await response.json() as WhatsAppAdminConfig;setConfig(body);setDraft({graphApiVersion:body.graphApiVersion,phoneNumberId:body.phoneNumberId,businessAccountId:body.businessAccountId,accessToken:""});}).catch(reason=>notify(reason instanceof Error?reason.message:"WhatsApp configuration could not be loaded."));},[notify]);
+  async function save(){setSaving(true);const response=await apiFetch("/api/v1/admin/kids-champ/whatsapp/config",{method:"PUT",body:JSON.stringify(draft)});const body=await response.json().catch(()=>null);setSaving(false);if(!response.ok){notify(body?.message||"WhatsApp configuration could not be saved.");return;}setConfig(body);setDraft(current=>({...current,accessToken:""}));notify("WhatsApp configuration saved securely.");}
+  async function test(){setTesting(true);const response=await apiFetch("/api/v1/admin/kids-champ/whatsapp/test",{method:"POST",body:JSON.stringify({phone:testPhone})});const body=await response.json().catch(()=>null);setTesting(false);if(!response.ok){notify(body?.message||"Test message failed.");return;}setConfig(current=>current?{...current,lastTestStatus:body.success?"SUCCESS":"FAILED",lastTestMessage:body.message,lastTestedAt:body.testedAt}:current);notify(body.message);}
+  return <section>
+    <div><h2 className="text-[22px] font-semibold">Account &amp; Management</h2><p className="mt-1 text-[13px] text-[#7A879A]">Manage external accounts and verify message delivery.</p></div>
+    <div className="mt-6 grid gap-5 desktop:grid-cols-[1.2fr_.8fr]">
+      <div className="rounded-[18px] border border-[#E0E7EF] bg-white p-5">
+        <div className="flex items-center gap-3"><WhatsAppIcon/><div><h3 className="text-[17px] font-semibold">WhatsApp Cloud API</h3><p className="text-[11px] text-[#7A879A]">Credentials are encrypted by the backend. The token is never returned to this page.</p></div></div>
+        <div className="mt-5 grid gap-4 tablet:grid-cols-2">
+          <label className="text-[11px] font-semibold text-[#526178]">Graph API version<input value={draft.graphApiVersion} onChange={e=>setDraft({...draft,graphApiVersion:e.target.value})} className={`${fieldClass} mt-1`} placeholder="v23.0"/></label>
+          <label className="text-[11px] font-semibold text-[#526178]">Phone Number ID<input value={draft.phoneNumberId} onChange={e=>setDraft({...draft,phoneNumberId:e.target.value})} className={`${fieldClass} mt-1`}/></label>
+          <label className="text-[11px] font-semibold text-[#526178]">Business Account ID<input value={draft.businessAccountId} onChange={e=>setDraft({...draft,businessAccountId:e.target.value})} className={`${fieldClass} mt-1`}/></label>
+          <label className="text-[11px] font-semibold text-[#526178]">Access token<input type="password" value={draft.accessToken} onChange={e=>setDraft({...draft,accessToken:e.target.value})} className={`${fieldClass} mt-1`} placeholder={config?.tokenConfigured?`${config.maskedToken} (leave blank to keep)`:"Paste Meta access token"}/></label>
+        </div>
+        <button onClick={()=>void save()} disabled={saving||!draft.phoneNumberId||!draft.businessAccountId} className={`${primaryButton} mt-5 w-full disabled:opacity-40`}>{saving?"Saving…":"Save WhatsApp account"}</button>
+      </div>
+      <div className="rounded-[18px] border border-[#E0E7EF] bg-white p-5">
+        <h3 className="text-[17px] font-semibold">Test message delivery</h3><p className="mt-1 text-[11px] text-[#7A879A]">Sends one connection-test message through the saved Meta sender.</p>
+        <label className="mt-5 block text-[11px] font-semibold text-[#526178]">Recipient number<input value={testPhone} onChange={e=>setTestPhone(e.target.value)} className={`${fieldClass} mt-1`} placeholder="07XXXXXXXX"/></label>
+        <button onClick={()=>void test()} disabled={testing||!config?.tokenConfigured||!testPhone} className="mt-3 h-10 w-full rounded-[10px] bg-[#20B15A] text-[12px] font-semibold text-white disabled:opacity-40">{testing?"Sending…":"Send test WhatsApp message"}</button>
+        <div className={`mt-5 rounded-[13px] border p-4 ${config?.lastTestStatus==="SUCCESS"?"border-emerald-200 bg-emerald-50":config?.lastTestStatus==="FAILED"?"border-red-200 bg-red-50":"border-[#E0E7EF] bg-[#F8FAFC]"}`}><p className="text-[11px] font-semibold uppercase text-[#7A879A]">Latest delivery status</p><p className="mt-2 text-[13px] font-semibold">{config?.lastTestStatus||"Not tested"}</p><p className="mt-1 text-[11px] text-[#66758B]">{config?.lastTestMessage||"Save the account, then send a test."}</p>{config?.lastTestedAt?<p className="mt-2 text-[10px] text-[#8490A2]">{new Date(config.lastTestedAt).toLocaleString()}</p>:null}</div>
+      </div>
+    </div>
+  </section>;
+}
+
+export function AccountManagementAdminPage() {
+  const [notice,setNotice]=useState("");
+  function notify(message:string){setNotice(message);window.setTimeout(()=>setNotice(""),4000);}
+  return <>
+    <header><p className="text-[13px] font-medium text-[#2488F4]">System management</p><h1 className="mt-1 text-[30px] font-semibold tracking-[-.03em] tablet:text-[38px]">Account &amp; Management</h1><p className="mt-2 max-w-2xl text-[14px] leading-6 text-[#6E7C91]">Manage external service accounts, credentials and delivery tests.</p></header>
+    <div className="mt-7"><AccountManagementWorkspace notify={notify}/></div>
+    {notice?<div className="fixed bottom-5 right-5 z-[130] max-w-md rounded-[12px] bg-[#17243D] px-4 py-3 text-[12px] font-semibold text-white shadow-xl">{notice}</div>:null}
+  </>;
+}
+
 export default function KidsChampAdmin() {
   const [workspace, setWorkspace] = useState<Workspace>("Overview");
   const [drawer, setDrawer] = useState<DrawerState>(null);
   const [privacy, setPrivacy] = useState(false);
-  const [reviewing, setReviewing] = useState(false);
   const [notice, setNotice] = useState("");
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [settings, setSettings] = useState<KidsChampSettings>(
     defaultKidsChampSettings,
   );
   const [zipCreateRequest, setZipCreateRequest] = useState<string[]>([]);
+  const [messageQueueOpen, setMessageQueueOpen] = useState(false);
+  const [liveVersion, setLiveVersion] = useState(0);
+  const [calendarWorkspaceFilter, setCalendarWorkspaceFilter] = useState<CalendarWorkspaceFilter | null>(null);
+  const [overviewSubmissionFilter, setOverviewSubmissionFilter] = useState<OverviewSubmissionFilter>(null);
+  const [overviewZipView, setOverviewZipView] = useState<OverviewZipView>("all");
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("aplus-kids-champ-settings");
-    if (!saved) return;
-    try {
-      const parsed = { ...defaultKidsChampSettings, ...JSON.parse(saved) };
-      const timer = window.setTimeout(() => setSettings(parsed), 0);
-      return () => window.clearTimeout(timer);
-    } catch {
-      window.localStorage.removeItem("aplus-kids-champ-settings");
-    }
+    const controller = new AbortController();
+    void apiFetch("/api/v1/admin/kids-champ/events", { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok || !response.body) return;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (!controller.signal.aborted) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const events = buffer.split("\n\n");
+          buffer = events.pop() ?? "";
+          if (events.some((event) => event.includes("event:update"))) {
+            setLiveVersion((current) => current + 1);
+          }
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    let active = true;
+    apiFetch("/api/v1/admin/kids-champ/settings")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Kids Champ settings could not be loaded.");
+        if (active) setSettings({ ...defaultKidsChampSettings, ...(await response.json()) });
+      })
+      .catch(() => notify("Kids Champ settings could not be loaded."));
+    return () => { active = false; };
+  }, [liveVersion]);
 
   useEffect(() => {
     const hashWorkspace = workspaces.find(
@@ -6159,12 +5709,15 @@ export default function KidsChampAdmin() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  function saveSettings(next: KidsChampSettings) {
-    setSettings(next);
-    window.localStorage.setItem(
-      "aplus-kids-champ-settings",
-      JSON.stringify(next),
-    );
+  async function saveSettings(next: KidsChampSettings) {
+    const response = await apiFetch("/api/v1/admin/kids-champ/settings", {
+      method: "PUT",
+      body: JSON.stringify(next),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) { notify(body?.message || "Settings could not be saved."); return; }
+    setSettings({ ...defaultKidsChampSettings, ...body });
+    notify("Kids Champ settings saved to the backend.");
   }
 
   function notify(message: string) {
@@ -6177,8 +5730,10 @@ export default function KidsChampAdmin() {
   }
 
   function changeWorkspace(next: Workspace) {
+    setCalendarWorkspaceFilter(null);
+    setOverviewSubmissionFilter(null);
+    setOverviewZipView("all");
     setWorkspace(next);
-    setReviewing(false);
     window.localStorage.setItem("aplus-kids-champ-workspace", next);
     window.history.replaceState(
       null,
@@ -6187,20 +5742,38 @@ export default function KidsChampAdmin() {
     );
   }
 
+  function openOverviewSubmissions(filter: OverviewSubmissionFilter) {
+    setCalendarWorkspaceFilter(null);
+    setOverviewSubmissionFilter(filter);
+    setWorkspace("Submissions");
+    window.localStorage.setItem("aplus-kids-champ-workspace", "Submissions");
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#submissions`);
+  }
+
+  function openOverviewZip(view: OverviewZipView) {
+    setCalendarWorkspaceFilter(null);
+    setOverviewSubmissionFilter(null);
+    setOverviewZipView(view);
+    setWorkspace("ZIP");
+    window.localStorage.setItem("aplus-kids-champ-workspace", "ZIP");
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#zip`);
+  }
+
   return (
     <>
-      <header className="flex flex-col gap-5 tablet:flex-row tablet:items-end tablet:justify-between">
-        <div>
+      <header className="relative z-10 flex flex-col gap-5 overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_92%_75%,rgba(220,239,255,.78)_0_2px,transparent_3px),linear-gradient(135deg,#fff_0%,#f5faff_100%)] px-6 py-8 tablet:flex-row tablet:items-end tablet:justify-between tablet:px-7 tablet:py-10">
+        <i className="pointer-events-none absolute left-3 top-12 text-2xl text-violet-100">✦</i><i className="pointer-events-none absolute left-[58%] top-12 text-3xl text-[#C7D2FE]">◆</i><i className="pointer-events-none absolute left-[66%] top-[62%] text-3xl text-[#F7DFA4]">✦</i><i className="pointer-events-none absolute right-[34%] top-9 size-3 rounded-full bg-[#FFC2C7]" />
+        <div className="relative z-10">
           <p className="text-[13px] font-medium text-[#2488F4]">Page manager</p>
-          <h1 className="mt-1 text-[30px] font-semibold tracking-[-.03em] tablet:text-[38px]">
-            Kids Champ
+          <h1 className="mt-1 flex items-center gap-2 text-[30px] font-semibold tracking-[-.03em] tablet:text-[38px]">
+            Kids Champ <span className="text-[25px] text-[#FFB900] tablet:text-[30px]">★</span>
           </h1>
           <p className="mt-2 max-w-2xl text-[14px] leading-6 text-[#6E7C91]">
-            Manage submissions, television selection, photo batches, participant
-            records and performance.
+            Approve submissions, monitor automatic ZIP batches, schedule telecasts,
+            and manage participant records.
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="relative z-10 flex flex-wrap gap-2">
           <a
             href="/kids-champ"
             target="_blank"
@@ -6208,14 +5781,6 @@ export default function KidsChampAdmin() {
           >
             View public page
           </a>
-          <button
-            onClick={() =>
-              setDrawer({ kind: "settings", title: "Kids Champ settings" })
-            }
-            className={secondaryButton}
-          >
-            Settings
-          </button>
           <button
             type="button"
             role="switch"
@@ -6238,19 +5803,28 @@ export default function KidsChampAdmin() {
       ) : null}
 
       <nav
-        className="mt-7 flex gap-2 overflow-x-auto border-b border-[#DCE4ED]"
+        className="mt-5 overflow-x-auto rounded-[28px] border border-[#E2EAF4] bg-white p-2.5 shadow-[0_12px_30px_rgba(30,72,123,.12)] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         aria-label="Kids Champ workspaces"
       >
-        {workspaces.map((item) => (
+        <div className="flex min-w-max" role="tablist">
+        {workspaces.map((item) => {
+          const label = item === "ZIP" ? "ZIP & Telecast" : item === "Account & Management" ? "Management" : item;
+          const active = workspace === item;
+          return (
           <button
             key={item}
             type="button"
+            role="tab"
+            aria-selected={active}
+            aria-current={active ? "page" : undefined}
             onClick={() => changeWorkspace(item)}
-            className={`shrink-0 border-b-2 px-5 py-3 text-[14px] font-medium ${workspace === item ? "border-[#2488F4] text-[#0877EF]" : "border-transparent text-[#718096]"}`}
+            className={`relative flex min-h-[78px] flex-1 items-center justify-center gap-3 border-r border-[#E5EBF3] px-6 text-[15px] font-bold transition last:border-r-0 tablet:min-w-[190px] ${active ? "rounded-[20px] bg-gradient-to-br from-[#299CFF] to-[#0869ED] text-white shadow-[0_10px_20px_rgba(13,118,239,.28)]" : "text-[#5D6E8C] hover:bg-[#F4F9FF] hover:text-[#0877EF]"}`}
           >
-            {item}
+            <span className={`grid size-10 place-items-center rounded-[12px] p-1.5 ${active ? "bg-white/14 text-white" : "bg-[#F8FBFF] text-[#90ADD6]"}`}><WorkspaceTabIcon workspace={item} /></span>{label}
           </button>
-        ))}
+        );
+        })}
+        </div>
       </nav>
 
       {privacy ? (
@@ -6268,34 +5842,47 @@ export default function KidsChampAdmin() {
       <main className="mt-6">
         {workspace === "Overview" ? (
           <Overview
+            key={`overview-${liveVersion}`}
             openDrawer={openDrawer}
             openCalendar={() => setCalendarOpen(true)}
+            goToWorkspace={changeWorkspace}
+            openSubmissions={openOverviewSubmissions}
+            openZipView={openOverviewZip}
             notify={notify}
           />
         ) : null}
         {workspace === "Submissions" ? (
           <SubmissionsWorkspace
+            key={`submissions-${liveVersion}-${calendarWorkspaceFilter?.mode ?? "all"}-${calendarWorkspaceFilter?.date ?? "all"}-${overviewSubmissionFilter ?? "all"}`}
             privacy={privacy}
-            settings={settings}
-            reviewing={reviewing}
-            setReviewing={setReviewing}
-            openSubmission={(submission, onSaveSubmission) =>
+            openSubmission={(submission, onSaveSubmission) => {
               setDrawer({
                 kind: "submissions",
                 title: "Submission details",
                 submission,
                 onSaveSubmission,
-              })
-            }
-            notify={notify}
-            createZipFromSelection={(submissionIds) => {
-              setZipCreateRequest(submissionIds);
-              changeWorkspace("ZIP");
+              });
+              if (submission.fileStatus === "Ready") {
+                void apiFetch(`/api/v1/admin/kids-champ/submissions/${submission.id}/photo`)
+                  .then(async (response) => {
+                    if (!response.ok) throw new Error("Photo preview could not be loaded.");
+                    const photoUrl = URL.createObjectURL(await response.blob());
+                    setDrawer((current) => current?.submission?.id === submission.id
+                      ? { ...current, submission: { ...current.submission, photoUrl } }
+                      : current);
+                  })
+                  .catch(() => notify("Photo preview could not be loaded."));
+              }
             }}
+            notify={notify}
+            initialOverviewFilter={overviewSubmissionFilter}
+            calendarFilter={calendarWorkspaceFilter}
+            clearCalendarFilter={() => setCalendarWorkspaceFilter(null)}
           />
         ) : null}
         {workspace === "ZIP" ? (
           <TvZipWorkspace
+            key={`zips-${liveVersion}-${overviewZipView}`}
             commonSettings={{
               batchSize: settings.zipBatchSize,
               expiryDays: settings.zipExpiryDays,
@@ -6321,10 +5908,12 @@ export default function KidsChampAdmin() {
               })
             }
             notify={notify}
+            initialOverviewView={overviewZipView}
           />
         ) : null}
         {workspace === "Participants" ? (
           <ParticipantsWorkspace
+            key={`participants-${liveVersion}`}
             privacy={privacy}
             settings={settings}
             openParticipant={(participant, onSaveParticipant) =>
@@ -6338,25 +5927,40 @@ export default function KidsChampAdmin() {
             notify={notify}
           />
         ) : null}
+        {workspace === "Account & Management" ? (
+          <AccountManagementWorkspace key={`account-management-${liveVersion}`} notify={notify} />
+        ) : null}
       </main>
 
       {calendarOpen ? (
         <CalendarModal
+          key={`calendar-${liveVersion}`}
           onClose={() => setCalendarOpen(false)}
           onOpenDay={(dateLabel) => {
             setCalendarOpen(false);
-            setDrawer({ kind: "calendar", title: dateLabel });
+            setCalendarWorkspaceFilter({ date: new Date(dateLabel).toISOString().slice(0, 10), mode: "submitted" });
+            changeWorkspace("Submissions");
           }}
+          onNavigate={(section, dateLabel) => {
+            setCalendarOpen(false);
+            if (section === "submissions") {
+              setCalendarWorkspaceFilter({ date: new Date(dateLabel).toISOString().slice(0, 10), mode: "submitted" });
+              changeWorkspace("Submissions");
+              return;
+            }
+            changeWorkspace("ZIP");
+            setOverviewZipView(section === "telecasts" ? "telecasted" : "all");
+          }}
+          notify={notify}
         />
       ) : null}
       {drawer ? (
         <SideDrawer
+          key={`${drawer.kind}-${drawer.kind === "calendar" ? liveVersion : drawer.title}`}
           title={drawer.title}
-          description={
-            drawer.kind === "settings"
-              ? "Configuration is grouped here so it does not compete with daily work."
-              : "A quick view from the current workspace."
-          }
+          wide={drawer.kind === "calendar"}
+          onBack={drawer.kind === "calendar" ? () => { setDrawer(null); setCalendarOpen(true); } : undefined}
+          description="A quick view from the current workspace."
           onClose={() => setDrawer(null)}
         >
           <DrawerContent
@@ -6365,11 +5969,21 @@ export default function KidsChampAdmin() {
             setWorkspace={changeWorkspace}
             close={() => setDrawer(null)}
             notify={notify}
-            settings={settings}
-            onSaveSettings={saveSettings}
           />
         </SideDrawer>
       ) : null}
+      {!calendarOpen && !messageQueueOpen ? (
+        <button
+          type="button"
+          onClick={() => setMessageQueueOpen(true)}
+          className="fixed bottom-5 right-5 z-[90] inline-flex items-center gap-2 rounded-full bg-[#102A56] px-4 py-3 text-[11px] font-bold text-white shadow-[0_12px_28px_rgba(16,42,86,.32)]"
+          aria-label="Open WhatsApp message queue"
+        >
+          <span className="grid size-6 place-items-center rounded-full bg-[#20B65B] text-[15px]">◔</span>
+          Message queue
+        </button>
+      ) : null}
+      {messageQueueOpen ? <WhatsAppQueueModal onClose={() => setMessageQueueOpen(false)} notify={notify} /> : null}
     </>
   );
 }

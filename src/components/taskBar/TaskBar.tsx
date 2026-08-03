@@ -5,6 +5,9 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { sitePath } from "@/utils/sitePath";
+import ProfileDashboard from "@/components/profile/ProfileDashboard";
+import LoginPage from "@/components/auth/LoginPage";
+import RegisterPage from "@/components/auth/RegisterPage";
 
 const tabs = [
   {
@@ -187,12 +190,13 @@ function getOverflowKeys(width: number) {
 
 export default function TaskBar() {
   const pathname = usePathname();
-  const isHiddenPath =
-    pathname.startsWith("/admin") ||
-    pathname.startsWith("/login") ||
-    pathname.startsWith("/register");
+  const isHiddenPath = pathname.startsWith("/admin");
   const [menuOpen, setMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [signedInName, setSignedInName] = useState("");
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authView, setAuthView] = useState<"login" | "register">("login");
   const [navWidth, setNavWidth] = useState(0);
   const navRef = useRef<HTMLElement>(null);
 
@@ -225,6 +229,54 @@ export default function TaskBar() {
 
     return () => resizeObserver.disconnect();
   }, []);
+
+  useEffect(() => {
+    const readSignedInUser = () => {
+      const rawUser = window.localStorage.getItem("aplus-current-user")
+        || window.sessionStorage.getItem("aplus-current-user");
+      if (!rawUser) {
+        setSignedInName("");
+        return;
+      }
+      try {
+        const user = JSON.parse(rawUser) as { accountHolderName?: string };
+        setSignedInName(user.accountHolderName?.trim() || "");
+      } catch {
+        setSignedInName("");
+      }
+    };
+    readSignedInUser();
+    window.addEventListener("storage", readSignedInUser);
+    window.addEventListener("aplus:user-updated", readSignedInUser);
+    return () => {
+      window.removeEventListener("storage", readSignedInUser);
+      window.removeEventListener("aplus:user-updated", readSignedInUser);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!profileOpen && !authOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setProfileOpen(false);
+        setAuthOpen(false);
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [profileOpen, authOpen]);
+
+  function openAuthentication(view: "login" | "register" = "login") {
+    setAuthView(view);
+    setAuthOpen(true);
+    setMenuOpen(false);
+    setMobileMenuOpen(false);
+  }
 
   if (isHiddenPath) {
     return null;
@@ -285,6 +337,22 @@ export default function TaskBar() {
 
         <div className="relative z-10 ml-6 flex shrink-0 items-center gap-3 desktop:ml-16 desktop:gap-4">
           {visibleActions.map((action) => {
+            if (action.key === "profile") {
+              return (
+                <button
+                  key={action.key}
+                  type="button"
+                  onClick={() => signedInName ? setProfileOpen(true) : openAuthentication("login")}
+                  aria-label={signedInName ? `Open ${signedInName}'s profile` : "Login or sign up"}
+                  aria-haspopup={signedInName ? "dialog" : undefined}
+                  className={`relative flex h-14 min-w-14 max-w-[190px] items-center justify-center gap-2 overflow-hidden rounded-full border px-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_8px_20px_rgba(33,150,243,0.1)] backdrop-blur-xl backdrop-saturate-150 transition-all ${profileOpen ? "border-white/45 bg-[#0877ef]/82" : "border-white/55 bg-white/36 hover:border-white/80 hover:bg-white/54"}`}
+                >
+                  <span className="pointer-events-none absolute inset-0 bg-[linear-gradient(135deg,rgba(255,255,255,0.68),rgba(255,255,255,0.16)_58%,rgba(122,208,255,0.18))]" />
+                  <TaskIcon src={action.icon} alt="" className="relative z-10 h-9 w-9" />
+                  <span className="relative z-10 truncate pr-1 text-sm font-semibold text-[#081944]">{signedInName || "Login / Sign up"}</span>
+                </button>
+              );
+            }
             if (action.type === "live") {
               return (
                 <Link
@@ -360,7 +428,14 @@ export default function TaskBar() {
                       <a
                         key={item.key}
                         href={staticPageHref(item.href)}
-                        onClick={() => setMenuOpen(false)}
+                        onClick={(event) => {
+                          setMenuOpen(false);
+                          if (item.key === "profile") {
+                            event.preventDefault();
+                            if (signedInName) setProfileOpen(true);
+                            else openAuthentication("login");
+                          }
+                        }}
                         className={`flex h-12 items-center gap-3 rounded-[18px] px-3 text-[14px] font-medium transition-colors ${
                           active
                             ? "bg-[#0877ef] text-white"
@@ -372,7 +447,7 @@ export default function TaskBar() {
                           alt=""
                           className="h-7 w-7"
                         />
-                        <span>{item.label}</span>
+                        <span>{item.key === "profile" ? (signedInName || "Login / Sign up") : item.label}</span>
                       </a>
                     );
                   })}
@@ -449,13 +524,20 @@ export default function TaskBar() {
                 <a
                   key={`${item.href}-${item.label}`}
                   href={staticPageHref(item.href)}
-                  onClick={() => setMobileMenuOpen(false)}
+                  onClick={(event) => {
+                    setMobileMenuOpen(false);
+                    if (item.label === "Profile") {
+                      event.preventDefault();
+                      if (signedInName) setProfileOpen(true);
+                      else openAuthentication("login");
+                    }
+                  }}
                   className={`flex h-11 items-center gap-3 rounded-[16px] px-3 text-[13px] font-medium ${
                     active ? "bg-[#0877ef] text-white" : "hover:bg-[#eaf6ff]"
                   }`}
                 >
                   <TaskIcon src={item.icon} alt="" className="h-6 w-6" />
-                  <span>{item.label}</span>
+                  <span>{item.label === "Profile" ? (signedInName || "Login / Sign up") : item.label}</span>
                 </a>
               );
             })}
@@ -463,6 +545,36 @@ export default function TaskBar() {
         ) : null}
       </div>
     </nav>
+    {profileOpen && (
+      <div className="fixed inset-0 z-[200] grid place-items-center bg-slate-950/35 p-2 backdrop-blur-md tablet:p-5" role="dialog" aria-modal="true" aria-labelledby="profile-modal-title" onMouseDown={(event) => { if (event.target === event.currentTarget) setProfileOpen(false); }}>
+        <section className="relative h-[96vh] w-full max-w-[1720px] overflow-hidden rounded-[24px] border border-white/80 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.32)] tablet:h-[92vh] tablet:rounded-[30px]">
+          <div className="absolute right-3 top-3 z-[210] flex items-center gap-3 tablet:right-5 tablet:top-5">
+            <h1 id="profile-modal-title" className="sr-only">Family profile</h1>
+            <button type="button" onClick={() => setProfileOpen(false)} aria-label="Close profile" className="grid size-11 place-items-center rounded-full border border-slate-200 bg-white/95 text-2xl font-medium text-slate-700 shadow-lg backdrop-blur hover:bg-blue-50 hover:text-[#0877ef]">
+              ×
+            </button>
+          </div>
+          <div className="h-full overflow-y-auto overscroll-contain">
+            <ProfileDashboard modal />
+          </div>
+        </section>
+      </div>
+    )}
+    {authOpen && (
+      <div className="fixed inset-0 z-[200] grid place-items-center bg-slate-950/35 p-2 backdrop-blur-md tablet:p-5" role="dialog" aria-modal="true" aria-labelledby="auth-modal-title" onMouseDown={(event) => { if (event.target === event.currentTarget) setAuthOpen(false); }}>
+        <section className={`relative max-h-[96vh] w-full overflow-hidden rounded-[24px] border border-white/80 bg-white shadow-[0_30px_100px_rgba(15,23,42,0.32)] tablet:max-h-[92vh] tablet:rounded-[30px] ${authView === "register" ? "max-w-[920px]" : "max-w-[600px]"}`}>
+          <h1 id="auth-modal-title" className="sr-only">{authView === "login" ? "Login" : "Create account"}</h1>
+          <button type="button" onClick={() => setAuthOpen(false)} aria-label="Close" className="absolute right-3 top-3 z-[210] grid size-11 place-items-center rounded-full border border-slate-200 bg-white/95 text-2xl font-medium text-slate-700 shadow-lg hover:bg-blue-50 hover:text-[#0877ef] tablet:right-5 tablet:top-5">×</button>
+          <div className="max-h-[96vh] overflow-y-auto overscroll-contain tablet:max-h-[92vh]">
+            {authView === "login" ? (
+              <LoginPage embedded onCreateAccount={() => setAuthView("register")} onLoginSuccess={() => setAuthOpen(false)} />
+            ) : (
+              <RegisterPage embedded onLogin={() => setAuthView("login")} />
+            )}
+          </div>
+        </section>
+      </div>
+    )}
     </>
   );
 }

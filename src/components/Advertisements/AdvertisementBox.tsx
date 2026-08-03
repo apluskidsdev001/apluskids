@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { sitePath } from "@/utils/sitePath";
 
 type AdvertisementBannerProps = {
@@ -37,7 +38,7 @@ export default function AdvertisementBanner({
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="mx-auto block h-[132px] max-w-7xl overflow-hidden rounded-[22px] shadow-[0_8px_30px_rgba(0,0,0,0.12)] md:h-[120px] md:rounded-3xl"
+        className="relative mx-auto block h-[132px] max-w-7xl overflow-hidden rounded-[22px] shadow-[0_8px_30px_rgba(0,0,0,0.12)] md:h-[120px] md:rounded-3xl"
       >
         {type === "video" ? (
           <video
@@ -50,9 +51,11 @@ export default function AdvertisementBanner({
             <source src={sitePath(src)} type="video/mp4" />
           </video>
         ) : (
-          <img
+          <Image
             src={sitePath(src)}
             alt={alt}
+            fill
+            sizes="(min-width: 1280px) 1280px, 100vw"
             className="h-full w-full object-cover"
           />
         )}

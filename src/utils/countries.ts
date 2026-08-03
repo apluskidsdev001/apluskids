@@ -5,6 +5,8 @@ const regionEntries = Array.from({ length: 26 * 26 }, (_, index) => {
   return { code, name: displayNames.of(code) || code };
 }).filter(({ code, name }) => name !== code && name !== "Unknown Region");
 
+export const countryOptions = [...regionEntries].sort((left, right) => left.name.localeCompare(right.name));
+
 export const countries = regionEntries
   .map(({ name }) => name)
   .filter((name, index, values) => values.indexOf(name) === index)

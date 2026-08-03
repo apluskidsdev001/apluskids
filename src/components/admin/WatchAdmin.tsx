@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useMemo, useState } from "react";
-import { defaultCategories, defaultVideos, defaultWeeklySchedule, scheduleDayNames, type AdminCategory, type AdminVideo, type ScheduleDayName } from "./adminData";
+import { defaultCategories, defaultVideos, defaultWeeklySchedule, scheduleDayNames, type AdminVideo, type ScheduleDayName } from "./adminData";
 import { makeAdminId, publishAdminKeys, useAdminStorage } from "./useAdminStorage";
 
 type WatchCopy = { pageTitle: string; pageDescription: string; programsTitle: string; trailersTitle: string; categoriesTitle: string };
