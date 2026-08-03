@@ -1,6 +1,11 @@
 import { backendFetch } from "@/utils/backendActivity";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081").replace(/\/$/, "");
+let activeApiRequests = 0;
+
+function publishApiActivity() {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("aplus-api-activity", { detail: { count: activeApiRequests } }));
+}
 
 function getAccessToken() {
   return window.sessionStorage.getItem("aplus-access-token")
@@ -122,6 +127,10 @@ async function refreshAccessToken() {
 }
 
 export async function apiFetch(path: string, init: RequestInit = {}) {
+  // Reads update their panel in place; only data-changing requests show the blocking save screen.
+  const tracked = !path.endsWith("/events") && Boolean(init.method && !["GET", "HEAD"].includes(init.method.toUpperCase()));
+  if (tracked) { activeApiRequests += 1; publishApiActivity(); }
+  try {
   let token = getAccessToken();
   if (!token) token = await refreshAccessToken();
 
@@ -142,6 +151,9 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
     if (token) response = await request(token);
   }
   return response;
+  } finally {
+    if (tracked) { activeApiRequests = Math.max(0, activeApiRequests - 1); publishApiActivity(); }
+  }
 }
 
 export async function logout() {

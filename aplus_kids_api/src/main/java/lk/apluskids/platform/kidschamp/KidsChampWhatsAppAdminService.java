@@ -50,6 +50,20 @@ class KidsChampWhatsAppAdminService {
         catch(RuntimeException error){entity.testResult(false,safe(error.getMessage()));return new TestResponse(false,safe(error.getMessage()),null,Instant.now());}
     }
 
+    @Transactional ConnectionTestResponse connectionTest(){
+        ActiveConfig active=active();
+        if(active.phoneNumberId().isBlank()||active.token().isBlank()) return new ConnectionTestResponse(false,"WhatsApp configuration is incomplete.",List.of("Enter the Phone Number ID and a permanent access token.","Confirm the token has whatsapp_business_messaging permission."),Instant.now());
+        try {
+            @SuppressWarnings("unchecked") Map<String,Object> response=RestClient.builder().baseUrl("https://graph.facebook.com/"+active.version()).build().get().uri("/{id}?fields=id,display_phone_number,verified_name",active.phoneNumberId())
+                .header("Authorization","Bearer "+active.token()).retrieve().body(Map.class);
+            String name=response==null?"":Objects.toString(response.get("verified_name"),"");
+            return new ConnectionTestResponse(true,name.isBlank()?"Meta connection is working.":"Connected to Meta as "+name+".",List.of(),Instant.now());
+        } catch(RuntimeException error) {
+            String message=safe(error.getMessage());
+            return new ConnectionTestResponse(false,message,List.of("Check that the Phone Number ID belongs to this WhatsApp Business Account.","Generate a new permanent system-user token with whatsapp_business_messaging and whatsapp_business_management permissions.","Confirm the app is live and the token has not expired."),Instant.now());
+        }
+    }
+
     @Transactional(readOnly=true) ActiveConfig active(){
         return repository.findById((short)1).map(item->new ActiveConfig(item.getGraphApiVersion(),item.getPhoneNumberId(),decrypt(item.getAccessTokenEncrypted())))
             .orElse(new ActiveConfig(fallbackVersion,fallbackPhoneId,fallbackToken));
@@ -96,4 +110,5 @@ class KidsChampWhatsAppAdminService {
     record ConfigRequest(String graphApiVersion,String phoneNumberId,String businessAccountId,String accessToken){}
     record ConfigResponse(String graphApiVersion,String phoneNumberId,String businessAccountId,boolean tokenConfigured,String maskedToken,String lastTestStatus,String lastTestMessage,Instant lastTestedAt){}
     record TestResponse(boolean success,String message,String providerMessageId,Instant testedAt){}
+    record ConnectionTestResponse(boolean success,String message,List<String> solutions,Instant testedAt){}
 }

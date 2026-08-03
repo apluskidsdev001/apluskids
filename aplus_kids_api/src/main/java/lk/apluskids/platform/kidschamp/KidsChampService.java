@@ -10,6 +10,8 @@ import lk.apluskids.platform.user.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 
 @Service
@@ -23,10 +25,11 @@ public class KidsChampService {
     private final UserRepository users;
     private final KidsChampStorage storage;
     private final KidsChampAuditRepository audits;
+    private final KidsChampLiveUpdates liveUpdates;
 
     public KidsChampService(KidsChampSubmissionRepository submissions, KidsChampGuestContactRepository guests,
-                            ChildProfileRepository children, UserRepository users, KidsChampStorage storage,KidsChampAuditRepository audits) {
-        this.submissions=submissions; this.guests=guests; this.children=children; this.users=users; this.storage=storage;this.audits=audits;
+                            ChildProfileRepository children, UserRepository users, KidsChampStorage storage,KidsChampAuditRepository audits,KidsChampLiveUpdates liveUpdates) {
+        this.submissions=submissions; this.guests=guests; this.children=children; this.users=users; this.storage=storage;this.audits=audits;this.liveUpdates=liveUpdates;
     }
 
     @Transactional
@@ -87,7 +90,9 @@ public class KidsChampService {
             item.setStoredFilename(stored.storedName()); item.setMediaType(stored.mediaType());
             item.setFileSize(stored.size()); item.setConsentAcceptedAt(Instant.now());
             if(whatsappConsent)item.setWhatsappConsentAt(Instant.now());
-            return KidsChampResponse.from(submissions.save(item));
+            KidsChampResponse response=KidsChampResponse.from(submissions.save(item));
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization(){@Override public void afterCommit(){liveUpdates.publish("SUBMISSION_RECEIVED","SUBMISSION",response.id());}});
+            return response;
         } catch (RuntimeException exception) {
             storage.delete(stored.storedName());
             throw exception;

@@ -6,11 +6,18 @@ import { apiFetch } from "@/utils/auth";
 import { KidsChampStatusBadge as StatusBadge } from "./KidsChampStatusBadge";
 import { KidsChampWhatsAppIcon as WhatsAppIcon } from "./KidsChampWhatsAppIcon";
 import { KidsChampConfirmationDialog as ConfirmationDialog } from "./KidsChampConfirmationDialog";
+
+function KidsChampLoadingScreen() {
+  const [loading,setLoading]=useState(false);
+  useEffect(()=>{const update=(event:Event)=>setLoading(((event as CustomEvent<{count:number}>).detail?.count||0)>0);window.addEventListener("aplus-api-activity",update);return()=>window.removeEventListener("aplus-api-activity",update);},[]);
+  if(!loading)return null;
+  return <div className="fixed inset-0 z-[300] grid place-items-center bg-[#102044]/20 backdrop-blur-[1px]" role="status" aria-live="polite"><div className="flex items-center gap-3 rounded-[18px] border border-white/70 bg-white px-6 py-5 shadow-2xl"><span className="size-6 animate-spin rounded-full border-[3px] border-[#B8DAFF] border-t-[#1689F7]"/><div><p className="text-[14px] font-semibold text-[#172A4B]">Saving your changes</p><p className="mt-0.5 text-[11px] text-[#708099]">Please wait while the database is updated.</p></div></div></div>;
+}
 type MockSubmission = {
   id: string; participantId: string; phone: string; trackingCode: string; childName: string; initials: string; age: number; location: string; category: string;
   participantType: "Guest" | "Registered"; reviewStatus: "New" | "Pending review" | "Under review" | "Approved" | "Rejected";
   tvStatus: "Not selected" | "Selected" | "Scheduled" | "Telecasted"; fileStatus: "Ready" | "Missing" | "Processing failed";
-  reviewer: string; submittedAt: string; submittedDate: string; reviewedDate?: string; previewed: boolean; photoUrl?: string; photoFile?: File;
+  reviewer: string; submittedAt: string; submittedDate: string; reviewedDate?: string; previewed: boolean; batchId?: string | null; photoUrl?: string; photoFile?: File;
 };
 const submissions: MockSubmission[] = [];
 const upcomingTelecasts: Array<{episode:string;date:string;time:string;entries:number;status:string}> = [];
@@ -42,6 +49,7 @@ type AdminSubmissionResponse = {
   reviewedAt?: string;
   previewed: boolean;
   photoAvailable: boolean;
+  batchId?: string | null;
 };
 
 type AdminSubmissionPageResponse = {
@@ -88,6 +96,7 @@ function toMockSubmission(item: AdminSubmissionResponse): MockSubmission {
     submittedDate: item.submittedAt.slice(0, 10),
     reviewedDate: item.reviewedAt?.slice(0, 10),
     previewed: item.previewed,
+    batchId: item.batchId,
   };
 }
 
@@ -1606,6 +1615,9 @@ function SubmissionsWorkspace({
 }) {
   const [records, setRecords] = useState<MockSubmission[]>([]);
   const [backendState, setBackendState] = useState<"loading" | "live" | "error">("loading");
+  const [connectionOpen,setConnectionOpen]=useState(false);
+  const [connectionReason,setConnectionReason]=useState("Checking the Kids Champ service…");
+  const [lastConnectionCheck,setLastConnectionCheck]=useState<Date|null>(null);
   const [approvalFilter, setApprovalFilter] = useState(initialOverviewFilter === "approved" ? "Approved" : initialOverviewFilter === "pending" ? "Not approved" : "All");
   const [search, setSearch] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -1625,10 +1637,13 @@ function SubmissionsWorkspace({
   const [submissionPage, setSubmissionPage] = useState(0);
   const [submissionTotalItems, setSubmissionTotalItems] = useState(0);
   const [submissionTotalPages, setSubmissionTotalPages] = useState(0);
+  const [summaryTotals,setSummaryTotals]=useState({pendingReviews:0,approved:0,totalSubmissions:0});
+
+  useEffect(()=>{apiFetch("/api/v1/admin/kids-champ/overview").then(async(response)=>{if(response.ok){const value=await response.json() as {pendingReviews:number;approved:number;totalSubmissions:number};setSummaryTotals({pendingReviews:value.pendingReviews,approved:value.approved,totalSubmissions:value.totalSubmissions});}}).catch(()=>undefined);},[]);
 
   useEffect(() => {
     let cancelled = false;
-    const params = new URLSearchParams({ page: String(submissionPage), size: "50" });
+    const params = new URLSearchParams({ page: String(submissionPage), size: "25" });
     if (search.trim()) params.set("search", search.trim());
     if (approvalFilter !== "All" && approvalFilter !== "New") params.set("approval", approvalFilter);
     if (locationFilter !== "All") params.set("location", locationFilter);
@@ -1662,7 +1677,7 @@ function SubmissionsWorkspace({
     }
     apiFetch(`/api/v1/admin/kids-champ/submissions/page?${params}`)
       .then(async (response) => {
-        if (!response.ok) throw new Error("Backend submissions are unavailable.");
+        if (!response.ok) { const error=await response.json().catch(()=>null) as {message?:string;code?:string}|null; throw new Error(error?.message||`The backend returned HTTP ${response.status}.`); }
         const body = (await response.json()) as AdminSubmissionPageResponse;
         if (!cancelled) {
           setRecords(body.items.map(toMockSubmission));
@@ -1670,12 +1685,16 @@ function SubmissionsWorkspace({
           setSubmissionTotalPages(body.totalPages);
           setSelected(new Set());
           setBackendState("live");
+          setConnectionReason("Database and Kids Champ service are connected.");
+          setLastConnectionCheck(new Date());
         }
       })
-      .catch(() => {
+      .catch((reason) => {
         if (!cancelled) {
           setRecords([]);
           setBackendState("error");
+          setConnectionReason(reason instanceof Error?reason.message:"The Kids Champ service could not be reached.");
+          setLastConnectionCheck(new Date());
         }
       });
     return () => {
@@ -1702,8 +1721,17 @@ function SubmissionsWorkspace({
         if (!response.ok) throw new Error(body?.message || "The submission update could not be saved.");
         saved = body as AdminSubmissionResponse;
       }
-      setRecords((items) => items.map((item) => item.id === updated.id ? (saved ? toMockSubmission(saved) : updated) : item));
-      notify("Submission changes saved to the backend.");
+      if (current.reviewStatus !== updated.reviewStatus) {
+        const status = updated.reviewStatus === "Approved" ? "APPROVED" : updated.reviewStatus === "Rejected" ? "REJECTED" : updated.reviewStatus === "Under review" ? "UNDER_REVIEW" : "SUBMITTED";
+        const response = await apiFetch(`/api/v1/admin/kids-champ/submissions/${updated.id}/review`, { method: "PATCH", body: JSON.stringify({ status, reason: updated.reviewStatus === "Rejected" ? "Rejected from the administrator review panel." : null }) });
+        const body = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(body?.message || "The submission review could not be saved.");
+        saved = body as AdminSubmissionResponse;
+      }
+      const next = saved ? toMockSubmission(saved) : current;
+      setRecords((items) => items.map((item) => item.id === updated.id ? next : item));
+      if (current.childName !== updated.childName || current.trackingCode !== updated.trackingCode || current.age !== updated.age || current.location !== updated.location || current.participantType !== updated.participantType || current.reviewer !== updated.reviewer || current.submittedDate !== updated.submittedDate) notify("Only submission category and review status can be changed here; profile details stay protected in the account record.");
+      else notify("Submission changes saved to the backend.");
     } catch (reason) {
       notify(reason instanceof Error ? reason.message : "The submission update could not be saved.");
     }
@@ -1719,7 +1747,9 @@ function SubmissionsWorkspace({
           item.trackingCode.toLowerCase().includes(query);
         const matchesApproval =
           approvalFilter === "All" ||
-          (approvalFilter === "Not approved"
+          (approvalFilter === "Waiting"
+            ? item.reviewStatus === "New" || item.reviewStatus === "Pending review" || item.reviewStatus === "Under review"
+            : approvalFilter === "Not approved"
             ? item.reviewStatus !== "Approved"
             : approvalFilter === "New"
               ? item.reviewStatus === "New"
@@ -1784,7 +1814,6 @@ function SubmissionsWorkspace({
     ],
   );
   const pendingVisible = visible.filter((item) => item.reviewStatus !== "Approved" && item.reviewStatus !== "Rejected").length;
-  const approvedVisible = visible.filter((item) => item.reviewStatus === "Approved").length;
   function toggleSelection(id: string) {
     setSelected((current) => {
       const next = new Set(current);
@@ -1907,8 +1936,9 @@ function SubmissionsWorkspace({
           <h2 className="text-[20px] font-semibold tracking-[-.025em]">Submission workspace</h2>
           <p className="mt-1 text-[13px] text-[#7A879A]">Approve and manage every Kids Champ entry on one page. Approved photos are queued for ZIP processing automatically.</p>
         </div>
-        <span className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-2 text-[11px] font-bold ${backendState === "live" ? "bg-emerald-50 text-emerald-700" : backendState === "loading" ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"}`}><i className={`size-2 rounded-full ${backendState === "live" ? "bg-emerald-500" : backendState === "loading" ? "bg-blue-500" : "bg-amber-500"}`} />{backendState === "live" ? "Database connected" : backendState === "loading" ? "Loading data" : "Database unavailable"}</span>
+        <button type="button" onClick={()=>setConnectionOpen(true)} className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-2 text-[11px] font-bold transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2488F4] ${backendState === "live" ? "bg-emerald-50 text-emerald-700" : backendState === "loading" ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"}`}><i className={`size-2 rounded-full ${backendState === "live" ? "bg-emerald-500" : backendState === "loading" ? "bg-blue-500" : "bg-amber-500"}`} />{backendState === "live" ? "Database connected" : backendState === "loading" ? "Loading data" : "Database unavailable"}</button>
       </div>
+      {connectionOpen?<div className="fixed inset-0 z-[190] grid place-items-center bg-[#102044]/30 p-4"><div className="w-full max-w-md rounded-[20px] border border-[#E0E8F2] bg-white p-6 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-[11px] font-bold uppercase tracking-[.14em] text-[#2488F4]">Connection status</p><h3 className="mt-1 text-[20px] font-semibold">{backendState==="live"?"Database connected":backendState==="loading"?"Checking connection":"Database unavailable"}</h3></div><button onClick={()=>setConnectionOpen(false)} className="grid size-8 place-items-center rounded-full bg-[#F2F6FB] text-[#526178]">×</button></div><div className={`mt-5 rounded-[13px] border p-4 text-[12px] leading-5 ${backendState==="live"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-amber-200 bg-amber-50 text-amber-900"}`}><p className="font-semibold">{connectionReason}</p>{lastConnectionCheck?<p className="mt-2 text-[11px] opacity-75">Last checked: {lastConnectionCheck.toLocaleTimeString()}</p>:null}</div>{backendState!=="live"?<div className="mt-4 rounded-[13px] bg-[#F7FAFE] p-4 text-[12px] leading-5 text-[#526178]"><p className="font-semibold text-[#263852]">What an administrator can check</p><ul className="mt-2 list-disc space-y-1 pl-4"><li>Confirm the API server is running on the configured address.</li><li>Check the database service and its connection settings.</li><li>Confirm your network can reach the API, then click the status chip again after a retry.</li></ul></div>:null}<button onClick={()=>{setConnectionOpen(false);setSubmissionPage(0);}} className={`${primaryButton} mt-5 w-full`}>{backendState==="live"?"Close":"Retry connection"}</button></div></div>:null}
       {calendarFilter ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-[14px] border border-blue-200 bg-blue-50 px-4 py-3">
           <p className="text-[13px] font-semibold text-blue-900">
@@ -1921,7 +1951,7 @@ function SubmissionsWorkspace({
       ) : null}
       <div className="border-t border-[#E5EBF2]">
         <div className="grid gap-3 bg-[#FBFDFF] p-4 tablet:grid-cols-3">
-          {[{ icon: "◷", label: "Waiting for approval", value: pendingVisible, style: "border-[#FBD589] bg-[#FFFAEC] text-[#9A4F00]" }, { icon: "✓", label: "Approved on this page", value: approvedVisible, style: "border-[#A9E9CF] bg-[#F1FCF7] text-[#087D55]" }, { icon: "♧", label: "Matching records", value: submissionTotalItems, style: "border-[#B9D6FF] bg-[#F2F7FF] text-[#1154B5]" }].map((metric) => <div key={metric.label} className={`relative overflow-hidden rounded-[10px] border px-5 py-3.5 ${metric.style}`}><span className="absolute right-5 top-3 grid size-10 place-items-center rounded-full bg-current/10 text-[22px]">{metric.icon}</span><strong className="block text-[27px] leading-none">{metric.value}</strong><span className="mt-1.5 block text-[11px] font-semibold">{metric.label}</span></div>)}
+          {[{ icon: "◷", label: "Waiting for approval", value: summaryTotals.pendingReviews, style: "border-[#FBD589] bg-[#FFFAEC] text-[#9A4F00]", action:()=>{setApprovalFilter("Waiting");setSubmissionPage(0);notify("Showing submissions waiting for approval.");} }, { icon: "✓", label: "Approved", value: summaryTotals.approved, style: "border-[#A9E9CF] bg-[#F1FCF7] text-[#087D55]", action:()=>{setApprovalFilter("Approved");setSubmissionPage(0);notify("Showing approved submissions.");} }, { icon: "♧", label: "Matching records", value: summaryTotals.totalSubmissions, style: "border-[#B9D6FF] bg-[#F2F7FF] text-[#1154B5]", action:()=>{setApprovalFilter("All");setSearch("");setSubmissionPage(0);notify("Showing all records.");} }].map((metric) => <button type="button" key={metric.label} onClick={metric.action} className={`relative overflow-hidden rounded-[10px] border px-5 py-3.5 text-left transition hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2488F4] ${metric.style}`}><span className="absolute right-5 top-3 grid size-10 place-items-center rounded-full bg-current/10 text-[22px]">{metric.icon}</span><strong className="block text-[27px] leading-none">{metric.value}</strong><span className="mt-1.5 block text-[11px] font-semibold">{metric.label}</span></button>)}
         </div>
         <div className="flex flex-col gap-3 border-b border-[#E5EBF2] p-4 tablet:flex-row tablet:items-center tablet:justify-between">
           <label className="relative w-full max-w-sm">
@@ -2919,6 +2949,12 @@ function TvZipWorkspace({
   const [creatingPendingZip, setCreatingPendingZip] = useState(false);
   const [advancedZipRecoveryOpen, setAdvancedZipRecoveryOpen] = useState(false);
   const [zipRecoveryReason, setZipRecoveryReason] = useState("");
+  const [manualZipSearch, setManualZipSearch] = useState("");
+  const [manualZipStatus, setManualZipStatus] = useState<"Ready to ZIP" | "Already ZIPped" | "All">("Ready to ZIP");
+  const [manualZipDateMode, setManualZipDateMode] = useState<"Any time" | "Specific date" | "Date range">("Any time");
+  const [manualZipDate, setManualZipDate] = useState("");
+  const [manualZipFrom, setManualZipFrom] = useState("");
+  const [manualZipTo, setManualZipTo] = useState("");
   const [zipProgress, setZipProgress] = useState({ readyPhotos: 0, activeTargetSize: commonSettings.batchSize, nextTargetSize: commonSettings.batchSize });
   const loadBatches = () => apiFetch("/api/v1/admin/kids-champ/batches")
     .then(async (response) => {
@@ -2963,6 +2999,16 @@ function TvZipWorkspace({
           ? item.deleted
           : !item.deleted && item.status === zipStatus)),
   );
+  const visibleManualZipSubmissions = useMemo(() => pendingZipSubmissions.filter((item) => {
+    const query = manualZipSearch.trim().toLowerCase();
+    if (query && !`${item.childName} ${item.trackingCode} ${item.location}`.toLowerCase().includes(query)) return false;
+    const zipped = Boolean(item.batchId);
+    if (manualZipStatus === "Ready to ZIP" && zipped) return false;
+    if (manualZipStatus === "Already ZIPped" && !zipped) return false;
+    if (manualZipDateMode === "Specific date" && manualZipDate && item.submittedDate !== manualZipDate) return false;
+    if (manualZipDateMode === "Date range" && ((manualZipFrom && item.submittedDate < manualZipFrom) || (manualZipTo && item.submittedDate > manualZipTo))) return false;
+    return true;
+  }), [pendingZipSubmissions, manualZipSearch, manualZipStatus, manualZipDateMode, manualZipDate, manualZipFrom, manualZipTo]);
   async function deleteZip(code: string) {
     const item = zipRecords.find((record) => record.code === code);
     if (!item?.id) return;
@@ -3095,33 +3141,38 @@ function TvZipWorkspace({
             <button type="button" onClick={() => setAdvancedZipRecoveryOpen((value) => !value)} className={secondaryButton}>
               {advancedZipRecoveryOpen ? "Close advanced recovery" : "Advanced ZIP recovery"}
             </button>
-            <button type="button" onClick={()=>setPendingZipSelected(new Set(pendingZipSelected.size===pendingZipSubmissions.length?[]:pendingZipSubmissions.map((item)=>item.id)))} disabled={!pendingZipSubmissions.length} className={advancedZipRecoveryOpen ? secondaryButton : "hidden"}>
-              {pendingZipSelected.size===pendingZipSubmissions.length&&pendingZipSubmissions.length?"Clear all":"Select all"}
+            <button type="button" onClick={()=>setPendingZipSelected((current)=>new Set([...current,...visibleManualZipSubmissions.filter((item)=>!item.batchId).map((item)=>item.id)]))} disabled={!visibleManualZipSubmissions.some((item)=>!item.batchId)} className={advancedZipRecoveryOpen ? secondaryButton : "hidden"}>
+              Select all
+            </button>
+            <button type="button" onClick={()=>setPendingZipSelected(new Set())} disabled={!pendingZipSelected.size} className={advancedZipRecoveryOpen ? secondaryButton : "hidden"}>
+              Deselect all
             </button>
             <button type="button" onClick={()=>void createPendingZip()} disabled={!pendingZipSelected.size||creatingPendingZip} className={advancedZipRecoveryOpen ? `${primaryButton} disabled:cursor-not-allowed disabled:opacity-40` : "hidden"}>
               {creatingPendingZip?"Creating ZIP…":`Create ZIP (${pendingZipSelected.size})`}
             </button>
           </div>
         </div>
-        {advancedZipRecoveryOpen ? <div className="mx-5 mt-5 rounded-[10px] border border-amber-200 bg-amber-50 p-3">
+        {advancedZipRecoveryOpen ? <div className="mx-5 mt-5 space-y-3 rounded-[10px] border border-amber-200 bg-amber-50 p-3">
           <label className="block text-[10px] font-semibold uppercase text-amber-900">Recovery reason
             <input value={zipRecoveryReason} onChange={(event) => setZipRecoveryReason(event.target.value)} className={`${fieldClass} mt-1`} placeholder="Why must this ZIP be created manually?" />
           </label>
+          <div className="grid gap-2 tablet:grid-cols-4"><input value={manualZipSearch} onChange={(event)=>setManualZipSearch(event.target.value)} className={fieldClass} placeholder="Search name, code or hometown" /><select value={manualZipStatus} onChange={(event)=>setManualZipStatus(event.target.value as typeof manualZipStatus)} className={fieldClass}><option>Ready to ZIP</option><option>Already ZIPped</option><option>All</option></select><select value={manualZipDateMode} onChange={(event)=>setManualZipDateMode(event.target.value as typeof manualZipDateMode)} className={fieldClass}><option>Any time</option><option>Specific date</option><option>Date range</option></select>{manualZipDateMode === "Specific date" ? <input type="date" value={manualZipDate} onChange={(event)=>setManualZipDate(event.target.value)} className={fieldClass} /> : manualZipDateMode === "Date range" ? <div className="flex gap-2"><input type="date" value={manualZipFrom} onChange={(event)=>setManualZipFrom(event.target.value)} className={`${fieldClass} min-w-0`} /><input type="date" value={manualZipTo} onChange={(event)=>setManualZipTo(event.target.value)} className={`${fieldClass} min-w-0`} /></div> : <span className="flex items-center text-[11px] font-semibold text-amber-800">{visibleManualZipSubmissions.length} matching photos</span>}</div>
+          <p className="text-[10px] text-amber-800">New archive names use: <strong>ZipPhotoId001_name_age_Hometown</strong>. Already ZIPped photos are view-only.</p>
         </div> : null}
         <p className="mx-5 mb-5 rounded-[10px] border border-emerald-100 bg-white px-4 py-3 text-[12px] text-emerald-800">
           {zipProgress.readyPhotos} of {zipProgress.activeTargetSize} approved photos are in the automatic ZIP queue. {Math.max(0, zipProgress.activeTargetSize - zipProgress.readyPhotos)} more photo{Math.max(0, zipProgress.activeTargetSize - zipProgress.readyPhotos) === 1 ? "" : "s"} needed before the next ZIP begins.
         </p>
-        {advancedZipRecoveryOpen && pendingZipSubmissions.length ? (
+        {advancedZipRecoveryOpen && visibleManualZipSubmissions.length ? (
           <div className="max-h-80 overflow-y-auto divide-y divide-[#E7EDF3]">
-            {pendingZipSubmissions.map((item)=>(
-              <label key={item.id} className="flex cursor-pointer items-center gap-4 px-5 py-3 hover:bg-[#F8FAFC]">
-                <input type="checkbox" checked={pendingZipSelected.has(item.id)} onChange={()=>setPendingZipSelected((current)=>{const next=new Set(current);if(next.has(item.id))next.delete(item.id);else next.add(item.id);return next;})} className="size-4 accent-emerald-600"/>
+            {visibleManualZipSubmissions.map((item)=>(
+              <label key={item.id} className={`flex items-center gap-4 px-5 py-3 ${item.batchId ? "cursor-not-allowed bg-slate-50 opacity-65" : "cursor-pointer hover:bg-[#F8FAFC]"}`}>
+                <input type="checkbox" disabled={Boolean(item.batchId)} checked={pendingZipSelected.has(item.id)} onChange={()=>setPendingZipSelected((current)=>{const next=new Set(current);if(next.has(item.id))next.delete(item.id);else next.add(item.id);return next;})} className="size-4 accent-emerald-600"/>
                 <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-semibold">{item.childName}</p><p className="mt-0.5 text-[10px] text-[#7A879A]">{item.trackingCode} · {item.category} · {item.location}</p></div>
-                <StatusBadge label="Approved"/>
+                <StatusBadge label={item.batchId ? "ZIPped" : "Approved"}/>
               </label>
             ))}
           </div>
-        ) : advancedZipRecoveryOpen ? <p className="px-5 pb-5 text-[12px] text-[#7A879A]">No approved photos are waiting for ZIP recovery.</p> : null}
+        ) : advancedZipRecoveryOpen ? <p className="px-5 pb-5 text-[12px] text-[#7A879A]">No photos match the manual ZIP filters.</p> : null}
       </section>
       <section className="overflow-hidden rounded-[18px] border border-[#E0E7EF] bg-white shadow-[0_10px_28px_rgba(30,72,123,.05)]">
         <div className="flex flex-col gap-4 border-b border-[#E5EBF2] p-5 tablet:flex-row tablet:items-end tablet:justify-between">
@@ -4551,6 +4602,8 @@ function SubmissionDetailsEditor({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item);
+  const [rejecting, setRejecting] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
   const update = <K extends keyof MockSubmission>(
     key: K,
     value: MockSubmission[K],
@@ -4755,16 +4808,7 @@ function SubmissionDetailsEditor({
               Approve
             </button>
             <button
-              onClick={() => {
-                const reason = window.prompt("Reason for rejection");
-                if (reason === null) return;
-                const updated = { ...draft, reviewStatus: "Rejected" as const };
-                setDraft(updated);
-                onSave?.(updated);
-                notify(
-                  `${draft.trackingCode} rejected${reason.trim() ? `: ${reason.trim()}` : "."}`,
-                );
-              }}
+              onClick={() => setRejecting(true)}
               className="h-11 rounded-[10px] bg-red-600 text-[13px] font-semibold text-white"
             >
               Reject
@@ -4788,6 +4832,7 @@ function SubmissionDetailsEditor({
           </>
         )}
       </div>
+      {rejecting ? <div className="mt-3 rounded-[12px] border border-red-200 bg-red-50 p-3"><label className="block text-[11px] font-semibold text-red-800">Reason for rejection<textarea value={rejectionReason} onChange={(event)=>setRejectionReason(event.target.value)} className={`${fieldClass} mt-1 min-h-20 bg-white`} placeholder="Explain why this submission cannot be approved"/></label><div className="mt-3 flex justify-end gap-2"><button onClick={()=>{setRejecting(false);setRejectionReason("");}} className={secondaryButton}>Cancel</button><button onClick={()=>{const updated={...draft,reviewStatus:"Rejected" as const};setDraft(updated);onSave?.(updated);setRejecting(false);notify(`${draft.trackingCode} rejected${rejectionReason.trim()?`: ${rejectionReason.trim()}`:"."}`);setRejectionReason("");}} className="h-9 rounded-[9px] bg-red-600 px-3 text-[11px] font-semibold text-white">Confirm rejection</button></div></div> : null}
     </div>
   );
 }
@@ -5277,8 +5322,6 @@ type CalendarTask = {
 
 function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message: string) => void; dateLabel: string; onNavigate?: (section: "submissions" | "zips" | "telecasts" | "tasks" | "warnings", dateLabel: string) => void }) {
   const [tasks, setTasks] = useState<CalendarTask[]>([]);
-  const [movingTaskId, setMovingTaskId] = useState<string | null>(null);
-  const [moveDate, setMoveDate] = useState("");
   const [daySubmissions, setDaySubmissions] = useState<AdminSubmissionResponse[]>([]);
   const [dayBatches, setDayBatches] = useState<AdminBatchResponse[]>([]);
   const [activeSection, setActiveSection] = useState<"submissions" | "zips" | "telecasts" | "warnings" | "tasks">("submissions");
@@ -5333,16 +5376,6 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
     const url = URL.createObjectURL(await response.blob());
     if (photoPreview) URL.revokeObjectURL(photoPreview.url);
     setPhotoPreview({ id: item.id, url });
-  }
-  async function moveTask(task: CalendarTask) {
-    if (!moveDate) return;
-    const response = await apiFetch(`/api/v1/admin/kids-champ/calendar/tasks/${task.id}/reschedule`, { method: "POST", body: JSON.stringify({ date: moveDate }) });
-    const body = await response.json().catch(() => null);
-    if (!response.ok) { notify(body?.message || "Task could not be rescheduled."); return; }
-    setTasks((current) => current.filter((item) => item.id !== task.id));
-    setMovingTaskId(null);
-    setMoveDate("");
-    notify("Task moved to the selected day.");
   }
   return (
     <div>
@@ -5413,10 +5446,8 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
           ))}
         </div>
       </div>
-      <div id="calendar-day-schedule" className="hidden">
-        <h3 className="text-[16px] font-semibold">Day schedule</h3>
-      </div>
-      <div className="hidden">
+      {activeSection === "tasks" ? <div className="mt-5 space-y-2 rounded-[16px] border border-[#E0E7EF] bg-white p-4">
+        <h3 className="text-[15px] font-semibold">Open tasks</h3>
         {tasks.map((task) => (
           <article
             key={task.id}
@@ -5450,11 +5481,10 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
             >
               Delete
             </button>
-            <button onClick={() => { setMovingTaskId((current) => current === task.id ? null : task.id); setMoveDate(taskDate); }} className="text-[11px] font-semibold text-[#0877EF]">Move</button>
-            {movingTaskId === task.id ? <div className="mt-3 flex w-full gap-2 border-t border-[#E5EBF2] pt-3"><input type="date" value={moveDate} onChange={(event) => setMoveDate(event.target.value)} className={`${fieldClass} flex-1`} /><button type="button" onClick={() => void moveTask(task)} disabled={!moveDate || moveDate === taskDate} className="rounded-[8px] bg-[#17243D] px-3 text-[11px] font-semibold text-white disabled:opacity-40">Move task</button></div> : null}
           </article>
         ))}
-      </div>
+        {!tasks.length ? <p className="py-5 text-center text-[12px] text-[#7A879A]">No open tasks for this day.</p> : null}
+      </div> : null}
     </div>
   );
 }
@@ -5599,19 +5629,56 @@ function DrawerContent({
 }
 
 type WhatsAppAdminConfig = { graphApiVersion:string;phoneNumberId:string;businessAccountId:string;tokenConfigured:boolean;maskedToken:string;lastTestStatus?:string;lastTestMessage?:string;lastTestedAt?:string };
+type AccountManagementOverview={totalAccounts:number;administrators:number;activeAccounts:number;childProfiles:number};
+type ManagedKidsAccount={id:string;accountType?:"REGISTERED"|"GUEST";name:string;email:string;phone:string;status:string;children:number;createdAt:string;lastLoginAt?:string};
+type ManagedAdministrator={id:string;name:string;email:string;role:"ADMIN"|"SUPER_ADMIN";status:string;lastLoginAt?:string};
+type AdminHistoryItem={action:string;entityType:string;entityId:string;details:string;actor:string;createdAt:string};
+type WhatsAppConnectionResult={success:boolean;message:string;solutions:string[];testedAt:string};
 
 export function AccountManagementWorkspace({notify}:{notify:(message:string)=>void}) {
+  const [tab,setTab]=useState<"overview"|"accounts"|"admins"|"whatsapp"|"templates"|"history">("overview");
+  const [isSuperAdmin]=useState(()=>{if(typeof window==="undefined")return false;try{const value=window.localStorage.getItem("aplus-current-user")||window.sessionStorage.getItem("aplus-current-user");const user=value?JSON.parse(value) as {roles?:string[]}:null;return Boolean(user?.roles?.includes("ROLE_SUPER_ADMIN"));}catch{return false;}});
+  const [overview,setOverview]=useState<AccountManagementOverview|null>(null);
+  const [accounts,setAccounts]=useState<ManagedKidsAccount[]>([]);
+  const [administrators,setAdministrators]=useState<ManagedAdministrator[]>([]);
+  const [history,setHistory]=useState<AdminHistoryItem[]>([]);
+  const [accountSearch,setAccountSearch]=useState("");
+  const [accountStatus,setAccountStatus]=useState("All");
+  const [accountType,setAccountType]=useState("All");
+  const [selectedAccounts,setSelectedAccounts]=useState<Set<string>>(new Set());
+  const [editingAccount,setEditingAccount]=useState<ManagedKidsAccount|null>(null);
+  const [accountDraft,setAccountDraft]=useState({accountHolderName:"",email:"",phoneE164:"",status:"ACTIVE"});
+  const [savingAccount,setSavingAccount]=useState(false);
+  const [deleteDialog,setDeleteDialog]=useState<ManagedKidsAccount|null>(null);
+  const [deleteReason,setDeleteReason]=useState("");
+  const [connection,setConnection]=useState<WhatsAppConnectionResult|null>(null);
+  const [testingConnection,setTestingConnection]=useState(false);
   const [config,setConfig]=useState<WhatsAppAdminConfig|null>(null);
   const [draft,setDraft]=useState({graphApiVersion:"v25.0",phoneNumberId:"",businessAccountId:"",accessToken:""});
   const [testPhone,setTestPhone]=useState("0782940117");
   const [saving,setSaving]=useState(false);
   const [testing,setTesting]=useState(false);
-  useEffect(()=>{apiFetch("/api/v1/admin/kids-champ/whatsapp/config").then(async response=>{if(!response.ok)throw new Error("WhatsApp configuration could not be loaded.");const body=await response.json() as WhatsAppAdminConfig;setConfig(body);setDraft({graphApiVersion:body.graphApiVersion,phoneNumberId:body.phoneNumberId,businessAccountId:body.businessAccountId,accessToken:""});}).catch(reason=>notify(reason instanceof Error?reason.message:"WhatsApp configuration could not be loaded."));},[notify]);
+  useEffect(()=>{apiFetch("/api/v1/admin/account-management/overview").then(async response=>{if(response.ok)setOverview(await response.json() as AccountManagementOverview);}).catch(()=>undefined);},[]);
+  useEffect(()=>{const params=new URLSearchParams();if(accountSearch.trim())params.set("search",accountSearch.trim());if(accountStatus!=="All")params.set("status",accountStatus);apiFetch(`/api/v1/admin/account-management/accounts?${params}`).then(async response=>{if(response.ok){setAccounts(await response.json() as ManagedKidsAccount[]);setSelectedAccounts(new Set());}}).catch(()=>undefined);},[accountSearch,accountStatus]);
+  useEffect(()=>{if(!isSuperAdmin)return;apiFetch("/api/v1/admin/account-management/administrators").then(async response=>{if(response.ok)setAdministrators(await response.json() as ManagedAdministrator[]);}).catch(()=>undefined);apiFetch("/api/v1/admin/kids-champ/admin-history").then(async response=>{if(response.ok)setHistory(await response.json() as AdminHistoryItem[]);}).catch(()=>undefined);apiFetch("/api/v1/admin/kids-champ/whatsapp/config").then(async response=>{if(!response.ok)return;const body=await response.json() as WhatsAppAdminConfig;setConfig(body);setDraft({graphApiVersion:body.graphApiVersion,phoneNumberId:body.phoneNumberId,businessAccountId:body.businessAccountId,accessToken:""});}).catch(()=>undefined);},[isSuperAdmin]);
   async function save(){setSaving(true);const response=await apiFetch("/api/v1/admin/kids-champ/whatsapp/config",{method:"PUT",body:JSON.stringify(draft)});const body=await response.json().catch(()=>null);setSaving(false);if(!response.ok){notify(body?.message||"WhatsApp configuration could not be saved.");return;}setConfig(body);setDraft(current=>({...current,accessToken:""}));notify("WhatsApp configuration saved securely.");}
   async function test(){setTesting(true);const response=await apiFetch("/api/v1/admin/kids-champ/whatsapp/test",{method:"POST",body:JSON.stringify({phone:testPhone})});const body=await response.json().catch(()=>null);setTesting(false);if(!response.ok){notify(body?.message||"Test message failed.");return;}setConfig(current=>current?{...current,lastTestStatus:body.success?"SUCCESS":"FAILED",lastTestMessage:body.message,lastTestedAt:body.testedAt}:current);notify(body.message);}
-  return <section>
-    <div><h2 className="text-[22px] font-semibold">Account &amp; Management</h2><p className="mt-1 text-[13px] text-[#7A879A]">Manage external accounts and verify message delivery.</p></div>
-    <div className="mt-6 grid gap-5 desktop:grid-cols-[1.2fr_.8fr]">
+  async function testConnection(){setTestingConnection(true);const response=await apiFetch("/api/v1/admin/kids-champ/whatsapp/connection-test",{method:"POST"});const body=await response.json().catch(()=>null) as WhatsAppConnectionResult|null;setTestingConnection(false);if(!response.ok){notify((body as unknown as {message?:string})?.message||"Connection test could not be completed.");return;}setConnection(body);notify(body?.message||"Connection test completed.");}
+  async function changeRole(administrator:ManagedAdministrator){const next=administrator.role==="SUPER_ADMIN"?"ROLE_ADMIN":"ROLE_SUPER_ADMIN";const response=await apiFetch(`/api/v1/admin/account-management/administrators/${administrator.id}/role`,{method:"PATCH",body:JSON.stringify({role:next})});const body=await response.json().catch(()=>null) as ManagedAdministrator|null;if(!response.ok||!body){notify((body as unknown as {message?:string})?.message||"Role could not be updated.");return;}setAdministrators(current=>current.map(item=>item.id===administrator.id?body:item));notify(`${administrator.name} is now ${body.role==="SUPER_ADMIN"?"a Super Admin":"an Admin"}.`);}
+  function openAccountEditor(account:ManagedKidsAccount){setEditingAccount(account);setAccountDraft({accountHolderName:account.name,email:account.email,phoneE164:account.phone,status:account.status});}
+  async function saveAccount(){if(!editingAccount)return;setSavingAccount(true);const guest=editingAccount.accountType==="GUEST";const response=await apiFetch(`/api/v1/admin/account-management/accounts/${guest?"guests/":""}${editingAccount.id}`,{method:"PATCH",body:JSON.stringify(guest?{parentName:accountDraft.accountHolderName,email:accountDraft.email,phoneE164:accountDraft.phoneE164}:accountDraft)});const body=await response.json().catch(()=>null) as ManagedKidsAccount|null;setSavingAccount(false);if(!response.ok||!body){notify((body as unknown as {message?:string})?.message||"Account could not be updated.");return;}setAccounts(current=>current.map(account=>account.id===body.id?body:account));setEditingAccount(null);notify("Account updated and recorded in Admin history.");}
+  async function restoreAccount(account:ManagedKidsAccount){const guest=account.accountType==="GUEST";const response=await apiFetch(`/api/v1/admin/account-management/accounts/${guest?"guests/":""}${account.id}/restore`,{method:"POST"});const body=await response.json().catch(()=>null) as ManagedKidsAccount|null;if(!response.ok||!body){notify((body as unknown as {message?:string})?.message||"Account could not be restored.");return;}setAccounts(current=>current.map(item=>item.id===body.id?body:item));notify("Account restored to active access.");}
+  async function deleteAccount(){if(!deleteDialog)return;const guest=deleteDialog.accountType==="GUEST";const response=await apiFetch(`/api/v1/admin/account-management/accounts/${guest?"guests/":""}${deleteDialog.id}`,{method:"DELETE",body:JSON.stringify({reason:deleteReason})});const body=await response.json().catch(()=>null) as ManagedKidsAccount|null;if(!response.ok||!body){notify((body as unknown as {message?:string})?.message||"Account could not be deleted.");return;}setAccounts(current=>current.map(item=>item.id===body.id?body:item));setDeleteDialog(null);setDeleteReason("");notify("Account was safely deleted and can be restored by an administrator.");}
+  const visibleAccounts=accounts.filter(item=>accountType==="All"||item.accountType===accountType);
+  const exportSelected=async(pdf=false)=>{const values=visibleAccounts.filter(item=>selectedAccounts.has(item.id));if(!values.length){notify("Select one or more accounts first.");return;}const rows=[["Account type","Name","Email","Phone","Status","Children"],...values.map(item=>[item.accountType||"REGISTERED",item.name,item.email||"",item.phone,item.status,String(item.children)])];if(pdf){const {jsPDF}=await import("jspdf");const doc=new jsPDF();doc.setFontSize(16);doc.text("A+ Kids selected accounts",14,16);doc.setFontSize(9);rows.forEach((row,index)=>doc.text(row.join(" | ").slice(0,180),14,28+(index*7)));doc.save("selected-kids-accounts.pdf");}else{const blob=new Blob([rows.map(row=>row.map(v=>`"${v.replaceAll('"','""')}"`).join(",")).join("\n")],{type:"text/csv"});const link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download="selected-kids-accounts.csv";link.click();URL.revokeObjectURL(link.href);}notify(`${values.length} selected account${values.length===1?"":"s"} exported.`);};
+  const tabs=[{id:"overview",label:"Overview"},{id:"accounts",label:"Kids accounts"},...(isSuperAdmin?[{id:"admins",label:"Admin users"},{id:"whatsapp",label:"WhatsApp API"},{id:"templates",label:"Templates"},{id:"history",label:"Admin history"}]:[])] as Array<{id:typeof tab;label:string}>;
+  return <section className="relative">
+    <div className="flex flex-col gap-3 tablet:flex-row tablet:items-end tablet:justify-between"><div><p className="text-[11px] font-bold uppercase tracking-[.16em] text-[#2488F4]">Control centre</p><h2 className="mt-1 text-[24px] font-semibold tracking-[-.03em]">Account operations</h2><p className="mt-1 text-[13px] text-[#7A879A]">Manage Kids accounts and keep operational access safe.</p></div><div className="inline-flex h-9 items-center gap-2 self-start rounded-full border border-emerald-200 bg-emerald-50 px-3 text-[11px] font-semibold text-emerald-700 tablet:self-auto"><span className="size-2 rounded-full bg-emerald-500"/>Secure access controls</div></div>
+    <div className="mt-5 flex gap-1.5 overflow-x-auto rounded-[22px] border border-[#E4EBF4] bg-white/90 p-2 shadow-[0_10px_28px_rgba(36,91,160,.08)]">{tabs.map(item=><button key={item.id} onClick={()=>setTab(item.id)} className={`whitespace-nowrap rounded-[14px] px-4 py-2.5 text-[12px] font-semibold transition ${tab===item.id?"bg-gradient-to-br from-[#1689F7] to-[#136FE8] text-white shadow-[0_8px_16px_rgba(31,123,241,.27)]":"text-[#526178] hover:bg-[#F2F7FF]"}`}>{item.label}</button>)}</div>
+    {tab==="overview"?<div className="mt-5 grid gap-4 tablet:grid-cols-2 desktop:grid-cols-4">{[["Kids accounts",overview?.totalAccounts,"All registered family accounts","bg-blue-50 text-blue-600"],["Active accounts",overview?.activeAccounts,"Can sign in and submit","bg-emerald-50 text-emerald-600"],["Children",overview?.childProfiles,"Profiles held securely","bg-violet-50 text-violet-600"],["Administrators",overview?.administrators,"Operational team members","bg-amber-50 text-amber-600"]].map(([label,value,detail,tone])=><div key={String(label)} className="group rounded-[20px] border border-[#E2EAF4] bg-white p-5 shadow-[0_8px_22px_rgba(43,86,138,.05)] transition hover:-translate-y-0.5 hover:shadow-[0_14px_28px_rgba(43,86,138,.1)]"><div className="flex items-start justify-between"><span className={`grid size-10 place-items-center rounded-[13px] text-lg ${tone}`}>{String(label)==="Kids accounts"?"◉":String(label)==="Active accounts"?"✓":String(label)==="Children"?"♙":"⚙"}</span><span className="text-[#B5C3D6]">↗</span></div><p className="mt-5 text-[12px] font-semibold text-[#687890]">{label}</p><p className="mt-1 text-[30px] font-semibold tracking-[-.04em]">{value??"–"}</p><p className="mt-1 text-[11px] text-[#8A97A9]">{detail}</p></div>)}</div>:null}
+    {tab==="accounts"?<div className="mt-5 overflow-hidden rounded-[20px] border border-[#E0E8F2] bg-white shadow-[0_10px_28px_rgba(43,86,138,.06)]"><div className="flex flex-col gap-3 border-b border-[#E9EEF5] bg-[#FBFDFF] p-4 tablet:flex-row"><input value={accountSearch} onChange={e=>setAccountSearch(e.target.value)} placeholder="Search name, email or phone" className={`${fieldClass} flex-1`}/><select value={accountType} onChange={e=>setAccountType(e.target.value)} className={fieldClass}><option>All</option><option value="REGISTERED">Registered</option><option value="GUEST">Non-registered</option></select><select value={accountStatus} onChange={e=>setAccountStatus(e.target.value)} className={fieldClass}><option>All</option>{["ACTIVE","PENDING_VERIFICATION","LOCKED","SUSPENDED","DELETION_PENDING","DELETED"].map(value=><option key={value}>{value}</option>)}</select></div><div className="flex flex-wrap items-center gap-2 border-b border-[#EDF1F6] px-4 py-3"><button onClick={()=>setSelectedAccounts(new Set(visibleAccounts.map(item=>item.id)))} className={secondaryButton}>Select all</button><button onClick={()=>setSelectedAccounts(new Set())} className={secondaryButton}>Deselect all</button><button onClick={()=>void exportSelected()} className={secondaryButton}>⇩ Export Excel</button><button onClick={()=>void exportSelected(true)} className={secondaryButton}>⇩ Export PDF</button><button onClick={()=>{const values=visibleAccounts.filter(item=>selectedAccounts.has(item.id));if(!values.length){notify("Select one or more accounts first.");return;}const message=encodeURIComponent("Hello, this is A+ Kids.");window.open(`https://wa.me/${values[0].phone.replace(/\D/g,"")}?text=${message}`,"_blank","noopener,noreferrer");notify(values.length>1?"Opened WhatsApp for the first selected recipient. Bulk queue delivery is available in Message Queue.":"WhatsApp message opened.");}} className="h-9 rounded-[9px] bg-[#18B957] px-3 text-[11px] font-semibold text-white">WhatsApp selected ({selectedAccounts.size})</button></div><div className="divide-y divide-[#EDF1F6]">{visibleAccounts.map(item=><div key={item.id} className="flex flex-col gap-3 p-4 transition hover:bg-[#F8FBFF] tablet:flex-row tablet:items-center tablet:justify-between"><div className="flex items-center gap-3"><input type="checkbox" checked={selectedAccounts.has(item.id)} onChange={()=>setSelectedAccounts(current=>{const next=new Set(current);if(next.has(item.id))next.delete(item.id);else next.add(item.id);return next;})} className="size-4 accent-[#1689F7]"/><span className="grid size-9 place-items-center rounded-full bg-[#EAF4FF] text-[12px] font-bold text-[#1C80EE]">{item.name.slice(0,2).toUpperCase()}</span><div><p className="text-[13px] font-semibold">{item.name} <span className={`ml-1 rounded-full px-2 py-0.5 text-[9px] font-bold ${item.accountType==="GUEST"?"bg-amber-50 text-amber-700":"bg-blue-50 text-blue-700"}`}>{item.accountType==="GUEST"?"NON-REGISTERED":"REGISTERED"}</span></p><p className="mt-1 text-[11px] text-[#75839A]">{item.email||"No email"} · {item.phone} · {item.children} record{item.children===1?"":"s"}</p></div></div><div className="flex items-center gap-2"><StatusBadge label={item.status}/>{item.status==="DELETED"||item.status==="DELETED_GUEST"?<button onClick={()=>void restoreAccount(item)} className={secondaryButton}>Restore</button>:<><button onClick={()=>openAccountEditor(item)} className={secondaryButton}>Edit</button><button onClick={()=>setDeleteDialog(item)} className="h-9 rounded-[9px] border border-red-200 bg-red-50 px-3 text-[11px] font-semibold text-red-600">Delete</button></>}</div></div>)}{visibleAccounts.length===0?<p className="p-6 text-center text-[12px] text-[#7A879A]">No accounts match these filters.</p>:null}</div></div>:null}
+    {tab==="admins"&&isSuperAdmin?<div className="mt-5 rounded-[18px] border border-[#E0E7EF] bg-white p-5"><h3 className="text-[16px] font-semibold">Administrator access</h3><p className="mt-1 text-[12px] text-[#7A879A]">Super Admins control credentials, admin roles and the audit trail. Admins have operational access only.</p><div className="mt-4 divide-y divide-[#EDF1F6]">{administrators.map(item=><div key={item.id} className="flex items-center justify-between gap-4 py-4"><div><p className="text-[13px] font-semibold">{item.name}</p><p className="mt-1 text-[11px] text-[#75839A]">{item.email}</p></div><button onClick={()=>void changeRole(item)} className={secondaryButton}>{item.role==="SUPER_ADMIN"?"Super Admin":"Admin"}</button></div>)}</div></div>:null}
+    {tab==="whatsapp"&&isSuperAdmin?<div className="mt-5 grid gap-5 desktop:grid-cols-[1.2fr_.8fr]">
       <div className="rounded-[18px] border border-[#E0E7EF] bg-white p-5">
         <div className="flex items-center gap-3"><WhatsAppIcon/><div><h3 className="text-[17px] font-semibold">WhatsApp Cloud API</h3><p className="text-[11px] text-[#7A879A]">Credentials are encrypted by the backend. The token is never returned to this page.</p></div></div>
         <div className="mt-5 grid gap-4 tablet:grid-cols-2">
@@ -5624,11 +5691,17 @@ export function AccountManagementWorkspace({notify}:{notify:(message:string)=>vo
       </div>
       <div className="rounded-[18px] border border-[#E0E7EF] bg-white p-5">
         <h3 className="text-[17px] font-semibold">Test message delivery</h3><p className="mt-1 text-[11px] text-[#7A879A]">Sends one connection-test message through the saved Meta sender.</p>
+        <button onClick={()=>void testConnection()} disabled={testingConnection||!config?.tokenConfigured} className={`${secondaryButton} mt-4 w-full disabled:opacity-40`}>{testingConnection?"Checking Meta connection…":"Test Meta connection"}</button>
+        {connection?<div className={`mt-3 rounded-[12px] border p-3 text-[11px] ${connection.success?"border-emerald-200 bg-emerald-50":"border-red-200 bg-red-50"}`}><p className="font-semibold">{connection.message}</p>{connection.solutions.map(solution=><p key={solution} className="mt-1 text-[#65748A]">• {solution}</p>)}</div>:null}
         <label className="mt-5 block text-[11px] font-semibold text-[#526178]">Recipient number<input value={testPhone} onChange={e=>setTestPhone(e.target.value)} className={`${fieldClass} mt-1`} placeholder="07XXXXXXXX"/></label>
         <button onClick={()=>void test()} disabled={testing||!config?.tokenConfigured||!testPhone} className="mt-3 h-10 w-full rounded-[10px] bg-[#20B15A] text-[12px] font-semibold text-white disabled:opacity-40">{testing?"Sending…":"Send test WhatsApp message"}</button>
         <div className={`mt-5 rounded-[13px] border p-4 ${config?.lastTestStatus==="SUCCESS"?"border-emerald-200 bg-emerald-50":config?.lastTestStatus==="FAILED"?"border-red-200 bg-red-50":"border-[#E0E7EF] bg-[#F8FAFC]"}`}><p className="text-[11px] font-semibold uppercase text-[#7A879A]">Latest delivery status</p><p className="mt-2 text-[13px] font-semibold">{config?.lastTestStatus||"Not tested"}</p><p className="mt-1 text-[11px] text-[#66758B]">{config?.lastTestMessage||"Save the account, then send a test."}</p>{config?.lastTestedAt?<p className="mt-2 text-[10px] text-[#8490A2]">{new Date(config.lastTestedAt).toLocaleString()}</p>:null}</div>
       </div>
-    </div>
+    </div>:null}
+    {tab==="templates"&&isSuperAdmin?<div className="mt-5 rounded-[18px] border border-[#E0E7EF] bg-white p-5"><h3 className="text-[16px] font-semibold">WhatsApp template management</h3><p className="mt-1 max-w-2xl text-[12px] leading-5 text-[#7A879A]">Templates are used by the message queue after Meta approves them. The next implementation slice will add template sync, approval state, language variants and variable previews here—without exposing Meta credentials to Admins.</p><div className="mt-4 grid gap-3 tablet:grid-cols-3">{["Reminder episode","Submission received","ZIP ready"].map(name=><div key={name} className="rounded-[13px] border border-[#E3EAF3] bg-[#FAFCFF] p-4"><p className="text-[12px] font-semibold">{name}</p><p className="mt-1 text-[11px] text-[#78869A]">Meta template · awaiting sync</p></div>)}</div></div>:null}
+    {tab==="history"&&isSuperAdmin?<div className="mt-5 rounded-[18px] border border-[#E0E7EF] bg-white p-5"><h3 className="text-[16px] font-semibold">Admin history</h3><p className="mt-1 text-[12px] text-[#7A879A]">Append-only record of changes made by administrators.</p><div className="mt-4 space-y-3">{history.slice(0,100).map(item=><div key={`${item.createdAt}-${item.action}`} className="border-l-2 border-[#1680F7] pl-4"><p className="text-[12px] font-semibold">{item.action.replaceAll("_"," ")}</p><p className="mt-1 text-[11px] text-[#596A82]">{item.actor} · {item.details}</p><p className="mt-1 text-[10px] text-[#9AA6B7]">{new Date(item.createdAt).toLocaleString()}</p></div>)}{history.length===0?<p className="py-8 text-center text-[12px] text-[#7A879A]">No administrator changes have been recorded yet.</p>:null}</div></div>:null}
+    {editingAccount?<div className="fixed inset-0 z-[140] grid place-items-center bg-[#0D1B33]/35 p-4"><div className="w-full max-w-lg rounded-[20px] bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><h3 className="text-[18px] font-semibold">Edit Kids account</h3><p className="mt-1 text-[12px] text-[#718097]">Changes are saved to the account and Admin history.</p></div><button onClick={()=>setEditingAccount(null)} className="text-lg text-[#6C7A90]">×</button></div><div className="mt-5 grid gap-4"><label className="text-[11px] font-semibold text-[#526178]">Parent or guardian name<input value={accountDraft.accountHolderName} onChange={e=>setAccountDraft({...accountDraft,accountHolderName:e.target.value})} className={`${fieldClass} mt-1`}/></label><label className="text-[11px] font-semibold text-[#526178]">Email address<input value={accountDraft.email} onChange={e=>setAccountDraft({...accountDraft,email:e.target.value})} className={`${fieldClass} mt-1`}/></label><label className="text-[11px] font-semibold text-[#526178]">Phone number<input value={accountDraft.phoneE164} onChange={e=>setAccountDraft({...accountDraft,phoneE164:e.target.value})} className={`${fieldClass} mt-1`}/></label><label className="text-[11px] font-semibold text-[#526178]">Account status<select value={accountDraft.status} onChange={e=>setAccountDraft({...accountDraft,status:e.target.value})} className={`${fieldClass} mt-1`}><option>ACTIVE</option><option>PENDING_VERIFICATION</option><option>LOCKED</option><option>SUSPENDED</option><option>DELETION_PENDING</option></select></label></div><div className="mt-6 flex justify-end gap-3"><button onClick={()=>setEditingAccount(null)} className={secondaryButton}>Cancel</button><button onClick={()=>void saveAccount()} disabled={savingAccount||!accountDraft.accountHolderName||!accountDraft.email||!accountDraft.phoneE164} className={`${primaryButton} disabled:opacity-40`}>{savingAccount?"Saving…":"Save changes"}</button></div></div></div>:null}
+    {deleteDialog?<div className="fixed inset-0 z-[145] grid place-items-center bg-[#0D1B33]/35 p-4"><div className="w-full max-w-md rounded-[20px] bg-white p-6 shadow-2xl"><h3 className="text-[18px] font-semibold text-red-700">Delete account?</h3><p className="mt-2 text-[12px] leading-5 text-[#687890]">{deleteDialog.name} will lose access. Their account is retained securely and can be restored later; no child data is permanently erased.</p><label className="mt-4 block text-[11px] font-semibold text-[#526178]">Reason for this action<textarea value={deleteReason} onChange={e=>setDeleteReason(e.target.value)} className={`${fieldClass} mt-1 min-h-20`} placeholder="Required for the admin history"/></label><div className="mt-6 flex justify-end gap-3"><button onClick={()=>{setDeleteDialog(null);setDeleteReason("");}} className={secondaryButton}>Cancel</button><button onClick={()=>void deleteAccount()} disabled={!deleteReason.trim()} className="h-10 rounded-[10px] bg-red-600 px-4 text-[12px] font-semibold text-white disabled:opacity-40">Delete safely</button></div></div></div>:null}
   </section>;
 }
 
@@ -5636,9 +5709,10 @@ export function AccountManagementAdminPage() {
   const [notice,setNotice]=useState("");
   function notify(message:string){setNotice(message);window.setTimeout(()=>setNotice(""),4000);}
   return <>
-    <header><p className="text-[13px] font-medium text-[#2488F4]">System management</p><h1 className="mt-1 text-[30px] font-semibold tracking-[-.03em] tablet:text-[38px]">Account &amp; Management</h1><p className="mt-2 max-w-2xl text-[14px] leading-6 text-[#6E7C91]">Manage external service accounts, credentials and delivery tests.</p></header>
-    <div className="mt-7"><AccountManagementWorkspace notify={notify}/></div>
+    <header className="relative overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_92%_75%,rgba(220,239,255,.78)_0_2px,transparent_3px),linear-gradient(135deg,#fff_0%,#f5faff_100%)] px-6 py-8 shadow-[0_10px_28px_rgba(43,86,138,.05)] tablet:px-8 tablet:py-10"><i className="pointer-events-none absolute left-[2%] top-[44%] text-2xl text-violet-100">✦</i><i className="pointer-events-none absolute left-[57%] top-10 text-3xl text-[#C7D2FE]">◆</i><i className="pointer-events-none absolute left-[67%] top-[58%] text-3xl text-[#F7DFA4]">✦</i><i className="pointer-events-none absolute right-[34%] top-9 size-3 rounded-full bg-[#FFC2C7]"/><div className="relative z-10 flex flex-col gap-5 tablet:flex-row tablet:items-end tablet:justify-between"><div><p className="text-[13px] font-medium text-[#2488F4]">Page manager</p><h1 className="mt-1 text-[32px] font-semibold tracking-[-.04em] text-[#132447] tablet:text-[44px]">Account Management <span className="text-[#FFB300]">✦</span></h1><p className="mt-2 max-w-2xl text-[14px] leading-6 text-[#6E7C91]">Manage family accounts, administrator access, WhatsApp services and a complete record of changes.</p></div><div className="flex gap-3"><div className="rounded-[12px] border border-[#DDE8F5] bg-white/90 px-4 py-3 text-[12px] font-semibold text-[#40516B] shadow-sm">🔒 Protected controls</div></div></div></header>
+    <div className="mt-6"><AccountManagementWorkspace notify={notify}/></div>
     {notice?<div className="fixed bottom-5 right-5 z-[130] max-w-md rounded-[12px] bg-[#17243D] px-4 py-3 text-[12px] font-semibold text-white shadow-xl">{notice}</div>:null}
+    <KidsChampLoadingScreen />
   </>;
 }
 
@@ -5984,6 +6058,7 @@ export default function KidsChampAdmin() {
         </button>
       ) : null}
       {messageQueueOpen ? <WhatsAppQueueModal onClose={() => setMessageQueueOpen(false)} notify={notify} /> : null}
+      <KidsChampLoadingScreen />
     </>
   );
 }

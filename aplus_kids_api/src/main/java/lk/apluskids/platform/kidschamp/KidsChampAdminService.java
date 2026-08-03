@@ -52,15 +52,27 @@ public class KidsChampAdminService {
         if(dateFrom!=null){Instant from=dateFrom.atStartOfDay(ZoneId.of("Asia/Colombo")).toInstant();filter=filter.and((root,query,builder)->builder.greaterThanOrEqualTo(root.get("submittedAt"),from));}
         if(dateTo!=null){Instant until=dateTo.plusDays(1).atStartOfDay(ZoneId.of("Asia/Colombo")).toInstant();filter=filter.and((root,query,builder)->builder.lessThan(root.get("submittedAt"),until));}
         if("Approved".equalsIgnoreCase(approval))filter=filter.and((root,query,builder)->builder.equal(root.get("reviewStatus"),ReviewStatus.APPROVED));
+        else if("Waiting".equalsIgnoreCase(approval))filter=filter.and((root,query,builder)->builder.or(builder.equal(root.get("reviewStatus"),ReviewStatus.SUBMITTED),builder.equal(root.get("reviewStatus"),ReviewStatus.UNDER_REVIEW)));
         else if("Not approved".equalsIgnoreCase(approval))filter=filter.and((root,query,builder)->builder.notEqual(root.get("reviewStatus"),ReviewStatus.APPROVED));
         var result=submissions.findAll(filter,org.springframework.data.domain.PageRequest.of(page,size,org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC,"submittedAt")));
         return new SubmissionPageResponse(result.getContent().stream().map(KidsChampAdminSubmissionResponse::from).toList(),result.getNumber(),result.getSize(),result.getTotalElements(),result.getTotalPages());
     }
 
     @Transactional(readOnly=true)
-    public List<GuestResponse> guests(){return guests.findAllByOrderByLastSubmittedAtDesc().stream().map(g->new GuestResponse(
+    public List<GuestResponse> guests(){return guests.findAllByOrderByLastSubmittedAtDesc().stream().filter(g->g.getDeletedAt()==null).map(g->new GuestResponse(
         g.getPublicId(),g.getParentName(),g.getPhoneE164(),g.getEmail(),g.getCountryCode(),g.getProvince(),
         g.getHometown(),g.getSubmissionCount(),g.getFirstSubmittedAt(),g.getLastSubmittedAt())).toList();}
+
+    @Transactional public GuestResponse updateGuest(UUID actorId,UUID id,String name,String email,String phone){
+        KidsChampGuestContactEntity guest=guests.findByPublicId(id).orElseThrow(()->bad("GUEST_NOT_FOUND","Guest account was not found."));
+        if(guest.getDeletedAt()!=null) throw bad("GUEST_DELETED","Restore this guest account before editing it.");
+        String before=guest.getParentName()+" | "+guest.getEmail()+" | "+guest.getPhoneE164();
+        if(name!=null&&!name.isBlank())guest.setParentName(name.trim());if(email!=null&&!email.isBlank())guest.setEmail(email.trim().toLowerCase(Locale.ROOT));if(phone!=null&&!phone.isBlank())guest.setPhoneE164(phone.trim());
+        audit(user(actorId),"GUEST_ACCOUNT_UPDATED","GUEST",id,"Before: "+before+". After: "+guest.getParentName()+" | "+guest.getEmail()+" | "+guest.getPhoneE164());return guestResponse(guest);
+    }
+    @Transactional public GuestResponse deleteGuest(UUID actorId,UUID id,String reason){KidsChampGuestContactEntity guest=guests.findByPublicId(id).orElseThrow(()->bad("GUEST_NOT_FOUND","Guest account was not found."));guest.setDeletedAt(Instant.now());audit(user(actorId),"GUEST_ACCOUNT_SOFT_DELETED","GUEST",id,"Deleted "+guest.getParentName()+". Reason: "+(reason==null?"No reason provided.":reason));return guestResponse(guest);}
+    @Transactional public GuestResponse restoreGuest(UUID actorId,UUID id){KidsChampGuestContactEntity guest=guests.findByPublicId(id).orElseThrow(()->bad("GUEST_NOT_FOUND","Guest account was not found."));guest.setDeletedAt(null);audit(user(actorId),"GUEST_ACCOUNT_RESTORED","GUEST",id,"Restored "+guest.getParentName());return guestResponse(guest);}
+    private GuestResponse guestResponse(KidsChampGuestContactEntity g){return new GuestResponse(g.getPublicId(),g.getParentName(),g.getPhoneE164(),g.getEmail(),g.getCountryCode(),g.getProvince(),g.getHometown(),g.getSubmissionCount(),g.getFirstSubmittedAt(),g.getLastSubmittedAt());}
 
     @Transactional(readOnly=true)
     public List<DuplicateGuestResponse> duplicateGuests(){
@@ -231,6 +243,12 @@ public class KidsChampAdminService {
     public List<ActivityResponse> activity(){return audits.findTop500ByOrderByCreatedAtDesc().stream().map(a->new ActivityResponse(
         a.getAction(),a.getEntityType(),a.getEntityPublicId(),a.getDetails(),a.getActor()==null?"System":a.getActor().getAccountHolderName(),a.getCreatedAt())).toList();}
 
+    /** Append-only audit entry for administrator-management actions. */
+    @Transactional
+    public void auditAdministratorAction(UUID actorId,String action,String entityType,UUID entityId,String details){
+        audit(user(actorId),action,entityType,entityId,details);
+    }
+
     @Transactional(readOnly=true)
     public List<GrowthResponse> growth(){
         ZoneId zone=ZoneId.of("Asia/Colombo");LocalDate today=LocalDate.now(zone);List<KidsChampSubmissionEntity> all=submissions.findAllByDeletedAtIsNullOrderBySubmittedAtDesc();
@@ -317,7 +335,7 @@ public class KidsChampAdminService {
     }
 
     private void ensureActiveZipTarget(KidsChampSettingsEntity entity){
-        if(entity.getActiveZipTargetSize()==null&&!submissions.findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullOrderBySubmittedAtAsc(ReviewStatus.APPROVED,PageRequest.of(0,1)).isEmpty())
+        if(entity.getActiveZipTargetSize()==null&&!submissions.findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullOrderBySubmittedAtAsc(ReviewStatus.APPROVED,PageRequest.of(0,200)).stream().filter(item->item.getStoredFilename()!=null).toList().isEmpty())
             entity.startActiveZip(entity.getZipBatchSize());
     }
 
@@ -326,10 +344,10 @@ public class KidsChampAdminService {
         ensureActiveZipTarget(entity);
         while(entity.getActiveZipTargetSize()!=null){
             int target=entity.getActiveZipTargetSize();
-            List<KidsChampSubmissionEntity> ready=submissions.findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullOrderBySubmittedAtAsc(ReviewStatus.APPROVED,PageRequest.of(0,target));
+            List<KidsChampSubmissionEntity> ready=submissions.findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullOrderBySubmittedAtAsc(ReviewStatus.APPROVED,PageRequest.of(0,Math.max(target*4,200))).stream().filter(item->item.getStoredFilename()!=null).limit(target).toList();
             if(ready.size()<target) return;
             buildBatch(actor,ready);entity.completeActiveZip();
-            List<KidsChampSubmissionEntity> remaining=submissions.findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullOrderBySubmittedAtAsc(ReviewStatus.APPROVED,PageRequest.of(0,1));
+            List<KidsChampSubmissionEntity> remaining=submissions.findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullOrderBySubmittedAtAsc(ReviewStatus.APPROVED,PageRequest.of(0,200)).stream().filter(item->item.getStoredFilename()!=null).toList();
             if(!remaining.isEmpty()) entity.startActiveZip(entity.getZipBatchSize());
         }
     }
@@ -422,8 +440,8 @@ public class KidsChampAdminService {
             int index=1;
             for(KidsChampSubmissionEntity item:items){
                 String ext=item.getMediaType().equals("image/png")?".png":".jpg";
-                String photoName=String.format("%03d_%s_%s_Age-%d_%s%s",index++,safeZipPart(item.getChildName()),
-                    safeZipPart(item.getHometown()),item.getAgeAtSubmission(),safeZipPart(item.getTrackingCode()),ext);
+                String photoName=String.format("%03d_%s_%d_%s%s",index++,safeZipPart(item.getChildName()),
+                    item.getAgeAtSubmission(),safeZipPart(item.getHometown()),ext);
                 zip.putNextEntry(new ZipEntry(photoName));
                 Files.copy(storage.photo(item.getStoredFilename()),zip);zip.closeEntry();
                 csv.append(csv(item.getTrackingCode())).append(',').append(csv(item.getChildName())).append(',')

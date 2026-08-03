@@ -31,6 +31,7 @@ public record KidsChampAdminSubmissionResponse(
     Instant submittedAt,
     boolean previewed,
     boolean photoAvailable,
+    UUID batchId,
     String originalFilename,
     String mediaType,
     long fileSize
@@ -49,6 +50,7 @@ public record KidsChampAdminSubmissionResponse(
             item.getAssignedReviewer() == null ? "Unassigned" : item.getAssignedReviewer().getAccountHolderName(),
             item.getInternalNote(),
             item.getReviewedAt(), item.getSubmittedAt(), item.getPreviewedAt() != null, item.getStoredFilename() != null,
+            batch == null ? null : batch.getPublicId(),
             item.getOriginalFilename(), item.getMediaType(), item.getFileSize()
         );
     }
