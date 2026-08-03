@@ -8,6 +8,10 @@ export default function PublishAllButton() {
 
   function publishAll() {
     publishAdminKeys([
+      { draft: "aplus-admin-home-hero", published: "aplus-published-home-hero" },
+      { draft: "aplus-admin-home-shortcuts", published: "aplus-published-home-shortcuts" },
+      { draft: "aplus-admin-home-live", published: "aplus-published-home-live" },
+      { draft: "aplus-admin-home-events", published: "aplus-published-home-events" },
       { draft: "aplus-admin-watch-categories", published: "aplus-published-watch-categories" },
       { draft: "aplus-admin-watch-videos", published: "aplus-published-watch-videos" },
       { draft: "aplus-admin-watch-copy", published: "aplus-published-watch-copy" },

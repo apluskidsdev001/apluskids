@@ -25,6 +25,8 @@
 html,
 body {
   background: var(--background);
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 body {
@@ -146,5 +148,92 @@ body {
     filter: none;
     transform: none;
     transition: none;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  [data-focus-strip] {
+    isolation: isolate;
+    margin-block: -1rem;
+    overflow-y: clip;
+    padding-block: 1rem;
+  }
+
+  [data-focus-strip] [data-focus-item] {
+    position: relative;
+    z-index: 1;
+    scale: 1;
+    opacity: 1;
+    transition:
+      scale 360ms cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 280ms ease;
+  }
+
+  [data-focus-strip]:has([data-focus-item]:hover) [data-focus-item] {
+    scale: 0.78;
+    opacity: 0.66;
+  }
+
+  [data-focus-strip]:has([data-focus-item]:hover) [data-focus-item]:hover {
+    z-index: 5;
+    scale: 1.16;
+    opacity: 1;
+  }
+
+  [data-focus-strip]:has([data-focus-item]:hover)
+    [data-focus-item]:has(+ [data-focus-item]:hover),
+  [data-focus-strip]:has([data-focus-item]:hover)
+    [data-focus-item]:hover + [data-focus-item] {
+    z-index: 4;
+    scale: 1;
+    opacity: 0.92;
+  }
+
+  [data-focus-strip]:has([data-focus-item]:hover)
+    [data-focus-item]:has(+ [data-focus-item] + [data-focus-item]:hover),
+  [data-focus-strip]:has([data-focus-item]:hover)
+    [data-focus-item]:hover + [data-focus-item] + [data-focus-item] {
+    z-index: 3;
+    scale: 0.88;
+    opacity: 0.78;
+  }
+
+  [data-focus-list] [data-focus-row] {
+    position: relative;
+    z-index: 1;
+    scale: 1;
+    opacity: 1;
+    transition:
+      scale 340ms cubic-bezier(0.16, 1, 0.3, 1),
+      opacity 260ms ease;
+  }
+
+  [data-focus-list]:has([data-focus-row]:hover) [data-focus-row] {
+    scale: 0.82;
+    opacity: 0.64;
+  }
+
+  [data-focus-list]:has([data-focus-row]:hover) [data-focus-row]:hover {
+    z-index: 5;
+    scale: 1.08;
+    opacity: 1;
+  }
+
+  [data-focus-list]:has([data-focus-row]:hover)
+    [data-focus-row]:has(+ [data-focus-row]:hover),
+  [data-focus-list]:has([data-focus-row]:hover)
+    [data-focus-row]:hover + [data-focus-row] {
+    z-index: 4;
+    scale: 0.96;
+    opacity: 0.9;
+  }
+
+  [data-focus-list]:has([data-focus-row]:hover)
+    [data-focus-row]:has(+ [data-focus-row] + [data-focus-row]:hover),
+  [data-focus-list]:has([data-focus-row]:hover)
+    [data-focus-row]:hover + [data-focus-row] + [data-focus-row] {
+    z-index: 3;
+    scale: 0.88;
+    opacity: 0.76;
   }
 }

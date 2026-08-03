@@ -89,11 +89,13 @@ export default function Categories() {
 
           <div
             ref={sliderRef}
+            data-focus-strip
             className="flex snap-x snap-mandatory gap-3 overflow-x-auto px-[64px] py-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-4 sm:px-[76px] md:gap-5 md:px-[104px]"
           >
             {categoryCards.map((card, index) => (
               <div
                 key={card.id}
+                data-focus-item
                 className={`relative h-[110px] min-w-[150px] snap-start overflow-hidden rounded-[24px] bg-[linear-gradient(180deg,#d8d8d8_0%,#d2d2d2_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.4)] transition-all duration-700 ease-out sm:h-[124px] sm:min-w-[180px] sm:rounded-[26px] md:h-[146px] md:min-w-[220px] md:rounded-[30px] ${
                   isVisible ? "translate-y-0 opacity-100" : "translate-y-14 opacity-0"
                 }`}

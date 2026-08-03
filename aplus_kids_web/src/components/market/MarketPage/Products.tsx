@@ -177,6 +177,7 @@ function ProductCard({
 }) {
   return (
     <div
+      data-focus-item={compact ? "" : undefined}
       role="button"
       tabIndex={0}
       onClick={() => onSelect(product)}
@@ -342,6 +343,7 @@ export default function Products() {
 
             <div
               ref={trendingSliderRef}
+              data-focus-strip
               className="flex gap-4 overflow-x-auto px-1 pt-3 pb-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:gap-5"
             >
               {trendingProducts.map((product, index) => (

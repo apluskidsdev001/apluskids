@@ -7,6 +7,7 @@ import { apiFetch } from "@/utils/auth";
 
 const navItems = [
   { href: "/admin", label: "Dashboard", icon: "⌂" },
+  { href: "/admin/home", label: "Home Page", icon: "H" },
   { href: "/admin/watch", label: "Watch Page", icon: "▶" },
   { href: "/admin/kids-zone", label: "Kids Zone", icon: "★" },
   { href: "/admin/kids-champ", label: "Kids Champ", icon: "KC" },

@@ -30,9 +30,99 @@ export type ScheduleEntry = {
   id: string;
   time: string;
   title: string;
+  youtubeUrl?: string;
 };
 
 export type WeeklySchedule = Record<ScheduleDayName, ScheduleEntry[]>;
+
+export type HomeHeroContent = {
+  titleLineOne: string;
+  titleLineTwo: string;
+  titleLineThree: string;
+  description: string;
+  videoUrl: string;
+  primaryLabel: string;
+  primaryUrl: string;
+  secondaryLabel: string;
+  secondaryUrl: string;
+};
+
+export type HomeShortcut = {
+  id: string;
+  label: string;
+  description?: string;
+  href: string;
+  icon: string;
+  active: boolean;
+};
+
+export type HomeLiveCard = {
+  title: string;
+  badge: string;
+  nowLabel: string;
+  programName: string;
+  description?: string;
+  buttonLabel: string;
+  linkUrl: string;
+  videoUrl: string;
+  channelLabel: string;
+};
+
+export type HomeSpecialEvent = {
+  id: string;
+  name: string;
+  date: string;
+  place: string;
+  youtubeUrl: string;
+  description: string;
+  guests: string[];
+  contact: string;
+  active: boolean;
+};
+
+export const defaultHomeHero: HomeHeroContent = {
+  titleLineOne: "Where Little",
+  titleLineTwo: "Minds Learn,",
+  titleLineThree: "Laugh & Grow!",
+  description: "Sri Lanka's First 24/7 Kids TV Channel with safe, fun, and educational entertainment for every child.",
+  videoUrl: "/videos/home/hero_video.mp4",
+  primaryLabel: "Watch Now",
+  primaryUrl: "/watch",
+  secondaryLabel: "Explore Shows",
+  secondaryUrl: "/watch",
+};
+
+export const defaultHomeShortcuts: HomeShortcut[] = [
+  { id: "birthdays", label: "Birthdays", description: "Celebrate special birthday moments with A Plus Kids.", href: "/birthdays", icon: "/images/home/birthday pic.png", active: true },
+  { id: "kids-champ", label: "Kids Champ", description: "Discover creative challenges, activities and young talent.", href: "/kids-zone", icon: "/images/home/kids_champ.png", active: true },
+];
+
+export const defaultHomeLiveCard: HomeLiveCard = {
+  title: "Watch Live",
+  badge: "Live",
+  nowLabel: "Now Playing",
+  programName: "Kids Champ",
+  description: "Watch safe, fun and educational programs live throughout the day.",
+  buttonLabel: "Watch Live Now",
+  linkUrl: "/watch",
+  videoUrl: "/videos/home/hero_video.mp4",
+  channelLabel: "Dialog TV Channel 48",
+};
+
+export const defaultHomeSpecialEvents: HomeSpecialEvent[] = [
+  { id: "radio-day", name: "A plus Radio", date: "25 Jun 2026", place: "Badulla", youtubeUrl: "https://www.youtube.com/watch?v=AwJR-7lrHWE", description: "A live family radio event with games, music, kids interviews, prize moments, and safe entertainment for young viewers.", guests: ["A Plus presenters", "Kids singers", "Parent guests"], contact: "+94 77 123 4567", active: true },
+  { id: "kids-fiesta", name: "Kids Fiesta", date: "28 Jun 2026", place: "Colombo", youtubeUrl: "https://www.youtube.com/watch?v=XqZsoesa55w", description: "A colorful kids festival with stage activities, learning corners, character meetups, and family-friendly performances.", guests: ["Dance teams", "Story hosts", "A Plus mascots"], contact: "+94 77 234 5678", active: true },
+  { id: "talent-show", name: "Talent Show", date: "05 Jul 2026", place: "Kandy", youtubeUrl: "https://www.youtube.com/watch?v=BELlZKpi1Zs", description: "A showcase for young singers, dancers, speakers, and creative performers from around the island.", guests: ["Junior performers", "Guest judges", "Music coaches"], contact: "+94 77 345 6789", active: true },
+];
+
+const scheduleVideoUrls: Record<string, string> = {
+  "Rhyme Doo": "https://www.youtube.com/watch?v=XKCPXEZ0f4s",
+  "A Plus Radio": "https://www.youtube.com/watch?v=AwJR-7lrHWE",
+  "Ekomath Eka Kaleka": "https://www.youtube.com/watch?v=1Dwrdl9NNxk",
+  "Chat with LM": "https://www.youtube.com/watch?v=5i4i9MkCiTA",
+  "Kids Champ": "https://www.youtube.com/watch?v=BwoIa0v9Yts",
+  "DP - Art": "https://www.youtube.com/watch?v=3r-zyu7UJss",
+};
 
 const defaultScheduleRows: ScheduleEntry[] = [
   ["06.00", "Rhyme Doo"], ["07.00", "A Plus Kids House"], ["07.30", "Plus Toon"],
@@ -43,7 +133,12 @@ const defaultScheduleRows: ScheduleEntry[] = [
   ["16.00", "Uncle Toy"], ["16.30", "O2"], ["17.00", "A Plus Radio"], ["17.30", "Rhyme Doo"],
   ["18.30", "A Plus Kids House"], ["19.00", "Kids Champ"], ["19.30", "O2"],
   ["20.00", "Chat with LM"], ["21.00", "A Plus Radio"], ["22.30", "DP - Art"], ["23.00", "Uncle Toy"],
-].map(([time, title], index) => ({ id: `slot-${index + 1}`, time, title }));
+].map(([time, title], index) => ({
+  id: `slot-${index + 1}`,
+  time,
+  title,
+  youtubeUrl: scheduleVideoUrls[title],
+}));
 
 export const scheduleDayNames: ScheduleDayName[] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 

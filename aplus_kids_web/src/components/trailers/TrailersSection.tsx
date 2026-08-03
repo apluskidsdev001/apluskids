@@ -3,45 +3,86 @@
 import Link from "next/link";
 import type { CSSProperties } from "react";
 import { useRef, useState } from "react";
+import type { AdminVideo } from "@/components/admin/adminData";
+import { useAdminDisplayContent } from "@/components/admin/useAdminStorage";
 import TrailerCard from "./TrailerCard";
 import TrailerPopup from "./TrailerPopup";
 
-const trailers = [
+type HomeTrailer = {
+  id: string;
+  title: string;
+  youtubeUrl: string;
+  type: "Trailer" | "Short";
+  category: string;
+};
+
+const fallbackTrailers: HomeTrailer[] = [
   {
     id: "baby-shark",
     title: "Kids Champ",
     youtubeUrl: "https://www.youtube.com/watch?v=XqZsoesa55w",
+    type: "Trailer",
+    category: "TV Programs",
   },
   {
     id: "bluey-sample",
     title: "Fun Time",
     youtubeUrl: "https://www.youtube.com/watch?v=BELlZKpi1Zs",
+    type: "Trailer",
+    category: "TV Programs",
   },
   {
     id: "peppa-sample",
     title: "Story Time",
     youtubeUrl: "https://www.youtube.com/watch?v=F4tHL8reNCs",
+    type: "Trailer",
+    category: "Stories",
   },
   {
     id: "learning-sample",
     title: "Learning Hour",
     youtubeUrl: "https://www.youtube.com/watch?v=e_04ZrNroTo",
+    type: "Trailer",
+    category: "Education",
   },
   {
     id: "music-sample",
     title: "Sing Along",
     youtubeUrl: "https://www.youtube.com/watch?v=XqZsoesa55w",
+    type: "Short",
+    category: "Songs & Rhymes",
   },
   {
     id: "adventure-sample",
     title: "Adventure Club",
     youtubeUrl: "https://www.youtube.com/watch?v=BELlZKpi1Zs",
+    type: "Trailer",
+    category: "TV Programs",
   },
 ];
 
 export default function TrailersSection() {
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const [activeTrailer, setActiveTrailer] = useState<(typeof trailers)[number]>();
+  const [activeTrailer, setActiveTrailer] = useState<HomeTrailer>();
+  const managedVideos = useAdminDisplayContent<AdminVideo[]>(
+    "aplus-admin-watch-videos",
+    "aplus-published-watch-videos",
+    [],
+  );
+  const trailers: HomeTrailer[] = managedVideos.length
+    ? managedVideos
+        .filter(
+          (video): video is AdminVideo & { type: "Trailer" | "Short" } =>
+            video.active && video.type !== "Program",
+        )
+        .map((video) => ({
+          id: video.id,
+          title: video.title,
+          youtubeUrl: video.youtubeUrl,
+          type: video.type,
+          category: video.category,
+        }))
+    : fallbackTrailers;
 
   function scrollByCards(direction: "left" | "right") {
     scrollerRef.current?.scrollBy({
@@ -58,7 +99,7 @@ export default function TrailersSection() {
             <span className="md:hidden">Top Picks For You</span>
             <span className="hidden md:inline">Trailers</span>
           </h2>
-          <Link href="/watch" className="text-[13px] font-bold text-[#0077ff] md:text-[16px]">
+          <Link href="/watch#watch-trailers" className="text-[13px] font-bold text-[#0077ff] md:text-[16px]">
             View All
           </Link>
         </div>
@@ -74,11 +115,13 @@ export default function TrailersSection() {
           </button>
           <div
             ref={scrollerRef}
-            className="flex snap-x gap-3 overflow-x-auto scroll-smooth pb-4 [scrollbar-width:none] md:gap-12 [&::-webkit-scrollbar]:hidden"
+            data-focus-strip
+            className="flex snap-x gap-3 overflow-x-auto overflow-y-hidden scroll-smooth pb-4 [scrollbar-width:none] md:gap-12 [&::-webkit-scrollbar]:hidden"
           >
             {trailers.map((trailer, index) => (
               <div
                 key={trailer.id}
+                data-focus-item
                 data-scroll-reveal="pop"
                 style={{ "--reveal-delay": `${index * 60}ms` } as CSSProperties}
                 className="snap-start"
@@ -86,6 +129,8 @@ export default function TrailersSection() {
                 <TrailerCard
                   title={trailer.title}
                   youtubeUrl={trailer.youtubeUrl}
+                  type={trailer.type}
+                  category={trailer.category}
                   onClick={() => setActiveTrailer(trailer)}
                 />
               </div>

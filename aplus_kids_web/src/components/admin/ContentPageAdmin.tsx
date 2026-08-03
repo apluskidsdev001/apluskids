@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ContentItem } from "./adminData";
 import { makeAdminId, publishAdminKeys, useAdminStorage } from "./useAdminStorage";
 
@@ -32,10 +32,44 @@ export default function ContentPageAdmin({
   const [form, setForm] = useState(emptyItem);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+  const [undoState, setUndoState] = useState<ContentItem[] | null>(null);
+  const previousStateRef = useRef<ContentItem[] | null>(null);
+  const sessionStateRef = useRef<ContentItem[] | null>(null);
+  const restoringRef = useRef(false);
+
+  useEffect(() => {
+    if (previousStateRef.current && isEditing && !restoringRef.current) setUndoState(previousStateRef.current);
+    previousStateRef.current = store.value;
+  }, [isEditing, store.value]);
+
+  function applyEditorState(state: ContentItem[]) {
+    restoringRef.current = true;
+    previousStateRef.current = state;
+    store.setValue(state);
+    window.setTimeout(() => { restoringRef.current = false; }, 0);
+  }
+
+  function beginEditing() {
+    restoringRef.current = true;
+    sessionStateRef.current = store.value;
+    previousStateRef.current = store.value;
+    setUndoState(null);
+    setIsEditing(true);
+    window.setTimeout(() => { restoringRef.current = false; }, 0);
+  }
 
   function notify(message: string) {
     setNotice(message);
     window.setTimeout(() => setNotice(""), 2200);
+  }
+
+  function publishPage() {
+    publishAdminKeys([{ draft: storageKey, published: publishedKey }]);
+    setUndoState(null);
+    setIsEditing(false);
+    notify(`${pageName} published. Returning to view mode.`);
+    window.setTimeout(() => window.location.reload(), 450);
   }
 
   function saveItem() {
@@ -69,15 +103,18 @@ export default function ContentPageAdmin({
           <h1 className="mt-1 text-[30px] font-semibold tracking-[-0.03em] tablet:text-[38px]">{pageName}</h1>
           <p className="mt-2 max-w-2xl text-[14px] font-normal leading-6 text-[#6E7C91]">{description}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <a href={`${previewUrl}${previewUrl.includes("?") ? "&" : "?"}adminPreview=1`} target="_blank" className="inline-flex h-11 items-center rounded-[12px] border border-[#D7E2EE] bg-white px-5 text-[13px] font-medium">Preview draft ↗</a>
-          <button type="button" onClick={() => notify("Draft saved locally. Public website was not changed.")} className="h-11 rounded-[12px] bg-[#2488F4] px-5 text-[13px] font-medium text-white">Save draft</button>
-          <button type="button" onClick={() => { publishAdminKeys([{ draft: storageKey, published: publishedKey }]); notify(`${pageName} published in this browser.`); }} className="h-11 rounded-[12px] bg-[#238A55] px-5 text-[13px] font-medium text-white">Publish</button>
+          {!isEditing ? <button type="button" onClick={beginEditing} className="h-11 rounded-[12px] bg-[#2488F4] px-5 text-[13px] font-medium text-white">Edit Page</button> : <><button type="button" disabled={!undoState} onClick={() => { if (undoState) { applyEditorState(undoState); setUndoState(null); notify("Last change undone."); } }} className="h-11 rounded-[12px] border border-[#D7E2EE] bg-white px-5 text-[13px] font-medium disabled:opacity-40">Undo</button><button type="button" onClick={() => { if (sessionStateRef.current) applyEditorState(sessionStateRef.current); setUndoState(null); setIsEditing(false); notify("Editing cancelled."); }} className="h-11 rounded-[12px] border border-[#E4C9C9] bg-white px-5 text-[13px] font-medium text-[#B34242]">Cancel Editing</button><button type="button" onClick={() => { setUndoState(null); setIsEditing(false); notify("Draft saved locally. Public website was not changed."); }} className="h-11 rounded-[12px] bg-[#2488F4] px-5 text-[13px] font-medium text-white">Save Draft</button></>}
+          <button type="button" onClick={publishPage} className="h-11 rounded-[12px] bg-[#238A55] px-5 text-[13px] font-medium text-white">Publish</button>
         </div>
       </div>
 
       {notice ? <div role="status" className="fixed right-5 top-20 z-[100] rounded-[12px] bg-[#17243D] px-4 py-3 text-[13px] font-medium text-white shadow-xl">{notice}</div> : null}
 
+      {!isEditing ? <div className="mt-6 rounded-[14px] border border-[#D8E8F7] bg-[#EDF6FF] px-4 py-3 text-[13px] text-[#55708F]">View mode is active. Click <strong>Edit Page</strong> to unlock content controls.</div> : null}
+
+      <fieldset disabled={!isEditing} className={!isEditing ? "opacity-75" : ""}>
       <section className="mt-7 grid gap-6 desktop:grid-cols-[380px_1fr]">
         <div className="h-fit rounded-[20px] border border-[#E0E7EF] bg-white p-5 shadow-sm">
           <h2 className="text-[18px] font-semibold">{editingId ? "Edit content" : "Add content"}</h2>
@@ -114,6 +151,7 @@ export default function ContentPageAdmin({
           </div>
         </div>
       </section>
+      </fieldset>
     </>
   );
 }

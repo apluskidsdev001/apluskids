@@ -2,6 +2,7 @@ type TVScheduleCardProps = {
   name: string;
   timePeriod: string;
   thumbnail?: string;
+  isCurrent?: boolean;
   onClick: () => void;
 };
 
@@ -9,14 +10,24 @@ export default function TVScheduleCard({
   name,
   timePeriod,
   thumbnail,
+  isCurrent = false,
   onClick,
 }: TVScheduleCardProps) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full shrink-0 items-center gap-4 rounded-[16px] bg-white p-4 text-left shadow-[0_10px_24px_rgba(7,27,99,0.1)] transition-transform duration-300 hover:-translate-y-1 md:block md:w-[240px] md:overflow-hidden md:rounded-[22px] md:p-0 md:shadow-[0_16px_34px_rgba(7,27,99,0.12)]"
+      className={`relative flex w-full shrink-0 items-center gap-4 rounded-[16px] border bg-white p-4 text-left transition-transform duration-300 hover:-translate-y-1 md:block md:w-[240px] md:overflow-hidden md:rounded-[22px] md:p-0 ${
+        isCurrent
+          ? "border-[#F04B23] shadow-[0_16px_34px_rgba(240,75,35,0.2)]"
+          : "border-transparent shadow-[0_10px_24px_rgba(7,27,99,0.1)] md:shadow-[0_16px_34px_rgba(7,27,99,0.12)]"
+      }`}
     >
+      {isCurrent ? (
+        <span className="absolute right-3 top-3 z-10 rounded-full bg-[#F04B23] px-2.5 py-1 text-[9px] font-bold uppercase tracking-wide text-white shadow-sm">
+          Now Playing
+        </span>
+      ) : null}
       <div
         className="h-14 w-14 shrink-0 rounded-[14px] bg-[#d8d8d8] md:h-[135px] md:w-auto md:rounded-none md:rounded-b-[22px]"
         style={
