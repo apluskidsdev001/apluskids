@@ -1,2 +1,2 @@
 ALTER TABLE kids_champ_batches
-    ADD COLUMN telecast_completed_at TIMESTAMPTZ;
+    ADD COLUMN IF NOT EXISTS telecast_completed_at TIMESTAMPTZ;
