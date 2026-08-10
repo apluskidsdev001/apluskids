@@ -1,17 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import { apiFetch } from "@/utils/auth";
 import { KidsChampStatusBadge as StatusBadge } from "./KidsChampStatusBadge";
 import { KidsChampWhatsAppIcon as WhatsAppIcon } from "./KidsChampWhatsAppIcon";
 import { KidsChampConfirmationDialog as ConfirmationDialog } from "./KidsChampConfirmationDialog";
+import { WhatsAppConsentControl, WhatsAppMessagingWorkspace, WhatsAppTemplatesPanel } from "./KidsChampWhatsAppMessaging";
 
 function KidsChampLoadingScreen() {
-  const [loading,setLoading]=useState(false);
-  useEffect(()=>{const update=(event:Event)=>setLoading(((event as CustomEvent<{count:number}>).detail?.count||0)>0);window.addEventListener("aplus-api-activity",update);return()=>window.removeEventListener("aplus-api-activity",update);},[]);
-  if(!loading)return null;
-  return <div className="fixed inset-0 z-[300] grid place-items-center bg-[#102044]/20 backdrop-blur-[1px]" role="status" aria-live="polite"><div className="flex items-center gap-3 rounded-[18px] border border-white/70 bg-white px-6 py-5 shadow-2xl"><span className="size-6 animate-spin rounded-full border-[3px] border-[#B8DAFF] border-t-[#1689F7]"/><div><p className="text-[14px] font-semibold text-[#172A4B]">Saving your changes</p><p className="mt-0.5 text-[11px] text-[#708099]">Please wait while the database is updated.</p></div></div></div>;
+  const [loading,setLoading]=useState(false); const [finished,setFinished]=useState<"success"|"error"|null>(null);
+  useEffect(()=>{let timer:number|undefined;const update=(event:Event)=>{const active=((event as CustomEvent<{count:number}>).detail?.count||0)>0;setLoading(active);if(active){if(timer)window.clearTimeout(timer);setFinished(null);}};const complete=(event:Event)=>{const success=Boolean((event as CustomEvent<{success:boolean}>).detail?.success);setFinished(success?"success":"error");if(timer)window.clearTimeout(timer);timer=window.setTimeout(()=>setFinished(null),2600);};window.addEventListener("aplus-api-activity",update);window.addEventListener("aplus-operation-finished",complete);return()=>{window.removeEventListener("aplus-api-activity",update);window.removeEventListener("aplus-operation-finished",complete);if(timer)window.clearTimeout(timer);};},[]);
+  if(!loading&&!finished)return null;
+  const successful=finished==="success"&&!loading;
+  return <div className="fixed inset-0 z-[300] grid place-items-center bg-[#102044]/20 backdrop-blur-[1px]" role="status" aria-live="polite"><div className="flex items-center gap-3 rounded-[18px] border border-white/70 bg-white px-6 py-5 shadow-2xl">{loading?<span className="size-6 animate-spin rounded-full border-[3px] border-[#B8DAFF] border-t-[#1689F7]"/>:<span className={`grid size-6 place-items-center rounded-full text-[14px] font-bold text-white ${successful?"bg-emerald-500":"bg-red-500"}`}>{successful?"✓":"!"}</span>}<div><p className="text-[14px] font-semibold text-[#172A4B]">{loading?"Saving your changes":successful?"Finished successfully":"Could not finish the action"}</p><p className="mt-0.5 text-[11px] text-[#708099]">{loading?"Please wait while the database is updated.":successful?"Live data has been refreshed.":"No changes were applied. Please review the message and try again."}</p></div></div></div>;
 }
 type MockSubmission = {
   id: string; participantId: string; phone: string; trackingCode: string; childName: string; initials: string; age: number; location: string; category: string;
@@ -22,7 +24,7 @@ type MockSubmission = {
 const submissions: MockSubmission[] = [];
 const upcomingTelecasts: Array<{episode:string;date:string;time:string;entries:number;status:string}> = [];
 
-type Workspace = "Overview" | "Submissions" | "ZIP" | "Participants" | "Account & Management";
+type Workspace = "Overview" | "Submissions" | "ZIP" | "Participants" | "Messaging" | "Account & Management";
 type OverviewSubmissionFilter = "approved" | "pending" | "today" | null;
 type OverviewZipView = "all" | "telecasted" | "whatsapp-attention";
 
@@ -150,6 +152,7 @@ type ParticipantRecord = {
   approved: number;
   telecasted: number;
   whatsapp: string;
+  whatsappStatus: "UNKNOWN" | "OPTED_IN" | "OPTED_OUT";
   joinedDate: string;
   lastSubmissionDate: string;
 };
@@ -189,11 +192,35 @@ type CalendarWorkspaceFilter = {
   mode: "submitted" | "reviewed";
 };
 
+function calendarDateKey(year: number, month: number, day: number) {
+  return `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function parseCalendarDateKey(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]) - 1;
+  const day = Number(match[3]);
+  const date = new Date(year, month, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) return null;
+  return date;
+}
+
+function dateLabelToCalendarKey(value: string) {
+  const match = /^([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})$/.exec(value);
+  if (!match) return null;
+  const month = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].indexOf(match[1]);
+  if (month < 0) return null;
+  return calendarDateKey(Number(match[3]), month, Number(match[2]));
+}
+
 const workspaces: Workspace[] = [
   "Overview",
   "Submissions",
   "ZIP",
   "Participants",
+  "Messaging",
 ];
 
 function WorkspaceTabIcon({ workspace }: { workspace: Workspace }) {
@@ -201,6 +228,7 @@ function WorkspaceTabIcon({ workspace }: { workspace: Workspace }) {
   if (workspace === "Overview") return <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="4" width="9" height="9" rx="2" {...shared}/><rect x="19" y="4" width="9" height="9" rx="2" {...shared}/><rect x="4" y="19" width="9" height="9" rx="2" {...shared}/><rect x="19" y="19" width="9" height="9" rx="2" {...shared}/></svg>;
   if (workspace === "Submissions") return <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 3.5h10l5 5v19H9z" {...shared}/><path d="M19 3.5v6h5M13 15h7M13 20h7M13 25h4" {...shared}/></svg>;
   if (workspace === "ZIP") return <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="3" {...shared}/><path d="M10.7 10.7a7.5 7.5 0 0 0 0 10.6M21.3 10.7a7.5 7.5 0 0 1 0 10.6M6.7 6.7a13.2 13.2 0 0 0 0 18.6M25.3 6.7a13.2 13.2 0 0 1 0 18.6" {...shared}/></svg>;
+  if (workspace === "Messaging") return <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 5h20v16H14l-6 5v-5H6z" {...shared}/><path d="M11 11h10M11 16h7" {...shared}/></svg>;
   return <svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="13" cy="11" r="4.5" {...shared}/><path d="M4.5 27c.8-5.2 4-8 8.5-8s7.7 2.8 8.5 8M22.5 7.5a4 4 0 0 1 0 7.8M23 19.3c3 .6 4.6 3 5 6.2" {...shared}/></svg>;
 }
 
@@ -596,14 +624,14 @@ type CalendarMetrics = {
 function CalendarDayCell({
   day,
   dateLabel,
-  current,
+  inCurrentMonth,
   selected,
   metrics,
   onOpen,
 }: {
   day: number;
   dateLabel: string;
-  current: boolean;
+  inCurrentMonth: boolean;
   selected: boolean;
   metrics?: CalendarMetrics;
   onOpen: () => void;
@@ -619,13 +647,12 @@ function CalendarDayCell({
   return (
     <button
       type="button"
-      disabled={!current}
       onClick={onOpen}
       aria-label={`${dateLabel}${metrics?.warnings ? `, ${metrics.warnings} items need attention` : ""}`}
-      className={`relative min-h-[52px] rounded-[10px] border p-2 text-left transition tablet:min-h-[66px] ${current ? "border-transparent bg-white hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-sm" : "border-transparent bg-white/45 text-slate-300"} ${selected ? "border-[#2488F4] bg-[#EFF8FF] ring-2 ring-[#2488F4]/25" : ""}`}
+      className={`relative min-h-[52px] rounded-[10px] border p-2 text-left transition tablet:min-h-[66px] ${inCurrentMonth ? "border-transparent bg-white hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-sm" : "border-transparent bg-white/45 text-slate-400 hover:bg-white/80"} ${selected ? "border-[#2488F4] bg-[#EFF8FF] ring-2 ring-[#2488F4]/25" : ""}`}
     >
       <span
-        className={`grid size-8 place-items-center rounded-full text-[13px] font-bold ${selected ? "bg-[#2488F4] text-white" : current ? "text-[#334155]" : "text-slate-300"}`}
+        className={`grid size-8 place-items-center rounded-full text-[13px] font-bold ${selected ? "bg-[#2488F4] text-white" : inCurrentMonth ? "text-[#334155]" : "text-slate-400"}`}
       >
         {day}
       </span>
@@ -666,15 +693,26 @@ function OverviewCalendar({
   const [jumpOpen, setJumpOpen] = useState(false);
   const [jumpDate, setJumpDate] = useState(() => new Intl.DateTimeFormat("en-CA").format(new Date()));
   const [calendarMetrics, setCalendarMetrics] = useState<Record<string, CalendarMetrics>>({});
+  const [calendarLoading, setCalendarLoading] = useState(true);
+  const [calendarError, setCalendarError] = useState("");
+  const [calendarReload, setCalendarReload] = useState(0);
   useEffect(() => {
+    const refresh = () => { setCalendarLoading(true); setCalendarError(""); setCalendarReload((value) => value + 1); };
+    window.addEventListener("aplus-data-updated", refresh);
+    return () => window.removeEventListener("aplus-data-updated", refresh);
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
     Promise.all([
       apiFetch("/api/v1/admin/kids-champ/submissions"),
       apiFetch("/api/v1/admin/kids-champ/batches"),
       apiFetch("/api/v1/admin/kids-champ/calendar/tasks"),
     ]).then(async ([submissionResponse, batchResponse, taskResponse]) => {
-      const submissionItems = submissionResponse.ok ? await submissionResponse.json() as AdminSubmissionResponse[] : [];
-      const batchItems = batchResponse.ok ? await batchResponse.json() as AdminBatchResponse[] : [];
-      const taskItems = taskResponse.ok ? await taskResponse.json() as Array<{ date: string; completedAt?: string }> : [];
+      if (!submissionResponse.ok || !batchResponse.ok || !taskResponse.ok) throw new Error("Some calendar activity could not be loaded.");
+      const submissionBody = await submissionResponse.json() as AdminSubmissionResponse[] | AdminSubmissionPageResponse;
+      const submissionItems = Array.isArray(submissionBody) ? submissionBody : submissionBody.items;
+      const batchItems = await batchResponse.json() as AdminBatchResponse[];
+      const taskItems = await taskResponse.json() as Array<{ date: string; completedAt?: string }>;
       const next: Record<string, CalendarMetrics> = {};
       const metric = (date: string) => next[date] ??= { submissions: 0, reviews: 0, telecasts: 0, zips: 0, warnings: 0 };
       submissionItems.forEach((item) => {
@@ -689,9 +727,15 @@ function OverviewCalendar({
       taskItems.forEach((item) => {
         if (!item.completedAt) metric(item.date).warnings += 1;
       });
-      setCalendarMetrics(next);
-    }).catch(() => setCalendarMetrics({}));
-  }, []);
+      if (!cancelled) setCalendarMetrics(next);
+    }).catch((reason) => {
+      if (!cancelled) {
+        setCalendarMetrics({});
+        setCalendarError(reason instanceof Error ? reason.message : "Calendar activity could not be loaded.");
+      }
+    }).finally(() => { if (!cancelled) setCalendarLoading(false); });
+    return () => { cancelled = true; };
+  }, [calendarReload]);
   const daysInMonth = new Date(displayYear, displayMonth + 1, 0).getDate();
   const leadingDays = new Date(displayYear, displayMonth, 1).getDay();
   const previousMonthDays = new Date(displayYear, displayMonth, 0).getDate();
@@ -700,23 +744,22 @@ function OverviewCalendar({
     ...Array.from({ length: leadingDays }, (_, index) => ({
       day: previousMonthDays - leadingDays + index + 1,
       current: false,
+      date: new Date(displayYear, displayMonth - 1, previousMonthDays - leadingDays + index + 1),
       key: `previous-${index}`,
     })),
     ...Array.from({ length: daysInMonth }, (_, index) => ({
       day: index + 1,
       current: true,
+      date: new Date(displayYear, displayMonth, index + 1),
       key: `current-${index}`,
     })),
     ...Array.from({ length: trailingDays }, (_, index) => ({
       day: index + 1,
       current: false,
+      date: new Date(displayYear, displayMonth + 1, index + 1),
       key: `next-${index}`,
     })),
   ];
-  const metricsForDay = (day: number): CalendarMetrics => {
-    const date = `${displayYear}-${String(displayMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-    return calendarMetrics[date] ?? { submissions: 0, reviews: 0, telecasts: 0, zips: 0, warnings: 0 };
-  };
   const selectedDate = new Date(
     displayYear,
     displayMonth,
@@ -729,11 +772,25 @@ function OverviewCalendar({
     date.setDate(weekStart.getDate() + index);
     return date;
   });
-  const selectedDateKey = `${selectedDate.getFullYear()}-${String(selectedDate.getMonth() + 1).padStart(2, "0")}-${String(selectedDate.getDate()).padStart(2, "0")}`;
+  const selectedDateKey = calendarDateKey(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
   const selectedMetrics = calendarMetrics[selectedDateKey] ?? { submissions: 0, reviews: 0, telecasts: 0, zips: 0, warnings: 0 };
   const selectedDateLabel = `${monthNames[selectedDate.getMonth()]} ${selectedDate.getDate()}, ${selectedDate.getFullYear()}`;
+  const currentYear = new Date().getFullYear();
+  const yearOptions = Array.from(new Set([...Array.from({ length: 9 }, (_, index) => currentYear - 4 + index), displayYear])).sort((a, b) => a - b);
 
-  function changeMonth(offset: number) {
+  function changePeriod(offset: number) {
+    if (view === "Year") {
+      setDisplayYear((year) => year + offset);
+      return;
+    }
+    if (view === "Week") {
+      const next = new Date(selectedDate);
+      next.setDate(next.getDate() + offset * 7);
+      setDisplayYear(next.getFullYear());
+      setDisplayMonth(next.getMonth());
+      setSelectedDay(next.getDate());
+      return;
+    }
     const next = new Date(displayYear, displayMonth + offset, 1);
     setDisplayYear(next.getFullYear());
     setDisplayMonth(next.getMonth());
@@ -748,9 +805,8 @@ function OverviewCalendar({
     setView("Month");
   }
   function applyJumpDate() {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(jumpDate)) return;
-    const next = new Date(`${jumpDate}T00:00:00`);
-    if (Number.isNaN(next.getTime())) return;
+    const next = parseCalendarDateKey(jumpDate);
+    if (!next) { notify("Choose a valid calendar date."); return; }
     setDisplayYear(next.getFullYear());
     setDisplayMonth(next.getMonth());
     setSelectedDay(next.getDate());
@@ -786,14 +842,22 @@ function OverviewCalendar({
               Select a day or enter a date to jump directly to it.
             </p>
           </div>
-          <button type="button" onClick={goToToday} className="rounded-[9px] border border-[#D8E4F0] bg-white px-3 py-2 text-[11px] font-bold text-[#0877EF]">Today</button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-[9px] border border-[#D8E4F0] bg-[#F7FAFD] p-1" aria-label="Calendar view">
+              {(["Month", "Week", "Year"] as const).map((item) => <button key={item} type="button" onClick={() => setView(item)} className={`rounded-[7px] px-3 py-1.5 text-[11px] font-bold ${view === item ? "bg-white text-[#0877EF] shadow-sm" : "text-[#718096]"}`}>{item}</button>)}
+            </div>
+            <button type="button" onClick={goToToday} className="rounded-[9px] border border-[#D8E4F0] bg-white px-3 py-2 text-[11px] font-bold text-[#0877EF]">Today</button>
+          </div>
         </div>
         <div className="flex items-center justify-between gap-2 rounded-[13px] border border-[#E5EBF2] bg-[#FBFDFF] p-2">
-          <button type="button" onClick={() => changeMonth(-1)} className="grid size-9 place-items-center rounded-[9px] text-[18px] font-semibold text-[#526178] transition hover:bg-[#EAF4FF]" aria-label="Previous month">‹</button>
-          <div className="flex min-w-0 items-center gap-2"><div className="text-center"><p className="text-[15px] font-bold text-[#17243D]">{monthNames[displayMonth]}</p><p className="mt-0.5 text-[10px] font-medium text-[#718096]">Select a day to manage its work</p></div><select value={displayYear} onChange={(event) => { setDisplayYear(Number(event.target.value)); setSelectedDay(1); setView("Month"); }} className="h-8 rounded-[8px] border border-[#D8E4F0] bg-white px-2 text-[11px] font-bold text-[#334155] outline-none focus:border-[#2488F4]" aria-label="Calendar year">{[2024, 2025, 2026, 2027, 2028].map((year) => <option key={year}>{year}</option>)}</select></div>
-          <button type="button" onClick={() => changeMonth(1)} className="grid size-9 place-items-center rounded-[9px] text-[18px] font-semibold text-[#526178] transition hover:bg-[#EAF4FF]" aria-label="Next month">›</button>
+          <button type="button" onClick={() => changePeriod(-1)} className="grid size-9 place-items-center rounded-[9px] text-[18px] font-semibold text-[#526178] transition hover:bg-[#EAF4FF]" aria-label={`Previous ${view.toLowerCase()}`}>‹</button>
+          <div className="flex min-w-0 items-center gap-2"><div className="text-center"><p className="text-[15px] font-bold text-[#17243D]">{view === "Year" ? displayYear : monthNames[displayMonth]}</p><p className="mt-0.5 text-[10px] font-medium text-[#718096]">Select a day to manage its work</p></div><select value={displayYear} onChange={(event) => { setDisplayYear(Number(event.target.value)); setSelectedDay(1); }} className="h-8 rounded-[8px] border border-[#D8E4F0] bg-white px-2 text-[11px] font-bold text-[#334155] outline-none focus:border-[#2488F4]" aria-label="Calendar year">{yearOptions.map((year) => <option key={year}>{year}</option>)}</select></div>
+          <button type="button" onClick={() => changePeriod(1)} className="grid size-9 place-items-center rounded-[9px] text-[18px] font-semibold text-[#526178] transition hover:bg-[#EAF4FF]" aria-label={`Next ${view.toLowerCase()}`}>›</button>
         </div>
       </div>
+
+      {calendarLoading ? <div className="border-b border-blue-100 bg-blue-50 px-4 py-2 text-[11px] font-semibold text-blue-700">Loading calendar activity…</div> : null}
+      {calendarError ? <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-[11px] text-amber-900"><span>{calendarError}</span><button type="button" onClick={() => { setCalendarLoading(true); setCalendarError(""); setCalendarReload((value) => value + 1); }} className="font-bold underline">Retry</button></div> : null}
 
       <div className="grid min-h-0 flex-1 bg-[#F4F7FB] desktop:grid-cols-[minmax(0,1fr)_390px]">
       <div className="min-w-0 p-3 tablet:p-4">
@@ -812,19 +876,22 @@ function OverviewCalendar({
               </div>
               <div className="mt-1.5 grid grid-cols-7 gap-1.5">
                 {cells.map((cell) => {
-                  const metrics = cell.current
-                    ? metricsForDay(cell.day)
-                    : undefined;
-                  const dateLabel = `${monthNames[displayMonth]} ${cell.day}, ${displayYear}`;
+                  const dateKey = calendarDateKey(cell.date.getFullYear(), cell.date.getMonth(), cell.date.getDate());
+                  const metrics = calendarMetrics[dateKey] ?? { submissions: 0, reviews: 0, telecasts: 0, zips: 0, warnings: 0 };
+                  const dateLabel = `${monthNames[cell.date.getMonth()]} ${cell.day}, ${cell.date.getFullYear()}`;
                   return (
                     <CalendarDayCell
                       key={cell.key}
                       day={cell.day}
                       dateLabel={dateLabel}
-                      current={cell.current}
-                      selected={cell.current && cell.day === selectedDay}
+                      inCurrentMonth={cell.current}
+                      selected={cell.date.getFullYear() === selectedDate.getFullYear() && cell.date.getMonth() === selectedDate.getMonth() && cell.date.getDate() === selectedDate.getDate()}
                       metrics={metrics}
-                    onOpen={() => setSelectedDay(cell.day)}
+                      onOpen={() => {
+                        setDisplayYear(cell.date.getFullYear());
+                        setDisplayMonth(cell.date.getMonth());
+                        setSelectedDay(cell.date.getDate());
+                      }}
                     />
                   );
                 })}
@@ -854,7 +921,7 @@ function OverviewCalendar({
                     key={date.toISOString()}
                     day={date.getDate()}
                     dateLabel={label}
-                    current
+                    inCurrentMonth={date.getMonth() === displayMonth}
                     selected={
                       date.getDate() === selectedDay &&
                       date.getMonth() === displayMonth
@@ -892,7 +959,7 @@ function OverviewCalendar({
           </div>
         ) : null}
       </div>
-      <aside className="hidden min-h-0 overflow-hidden border-l border-[#E2EAF3] bg-white p-4 desktop:block">
+      <aside className="hidden min-h-0 overflow-y-auto border-l border-[#E2EAF3] bg-white p-4 desktop:block">
         <div className="sticky top-0 z-10 -mx-4 -mt-4 mb-4 border-b border-[#E5EBF2] bg-white px-4 py-4"><p className="text-[10px] font-bold uppercase tracking-[.14em] text-[#2488F4]">Selected-day agenda</p><h3 className="mt-1 text-[19px] font-semibold text-[#17243D]">{selectedDateLabel}</h3><p className="mt-1 text-[11px] text-[#718096]">Manage the day without leaving the calendar.</p></div>
         <CalendarDayPanel key={selectedDateLabel} notify={notify} dateLabel={selectedDateLabel} onNavigate={onNavigate} />
       </aside>
@@ -1531,6 +1598,7 @@ function SubmissionRow({
           checked={selected}
           onChange={onSelect}
           aria-label={`Select ${item.childName}`}
+          title="Select for approval or deletion"
           className="size-4 accent-[#2488F4]"
         />
       </td>
@@ -1634,6 +1702,7 @@ function SubmissionsWorkspace({
   const [week, setWeek] = useState("2026-W31");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [submissionPage, setSubmissionPage] = useState(0);
   const [submissionTotalItems, setSubmissionTotalItems] = useState(0);
   const [submissionTotalPages, setSubmissionTotalPages] = useState(0);
@@ -1842,20 +1911,31 @@ function SubmissionsWorkspace({
       return;
     }
     const ids = [...selected];
+    setDeleting(true);
+    try {
     const results = await Promise.all(ids.map(async (id) => {
-      const response = await apiFetch(`/api/v1/admin/kids-champ/submissions/${id}`, { method: "DELETE" });
-      return { id, response };
+      try {
+        const response = await apiFetch(`/api/v1/admin/kids-champ/submissions/${id}`, { method: "DELETE" });
+        const error = response.ok
+          ? null
+          : await response.json().catch(() => null) as { message?: string } | null;
+        return { id, response, message: error?.message ?? `The backend returned HTTP ${response.status}.` };
+      } catch (error) {
+        return { id, response: null, message: error instanceof Error ? error.message : "The deletion request could not be completed." };
+      }
     }));
-    const failed = results.filter(({ response }) => !response.ok);
+    const failed = results.filter(({ response }) => !response?.ok);
     if (failed.length) {
-      notify(`${failed.length} submission${failed.length === 1 ? "" : "s"} could not be deleted. Batched submissions are protected.`);
+      const reason = failed[0]?.message ?? "The deletion request could not be completed.";
+      notify(`${failed.length} submission${failed.length === 1 ? "" : "s"} could not be deleted: ${reason}`);
     }
-    const deletedIds = new Set(results.filter(({ response }) => response.ok).map(({ id }) => id));
+    const deletedIds = new Set(results.filter(({ response }) => response?.ok).map(({ id }) => id));
     setRecords((current) => current.filter((item) => !deletedIds.has(item.id)));
-    notify(
-      `${deletedIds.size} submission${deletedIds.size === 1 ? "" : "s"} deleted from the database.`,
-    );
+    if (deletedIds.size) notify(`${deletedIds.size} submission${deletedIds.size === 1 ? "" : "s"} deleted from the database.`);
     setSelected(new Set());
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function approveSubmissions(ids: string[]) {
@@ -1931,6 +2011,14 @@ function SubmissionsWorkspace({
 
   return (
     <section className="overflow-hidden rounded-[18px] border border-[#E0E8F1] bg-white shadow-[0_10px_28px_rgba(30,72,123,.05)]">
+      {deleting ? (
+        <div className="fixed inset-0 z-[310] grid place-items-center bg-[#102044]/30 backdrop-blur-[2px]" role="status" aria-live="assertive">
+          <div className="flex items-center gap-4 rounded-[20px] border border-white/70 bg-white px-7 py-6 shadow-2xl">
+            <span className="size-7 animate-spin rounded-full border-[3px] border-[#B8DAFF] border-t-[#1689F7]" />
+            <div><p className="text-[15px] font-semibold text-[#172A4B]">Deleting selected submissions</p><p className="mt-1 text-[12px] text-[#708099]">Please wait while the database updates every selected record.</p></div>
+          </div>
+        </div>
+      ) : null}
       <div className="flex flex-col gap-4 p-5 tablet:flex-row tablet:items-end tablet:justify-between">
         <div>
           <h2 className="text-[20px] font-semibold tracking-[-.025em]">Submission workspace</h2>
@@ -2231,7 +2319,7 @@ function SubmissionsWorkspace({
       {deleteConfirmOpen ? (
         <ConfirmationDialog
           title={`Delete ${selected.size} submission${selected.size === 1 ? "" : "s"}?`}
-          description="The selected records will be soft-deleted from the database and recorded in the backend audit log. Submissions already assigned to a ZIP batch are protected."
+          description="The selected records will disappear immediately, be soft-deleted in the database, and be recorded in the backend audit log. Existing ZIP archive history is retained."
           confirmLabel="Delete submissions"
           onCancel={() => setDeleteConfirmOpen(false)}
           onConfirm={() => {
@@ -2245,6 +2333,40 @@ function SubmissionsWorkspace({
 }
 
 type CampaignStatus = "Unsent" | "Queued" | "Sending" | "Sent" | "Error" | "Ignored";
+type MetaWhatsAppTemplate = {
+  id: string;
+  name: string;
+  languageCode: string;
+  status: string;
+  body: string;
+  variables: string[];
+  disabled: boolean;
+};
+
+function useApprovedWhatsAppTemplates(notify: (message: string) => void) {
+  const [templates, setTemplates] = useState<MetaWhatsAppTemplate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const reload = useCallback(async () => {
+    try {
+      const response = await apiFetch("/api/v1/admin/kids-champ/whatsapp/templates");
+      if (!response.ok) throw new Error("Approved WhatsApp templates could not be loaded.");
+      const body = await response.json() as MetaWhatsAppTemplate[];
+      setTemplates(body.filter((item) => item.status === "APPROVED" && !item.disabled));
+    } catch (reason) {
+      notify(reason instanceof Error ? reason.message : "Approved WhatsApp templates could not be loaded.");
+    } finally {
+      setLoading(false);
+    }
+  }, [notify]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { void reload(); }, [reload]);
+  return { templates, loading, reload };
+}
+
+function renderMetaTemplate(body: string, parameters: string[]) {
+  return parameters.reduce((value, parameter, index) => value.replaceAll(`{{${index + 1}}}`, parameter), body);
+}
+
 type CampaignRecipient = {
   id: string;
   participantId: string;
@@ -2277,7 +2399,13 @@ type QueuedDelivery = {
   failureReason?: string;
 };
 
-function WhatsAppQueueModal({ onClose, notify, initialFilter = "ALL" }: { onClose: () => void; notify: (message: string) => void; initialFilter?: string }) {
+function WhatsAppQueueModal({ onClose, notify }: { onClose: () => void; notify: (message: string) => void; initialFilter?: string }) {
+  return <div className="fixed inset-0 z-[115] grid place-items-center bg-[#102A56]/45 p-4 backdrop-blur-[2px]" role="dialog" aria-modal="true" aria-label="WhatsApp messaging workspace"><WhatsAppMessagingWorkspace compact onClose={onClose} notify={notify}/></div>;
+}
+
+// Kept temporarily as a rollback-safe reference while the new operational workspace replaces the legacy queue.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function LegacyWhatsAppQueueModal({ onClose, notify, initialFilter = "ALL" }: { onClose: () => void; notify: (message: string) => void; initialFilter?: string }) {
   const [campaigns, setCampaigns] = useState<CampaignQueueItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [deliveries, setDeliveries] = useState<QueuedDelivery[]>([]);
@@ -2357,13 +2485,13 @@ function WhatsAppCampaignModal({
   onClose: () => void;
   notify: (message: string) => void;
 }) {
-  const englishTemplate = `Hello {name}, your Kids Champ artwork ({trackingCode}) is scheduled for telecast on {telecastDate}. Thank you for participating!`;
-  const sinhalaTemplate = `ආයුබෝවන් {name}, ${zipCode} හි ඔබගේ Kids Champ නිර්මාණය ({trackingCode}) {telecastDate} දින රූපවාහිනියේ විකාශය කිරීමට නියමිතයි. සහභාගී වූ ඔබට ස්තූතියි!`;
   const [step, setStep] = useState<"Compose" | "Preview" | "Progress">(
     "Compose",
   );
   const [language, setLanguage] = useState<"English" | "Sinhala">("Sinhala");
-  const [message, setMessage] = useState(sinhalaTemplate);
+  const { templates, loading: templatesLoading, reload: reloadTemplates } = useApprovedWhatsAppTemplates(notify);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [templateParameters, setTemplateParameters] = useState<string[]>([]);
   const [filter, setFilter] = useState<"All" | CampaignStatus>("All");
   const [sending, setSending] = useState(false);
   const [minimized, setMinimized] = useState(false);
@@ -2380,12 +2508,38 @@ function WhatsAppCampaignModal({
     })),
   );
   const recipientsRef = useRef(recipients);
+  const languageTemplates = templates.filter((item) => language === "Sinhala" ? item.languageCode.toLowerCase().startsWith("si") : item.languageCode.toLowerCase().startsWith("en"));
+  const selectedTemplate = templates.find((item) => item.id === selectedTemplateId) ?? null;
+  const message = selectedTemplate?.body ?? "";
+  function suggestedParameters(count: number) {
+    if (count === 4) return ["{name}", zipCode, "{trackingCode}", telecastDate];
+    if (count === 3) return ["{name}", "{trackingCode}", telecastDate];
+    return Array.from({ length: count }, (_, index) => index === 0 ? "{name}" : "");
+  }
+  function chooseTemplate(item: MetaWhatsAppTemplate | null) {
+    setSelectedTemplateId(item?.id ?? "");
+    setTemplateParameters(item ? suggestedParameters(item.variables.length) : []);
+  }
+  // Synchronized server data supplies the initial composer selection.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (selectedTemplateId && templates.some((item) => item.id === selectedTemplateId)) return;
+    const preferred = templates.find((item) => item.languageCode.toLowerCase().startsWith("si")) ?? templates[0];
+    if (!preferred) return;
+    setLanguage(preferred.languageCode.toLowerCase().startsWith("si") ? "Sinhala" : "English");
+    setSelectedTemplateId(preferred.id);
+    setTemplateParameters(suggestedParameters(preferred.variables.length));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templates, selectedTemplateId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
   useEffect(() => { recipientsRef.current = recipients; }, [recipients]);
-  const personalize = (recipient: CampaignRecipient) =>
-    message
+  const personalize = (recipient: CampaignRecipient) => {
+    const parameters = templateParameters.map((value) => value
       .replaceAll("{name}", recipient.name)
       .replaceAll("{trackingCode}", recipient.trackingCode)
-      .replaceAll("{telecastDate}", telecastDate || "the date to be announced");
+      .replaceAll("{telecastDate}", telecastDate || "the date to be announced"));
+    return renderMetaTemplate(message, parameters);
+  };
   const counts = recipients.reduce(
     (result, item) => ({ ...result, [item.status]: result[item.status] + 1 }),
     { Queued: 0, Error: 0, Unsent: 0, Sending: 0, Sent: 0, Ignored: 0 } as Record<
@@ -2409,48 +2563,39 @@ function WhatsAppCampaignModal({
         )
         .map((item) => item.id);
     if (!targets.length) return;
+    if (!selectedTemplate || templateParameters.some((value) => !value.trim())) {
+      notify("Choose an approved Meta template and complete every template variable.");
+      return;
+    }
     setStep("Progress");
     setSending(true);
     setRecipients((current) => current.map((item) => targets.includes(item.id) ? { ...item, status: "Sending" } : item));
     const targetRecipients = recipients.filter((item) => targets.includes(item.id));
-    const results = await Promise.all(targetRecipients.map(async (recipient) => {
-      const response = await apiFetch("/api/v1/admin/kids-champ/campaigns", {
-        method: "POST",
-        body: JSON.stringify({
-          channel: "WHATSAPP",
-          messageTemplate: personalize(recipient),
-          participantIds: [recipient.participantId],
-          templateName: language === "Sinhala" ? "kids_champ_telecast_si" : "kids_champ_telecast_en",
-          languageCode: language === "Sinhala" ? "si_LK" : "en_US",
-          templateParameters: language === "Sinhala"
-            ? [recipient.name, zipCode, recipient.trackingCode, telecastDate]
-            : [recipient.name, recipient.trackingCode, telecastDate],
-        }),
-      });
-      const body = await response.json().catch(() => null) as { id?: string; message?: string } | null;
-      return { id: recipient.id, ok: response.ok, campaignId: body?.id, message: response.ok ? undefined : body?.message };
-    }));
-    const resultById = new Map(results.map((result) => [result.id, result]));
-    setRecipients((current) => current.map((item) => {
-      const result = resultById.get(item.id);
-      return result ? { ...item, status: result.ok ? "Queued" : "Error", campaignId: result.campaignId, attempts: item.attempts + 1, selected: !result.ok, failureReason: result.message } : item;
-    }));
+    const response = await apiFetch("/api/v1/admin/kids-champ/campaigns", {
+      method: "POST",
+      body: JSON.stringify({
+        channel: "WHATSAPP", messageTemplate: message,
+        participantIds: targetRecipients.map((recipient) => recipient.participantId),
+        templateName: selectedTemplate.name,
+        languageCode: selectedTemplate.languageCode,
+        templateParameters,
+        name: `${zipCode} telecast notification`, source: "ZIP",
+      }),
+    });
+    const body = await response.json().catch(() => null) as { id?: string; message?: string } | null;
+    setRecipients((current) => current.map((item) => targets.includes(item.id) ? { ...item, status: response.ok ? "Queued" : "Error", campaignId: body?.id, attempts: item.attempts + 1, selected: !response.ok, failureReason: response.ok ? undefined : body?.message } : item));
     setSending(false);
-    const failed = results.filter((result) => !result.ok);
-    notify(failed.length ? `${results.length - failed.length} messages queued; ${failed.length} could not be queued${failed[0].message ? `: ${failed[0].message}` : "."}` : `${results.length} personalized WhatsApp messages queued for delivery.`);
+    notify(response.ok ? `${targetRecipients.length} personalized WhatsApp messages queued in one campaign.` : body?.message || "The WhatsApp campaign could not be queued.");
   }
 
   useEffect(() => {
     if (step !== "Progress") return;
     const refresh = async () => {
       const tracked = recipientsRef.current.filter((item) => item.campaignId);
-      const updates = await Promise.all(tracked.map(async (item) => {
-        const response = await apiFetch(`/api/v1/admin/kids-champ/campaigns/${item.campaignId}/recipients`);
-        const body = response.ok ? await response.json() as Array<{ id:number; status:string; attempts:number; failureReason?:string }> : [];
-        return { recipientId: item.id, delivery: body[0] };
-      }));
+      const campaignIds = [...new Set(tracked.map((item) => item.campaignId as string))];
+      const campaignDeliveries = (await Promise.all(campaignIds.map(async (campaignId) => { const response = await apiFetch(`/api/v1/admin/kids-champ/campaigns/${campaignId}/recipients`); return response.ok ? await response.json() as Array<{ id:number; participantId:string; status:string; attempts:number; failureReason?:string }> : []; }))).flat();
       setRecipients((current) => current.map((item) => {
-        const update = updates.find((value) => value.recipientId === item.id)?.delivery;
+        const update = campaignDeliveries.find((value) => value.participantId === item.participantId);
         if (!update) return item;
         const status: CampaignStatus = update.status === "SENT" || update.status === "DELIVERED" || update.status === "READ" ? "Sent" : update.status === "FAILED" ? "Error" : update.status === "SKIPPED" ? "Ignored" : update.status === "SENDING" ? "Sending" : "Queued";
         return { ...item, status, attempts: update.attempts, deliveryId: update.id, failureReason: update.failureReason };
@@ -2586,7 +2731,7 @@ function WhatsAppCampaignModal({
                         type="button"
                         onClick={() => {
                           setLanguage(item);
-                          setMessage(item === "Sinhala" ? sinhalaTemplate : englishTemplate);
+                          chooseTemplate(templates.find((template) => item === "Sinhala" ? template.languageCode.toLowerCase().startsWith("si") : template.languageCode.toLowerCase().startsWith("en")) ?? null);
                         }}
                         className={`rounded-[8px] px-4 py-2 text-[11px] font-semibold ${language === item ? "bg-white text-[#17243D] shadow-sm" : "text-[#7A879A]"}`}
                       >
@@ -2595,18 +2740,18 @@ function WhatsAppCampaignModal({
                     ))}
                   </div>
                 </div>
-                <label className="text-[12px] font-semibold text-[#526178]">
-                  Message template
-                  <textarea
-                    value={message}
-                    onChange={(event) => setMessage(event.target.value)}
-                    className="mt-2 min-h-44 w-full rounded-[12px] border border-[#D8E2EC] p-3 text-[13px] leading-6 outline-none focus:border-[#2488F4]"
-                  />
+                <label className="text-[12px] font-semibold text-[#526178]">Approved Meta template
+                  <select value={selectedTemplateId} onChange={(event) => chooseTemplate(templates.find((item) => item.id === event.target.value) ?? null)} className="mt-2 h-10 w-full rounded-[10px] border border-[#D8E2EC] bg-white px-3 text-[12px]">
+                    <option value="">{templatesLoading ? "Loading templates…" : "Choose a template"}</option>
+                    {languageTemplates.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.languageCode})</option>)}
+                  </select>
                 </label>
-                <p className="mt-2 text-[10px] text-[#8490A2]">
-                  Variables: {`{name}`} · {`{trackingCode}`} ·{" "}
-                  {`{telecastDate}`}
-                </p>
+                {!templatesLoading && !languageTemplates.length ? <div className="mt-3 rounded-[10px] border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800">No enabled, approved {language.toLowerCase()} template is synchronized. Ask a Super Admin to sync it in Account &amp; Management → Templates. <button type="button" onClick={() => void reloadTemplates()} className="font-bold underline">Refresh</button></div> : null}
+                {selectedTemplate ? <>
+                  <div className="mt-3 min-h-28 whitespace-pre-wrap rounded-[12px] border border-[#D8E2EC] bg-[#F7FAFC] p-3 text-[12px] leading-6 text-[#40516B]">{message}</div>
+                  <div className="mt-3 grid gap-2 tablet:grid-cols-2">{selectedTemplate.variables.map((variable, index) => <label key={`${variable}-${index}`} className="text-[10px] font-semibold text-[#66758B]">Variable {`{{${variable}}}`}<input value={templateParameters[index] ?? ""} onChange={(event) => setTemplateParameters((current) => current.map((value, parameterIndex) => parameterIndex === index ? event.target.value : value))} placeholder="Value or {name}/{trackingCode}" className="mt-1 h-9 w-full rounded-[9px] border border-[#D8E2EC] px-3 text-[11px]" /></label>)}</div>
+                  <p className="mt-2 text-[10px] text-[#8490A2]">Personalization tokens: {`{name}`} · {`{trackingCode}`} · {`{telecastDate}`}</p>
+                </> : null}
               </div>
               <aside className="rounded-[14px] border border-[#DDE6EF] bg-[#F7FAFC] p-4">
                 <h3 className="text-[13px] font-semibold">Delivery settings</h3>
@@ -2769,7 +2914,7 @@ function WhatsAppCampaignModal({
           {step === "Compose" ? (
             <button
               onClick={() => setStep("Preview")}
-              disabled={!message.trim() || !telecastDate}
+              disabled={!selectedTemplate || !message.trim() || !telecastDate || templateParameters.some((value) => !value.trim())}
               className={`${primaryButton} disabled:opacity-40`}
             >
               Preview messages
@@ -2777,7 +2922,7 @@ function WhatsAppCampaignModal({
           ) : step === "Preview" ? (
             <button
               onClick={() => void startSending()}
-              disabled={!recipients.some((item) => item.selected)}
+              disabled={!selectedTemplate || !recipients.some((item) => item.selected)}
               className="h-10 rounded-[10px] bg-[#20B15A] px-4 text-[12px] font-semibold text-white"
             >
               Confirm and queue campaign
@@ -2939,6 +3084,8 @@ function TvZipWorkspace({
   const [zipSearch, setZipSearch] = useState("");
   const [editingZipId, setEditingZipId] = useState<string | null>(null);
   const [zipStatus, setZipStatus] = useState("All");
+  const [binOpen, setBinOpen] = useState(false);
+  const [binSelected, setBinSelected] = useState<Set<string>>(new Set());
   const [campaignZip, setCampaignZip] = useState<ZipBatch | null>(null);
   const [queueOpen, setQueueOpen] = useState(initialOverviewView === "whatsapp-attention");
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -2963,8 +3110,20 @@ function TvZipWorkspace({
     })
     .catch((reason) => notify(reason instanceof Error ? reason.message : "ZIP batches could not be loaded."));
   useEffect(() => {
-    void loadBatches();
-    apiFetch("/api/v1/admin/kids-champ/batches/progress").then(async(response)=>{if(response.ok)setZipProgress(await response.json());}).catch(()=>undefined);
+    const refreshZipQueue = async () => {
+      // This mount-time maintenance request is followed by the local refresh
+      // below.  Do not publish a global update here: it would remount this
+      // workspace, call this endpoint again, and create an update loop.
+      const processing = await apiFetch("/api/v1/admin/kids-champ/batches/process-automatic", { method: "POST", notifyDataUpdated: false });
+      if (!processing.ok) {
+        const failure = await processing.json().catch(() => null) as { message?: string } | null;
+        notify(failure?.message || "Automatic ZIP processing could not be started. Restart the API and try again.");
+      }
+      await loadBatches();
+      const response = await apiFetch("/api/v1/admin/kids-champ/batches/progress");
+      if (response.ok) setZipProgress(await response.json());
+    };
+    void refreshZipQueue();
     apiFetch("/api/v1/admin/kids-champ/submissions").then(async(response)=>{if(response.ok){const submissions=((await response.json()) as AdminSubmissionResponse[]).map(toMockSubmission);setBatchSubmissions(submissions);const pending=submissions.filter((item)=>item.reviewStatus==="Approved"&&item.fileStatus==="Ready");setPendingZipSubmissions(pending);setPendingZipSelected(new Set());}}).catch(()=>undefined);
   // load once when this workspace mounts
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -2991,13 +3150,12 @@ function TvZipWorkspace({
   ]);
   const visibleZips = zipRecords.filter(
     (item) =>
+      (binOpen ? item.deleted : !item.deleted) &&
       (!zipSearch ||
         item.code.toLowerCase().includes(zipSearch.toLowerCase())) &&
       (initialOverviewView !== "telecasted" || item.telecastCompleted) &&
       (zipStatus === "All" ||
-        (zipStatus === "Deleted"
-          ? item.deleted
-          : !item.deleted && item.status === zipStatus)),
+        (zipStatus === "All" || item.status === zipStatus)),
   );
   const visibleManualZipSubmissions = useMemo(() => pendingZipSubmissions.filter((item) => {
     const query = manualZipSearch.trim().toLowerCase();
@@ -3020,7 +3178,14 @@ function TvZipWorkspace({
     const body = await response.json().catch(() => null);
     if (!response.ok) { notify(body?.message || "The ZIP archive could not be deleted."); return; }
     await loadBatches();
-    notify(`${code} archive deleted. Its audit record has been retained.`);
+    notify(`${code} moved to the ZIP Bin. Its details remain available until the Bin is cleared.`);
+  }
+  async function clearZipBin() {
+    const batchIds=[...binSelected]; if(!batchIds.length)return;
+    const response=await apiFetch("/api/v1/admin/kids-champ/batches/bin",{method:"DELETE",body:JSON.stringify({batchIds})});
+    const body=await response.json().catch(()=>null);
+    if(!response.ok){notify(body?.message||"The selected ZIP Bin records could not be cleared.");return;}
+    setBinSelected(new Set());await loadBatches();notify(`${batchIds.length} ZIP record${batchIds.length===1?"":"s"} permanently cleared from the Bin.`);
   }
 
   async function createPendingZip() {
@@ -3103,7 +3268,7 @@ function TvZipWorkspace({
             Manage ZIP details, telecast dates and participant notifications.
           </p>
         </div>
-        <span className="rounded-full bg-emerald-50 px-4 py-2 text-[12px] font-semibold text-emerald-700">Automatic ZIP: {zipProgress.readyPhotos} / {zipProgress.activeTargetSize} photos</span>
+        <span className="rounded-full bg-emerald-50 px-4 py-2 text-[12px] font-semibold text-emerald-700">Automatic ZIP: {zipProgress.readyPhotos} waiting · {zipProgress.activeTargetSize} per batch</span>
       </div>
       <button
         onClick={() => setSettingsOpen(true)}
@@ -3160,7 +3325,7 @@ function TvZipWorkspace({
           <p className="text-[10px] text-amber-800">New archive names use: <strong>ZipPhotoId001_name_age_Hometown</strong>. Already ZIPped photos are view-only.</p>
         </div> : null}
         <p className="mx-5 mb-5 rounded-[10px] border border-emerald-100 bg-white px-4 py-3 text-[12px] text-emerald-800">
-          {zipProgress.readyPhotos} of {zipProgress.activeTargetSize} approved photos are in the automatic ZIP queue. {Math.max(0, zipProgress.activeTargetSize - zipProgress.readyPhotos)} more photo{Math.max(0, zipProgress.activeTargetSize - zipProgress.readyPhotos) === 1 ? "" : "s"} needed before the next ZIP begins.
+          {zipProgress.readyPhotos >= zipProgress.activeTargetSize ? `${Math.floor(zipProgress.readyPhotos / zipProgress.activeTargetSize)} ZIP batch${Math.floor(zipProgress.readyPhotos / zipProgress.activeTargetSize) === 1 ? " is" : "es are"} ready to create automatically.` : `${zipProgress.readyPhotos} approved photo${zipProgress.readyPhotos === 1 ? " is" : "s are"} waiting. ${Math.max(0, zipProgress.activeTargetSize - zipProgress.readyPhotos)} more needed before the next ZIP begins.`}
         </p>
         {advancedZipRecoveryOpen && visibleManualZipSubmissions.length ? (
           <div className="max-h-80 overflow-y-auto divide-y divide-[#E7EDF3]">
@@ -3179,13 +3344,14 @@ function TvZipWorkspace({
           <div>
             <h3 className="text-[18px] font-semibold">ZIP records</h3>
             <p className="mt-1 text-[12px] text-[#8490A2]">
-              Deleted files retain their complete audit records.
+              {binOpen ? "Deleted ZIP details stay here until you permanently clear them." : "Deleted ZIP archives are moved to the Bin."}
             </p>
           </div>
           <div className="flex gap-2">
-            <button type="button" onClick={() => setQueueOpen(true)} className={secondaryButton}>
-              Message queue
+            <button type="button" onClick={() => { setBinOpen((value)=>!value); setBinSelected(new Set()); }} className={`${secondaryButton} min-w-[108px] whitespace-nowrap ${binOpen ? "border-red-300 bg-red-50 text-red-700" : ""}`}>
+              {binOpen ? "Back to ZIPs" : `ZIP Bin (${zipRecords.filter((item)=>item.deleted).length})`}
             </button>
+            {binOpen ? <><button type="button" onClick={()=>setBinSelected(new Set(visibleZips.map((item)=>item.id).filter(Boolean) as string[]))} className={secondaryButton}>Select all</button><button type="button" onClick={()=>void clearZipBin()} disabled={!binSelected.size} className="rounded-[9px] bg-red-600 px-3 text-[11px] font-semibold text-white disabled:opacity-40">Clear selected</button></> : null}
             <input
               value={zipSearch}
               onChange={(event) => setZipSearch(event.target.value)}
@@ -3201,7 +3367,6 @@ function TvZipWorkspace({
               <option>Ready</option>
               <option>Creating ZIP</option>
               <option>Queued</option>
-              <option>Deleted</option>
             </select>
           </div>
         </div>
@@ -3209,8 +3374,9 @@ function TvZipWorkspace({
           {visibleZips.map((item) => (
             <article
               key={item.code}
-              className={`grid items-center gap-3 px-5 py-4 transition hover:bg-[#F8FAFC] tablet:grid-cols-[1fr_110px_170px_100px_90px_270px] ${item.deleted ? "bg-red-50/35" : ""}`}
+              className={`grid items-center gap-3 px-5 py-4 transition hover:bg-[#F8FAFC] ${binOpen ? "tablet:grid-cols-[32px_1fr_110px_170px_100px_90px_270px]" : "tablet:grid-cols-[1fr_110px_170px_100px_90px_270px]"} ${item.deleted ? "bg-red-50/35" : ""}`}
             >
+              {binOpen ? <input type="checkbox" checked={Boolean(item.id&&binSelected.has(item.id))} onChange={()=>item.id&&setBinSelected((current)=>{const next=new Set(current);if(next.has(item.id!))next.delete(item.id!);else next.add(item.id!);return next;})} className="size-4 accent-red-600" aria-label={`Select ${item.code} for permanent deletion`} /> : null}
               <button
                 onClick={() => openZip(item, deleteZip, updateZip)}
                 className="text-left"
@@ -3403,26 +3569,50 @@ function ParticipantMessageCampaign({
   const [step, setStep] = useState<"Compose" | "Confirm" | "Sending">(
     "Compose",
   );
-  const [template, setTemplate] = useState(defaultTemplate);
+  const { templates, loading: templatesLoading, reload: reloadTemplates } = useApprovedWhatsAppTemplates(notify);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [templateParameters, setTemplateParameters] = useState<string[]>([]);
+  const selectedTemplate = templates.find((item) => item.id === selectedTemplateId) ?? null;
+  const template = selectedTemplate?.body ?? defaultTemplate;
   const [deliveries, setDeliveries] = useState<ParticipantDelivery[]>(() =>
     members.map((item) => ({ ...item, delivery: "Unsent" })),
   );
   const [currentId, setCurrentId] = useState("");
   const [running, setRunning] = useState(false);
-  const personalize = (item: ParticipantRecord) =>
-    template
+  // Synchronized server data supplies the initial composer selection.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (selectedTemplateId && templates.some((item) => item.id === selectedTemplateId)) return;
+    const first = templates[0];
+    if (!first) return;
+    setSelectedTemplateId(first.id);
+    setTemplateParameters(first.variables.length === 3 ? ["{name}", "{reference}", "{homeTown}"] : Array.from({ length: first.variables.length }, (_, index) => index === 0 ? "{name}" : ""));
+  }, [templates, selectedTemplateId]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+  function chooseTemplate(item: MetaWhatsAppTemplate | null) {
+    setSelectedTemplateId(item?.id ?? "");
+    setTemplateParameters(item ? (item.variables.length === 3 ? ["{name}", "{reference}", "{homeTown}"] : Array.from({ length: item.variables.length }, (_, index) => index === 0 ? "{name}" : "")) : []);
+  }
+  const personalize = (item: ParticipantRecord) => {
+    if (selectedTemplate) return renderMetaTemplate(template, templateParameters.map((value) => value
       .replaceAll("{name}", item.name)
       .replaceAll("{reference}", item.reference)
-      .replaceAll("{homeTown}", item.location);
+      .replaceAll("{homeTown}", item.location)));
+    return template.replaceAll("{name}", item.name).replaceAll("{reference}", item.reference).replaceAll("{homeTown}", item.location);
+  };
   const sent = deliveries.filter((item) => item.delivery === "Queued").length;
   const errors = deliveries.filter((item) => item.delivery === "Error").length;
   const processed = sent + errors;
   const current = deliveries.find((item) => item.reference === currentId);
 
   async function startSending() {
+    if (!selectedTemplate || templateParameters.some((value) => !value.trim())) {
+      notify("Choose an approved Meta template and complete every template variable.");
+      return;
+    }
     setStep("Sending");
     setRunning(true);
-    const response=await apiFetch("/api/v1/admin/kids-champ/campaigns",{method:"POST",body:JSON.stringify({channel:"WHATSAPP",messageTemplate:template,participantIds:deliveries.map((item)=>item.reference)})});
+    const response=await apiFetch("/api/v1/admin/kids-champ/campaigns",{method:"POST",body:JSON.stringify({channel:"WHATSAPP",messageTemplate:template,participantIds:deliveries.map((item)=>item.reference),templateName:selectedTemplate.name,languageCode:selectedTemplate.languageCode,templateParameters,name:"Participant message",source:"PARTICIPANTS"})});
     const body=await response.json().catch(()=>null);
     if(response.ok)setDeliveries((items)=>items.map((item)=>({...item,delivery:"Queued"})));
     else {setDeliveries((items)=>items.map((item)=>({...item,delivery:"Error"})));notify(body?.message||"Campaign could not be queued.");}
@@ -3480,17 +3670,15 @@ function ParticipantMessageCampaign({
         <div className="flex-1 overflow-y-auto p-5">
           {step === "Compose" ? (
             <div>
-              <label className="text-[12px] font-semibold text-[#526178]">
-                Message template
-                <textarea
-                  value={template}
-                  onChange={(event) => setTemplate(event.target.value)}
-                  className="mt-2 min-h-36 w-full rounded-[12px] border border-[#D8E2EC] p-3 text-[13px] leading-6 outline-none focus:border-[#2488F4]"
-                />
+              <label className="text-[12px] font-semibold text-[#526178]">Approved Meta template
+                <select value={selectedTemplateId} onChange={(event) => chooseTemplate(templates.find((item) => item.id === event.target.value) ?? null)} className="mt-2 h-10 w-full rounded-[10px] border border-[#D8E2EC] bg-white px-3 text-[12px]">
+                  <option value="">{templatesLoading ? "Loading templates…" : "Choose a template"}</option>
+                  {templates.map((item) => <option key={item.id} value={item.id}>{item.name} ({item.languageCode})</option>)}
+                </select>
               </label>
-              <p className="mt-2 text-[10px] text-[#8490A2]">
-                Variables: {`{name}`} · {`{reference}`} · {`{homeTown}`}
-              </p>
+              {!templatesLoading && !templates.length ? <div className="mt-3 rounded-[10px] border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800">No enabled, approved template is synchronized. Ask a Super Admin to sync templates, then <button type="button" onClick={() => void reloadTemplates()} className="font-bold underline">refresh</button>.</div> : null}
+              {selectedTemplate ? <><div className="mt-3 min-h-28 whitespace-pre-wrap rounded-[12px] border border-[#D8E2EC] bg-[#F7FAFC] p-3 text-[12px] leading-6 text-[#40516B]">{template}</div><div className="mt-3 grid gap-2 tablet:grid-cols-2">{selectedTemplate.variables.map((variable, index) => <label key={`${variable}-${index}`} className="text-[10px] font-semibold text-[#66758B]">Variable {`{{${variable}}}`}<input value={templateParameters[index] ?? ""} onChange={(event) => setTemplateParameters((current) => current.map((value, parameterIndex) => parameterIndex === index ? event.target.value : value))} placeholder="Value or personalization token" className="mt-1 h-9 w-full rounded-[9px] border border-[#D8E2EC] px-3 text-[11px]" /></label>)}</div></> : null}
+              <p className="mt-2 text-[10px] text-[#8490A2]">Personalization tokens: {`{name}`} · {`{reference}`} · {`{homeTown}`}</p>
               <div className="mt-5 rounded-[13px] border border-emerald-200 bg-emerald-50 p-4">
                 <p className="text-[11px] font-semibold text-emerald-800">
                   Example for {members[0]?.name}
@@ -3615,7 +3803,7 @@ function ParticipantMessageCampaign({
           {step === "Compose" ? (
             <button
               onClick={() => setStep("Confirm")}
-              disabled={!template.trim() || !members.length}
+              disabled={!selectedTemplate || !template.trim() || !members.length || templateParameters.some((value) => !value.trim())}
               className={`${primaryButton} disabled:opacity-40`}
             >
               Preview and confirm
@@ -3623,7 +3811,8 @@ function ParticipantMessageCampaign({
           ) : step === "Confirm" ? (
             <button
               onClick={() => void startSending()}
-              className="h-10 rounded-[10px] bg-[#20B15A] px-4 text-[12px] font-semibold text-white"
+              disabled={!selectedTemplate}
+              className="h-10 rounded-[10px] bg-[#20B15A] px-4 text-[12px] font-semibold text-white disabled:opacity-40"
             >
               Confirm and start sending
             </button>
@@ -3684,7 +3873,7 @@ function ParticipantsWorkspace({
         if (!response.ok) throw new Error("Participants could not be loaded.");
         const body = await response.json() as Array<{
           id: string; name: string; age: number; type: string; location: string; phone: string;
-          submissions: number; approved: number; telecasted: number; joinedAt: string; lastSubmissionAt: string; whatsappConsented:boolean;
+          submissions: number; approved: number; telecasted: number; joinedAt: string; lastSubmissionAt: string; whatsappConsented:boolean; whatsappConsentStatus?:"UNKNOWN"|"OPTED_IN"|"OPTED_OUT";
         }>;
         setRecords(body.map((item) => ({
           reference: item.id,
@@ -3696,7 +3885,8 @@ function ParticipantsWorkspace({
           submissions: item.submissions,
           approved: item.approved,
           telecasted: item.telecasted,
-          whatsapp: item.whatsappConsented ? "Consented" : "Not provided",
+          whatsapp: item.whatsappConsentStatus === "OPTED_OUT" ? "Opted out" : item.whatsappConsented ? "Consented" : "Not provided",
+          whatsappStatus: item.whatsappConsentStatus ?? (item.whatsappConsented ? "OPTED_IN" : "UNKNOWN"),
           joinedDate: item.joinedAt.slice(0, 10),
           lastSubmissionDate: item.lastSubmissionAt.slice(0, 10),
         })));
@@ -3924,7 +4114,8 @@ function ParticipantsWorkspace({
   }
   const canMessage = (item: ParticipantRecord) =>
     Boolean(item.phone.trim()) &&
-    (!settings.requireWhatsAppConsent || item.whatsapp === "Consented");
+    item.whatsappStatus !== "OPTED_OUT" &&
+    (!settings.requireWhatsAppConsent || item.whatsappStatus === "OPTED_IN");
   const selectedCampaignMembers = records
     .filter((item) => selected.has(item.reference) && canMessage(item))
     .slice(0, settings.campaignLimit);
@@ -4392,6 +4583,7 @@ function ParticipantDetailsEditor({
     }
     onSave(draft);
     setEditing(false);
+    notify("Participant details updated.");
   }
   return (
     <div>
@@ -4471,20 +4663,7 @@ function ParticipantDetailsEditor({
               className={`${fieldClass} mt-1`}
             />
           </label>
-          <label className="text-[10px] font-semibold uppercase text-[#8793A5]">
-            WhatsApp
-            <select
-              value={draft.whatsapp}
-              onChange={(event) =>
-                setDraft({ ...draft, whatsapp: event.target.value })
-              }
-              className={`${fieldClass} mt-1`}
-            >
-              <option>Consented</option>
-              <option>Not provided</option>
-              <option>Opted out</option>
-            </select>
-          </label>
+          <div className="rounded-[10px] bg-slate-50 p-3 text-[10px] font-semibold uppercase text-[#8793A5]">WhatsApp<span className="mt-2 block text-[12px] normal-case text-[#40516A]">Managed through the audited consent control below.</span></div>
           <label className="text-[10px] font-semibold uppercase text-[#8793A5]">
             Joined date
             <input
@@ -4565,6 +4744,7 @@ function ParticipantDetailsEditor({
           ))}
         </dl>
       )}
+      <div className="mt-5"><WhatsAppConsentControl participantId={draft.reference} status={draft.whatsappStatus} notify={notify} onChanged={(next) => setDraft((current) => ({ ...current, whatsappStatus: next as ParticipantRecord["whatsappStatus"], whatsapp: next === "OPTED_IN" ? "Consented" : next === "OPTED_OUT" ? "Opted out" : "Not provided" }))} /></div>
       <div className="mt-5 grid grid-cols-2 gap-2">
         {editing ? (
           <>
@@ -4582,7 +4762,17 @@ function ParticipantDetailsEditor({
             </button>
           </>
         ) : (
-          <p className="col-span-2 rounded-[10px] bg-blue-50 p-3 text-[11px] leading-5 text-blue-800">Participant identity is derived from account and submission records. Use the Participants workspace to queue an audited message campaign.</p>
+          <>
+            <button
+              onClick={() => setEditing(true)}
+              className={primaryButton}
+            >
+              Edit details
+            </button>
+            <p className="rounded-[10px] bg-blue-50 p-3 text-[11px] leading-5 text-blue-800">
+              Update participant details, then save your changes.
+            </p>
+          </>
         )}
       </div>
     </div>
@@ -5314,7 +5504,6 @@ function KidsChampSettingsPanel({
 
 type CalendarTask = {
   id: string;
-  time: string;
   title: string;
   detail: string;
   complete: boolean;
@@ -5326,48 +5515,65 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
   const [dayBatches, setDayBatches] = useState<AdminBatchResponse[]>([]);
   const [activeSection, setActiveSection] = useState<"submissions" | "zips" | "telecasts" | "warnings" | "tasks">("submissions");
   const [photoPreview, setPhotoPreview] = useState<{ id: string; url: string } | null>(null);
-  const taskDate = (() => {
-    const match = dateLabel.match(/^([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})$/);
-    if (match) {
-      const month = new Date(`${match[1]} 1, 2000`).getMonth() + 1;
-      return `${match[3]}-${String(month).padStart(2, "0")}-${String(Number(match[2])).padStart(2, "0")}`;
-    }
-    const value = new Date(dateLabel);
-    if (Number.isNaN(value.getTime())) {
-      const today = new Date();
-      return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    }
-    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}-${String(value.getDate()).padStart(2, "0")}`;
-  })();
+  const [tasksLoading, setTasksLoading] = useState(true);
+  const [operationsLoading, setOperationsLoading] = useState(true);
+  const [newTaskOpen, setNewTaskOpen] = useState(false);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDetails, setTaskDetails] = useState("");
+  const [taskSaving, setTaskSaving] = useState(false);
+  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
+  const [approvingId, setApprovingId] = useState<string | null>(null);
+  const [dataReload, setDataReload] = useState(0);
+  const today = new Date();
+  const taskDate = dateLabelToCalendarKey(dateLabel) ?? calendarDateKey(today.getFullYear(), today.getMonth(), today.getDate());
   useEffect(() => {
+    const refresh = () => setDataReload((value) => value + 1);
+    window.addEventListener("aplus-data-updated", refresh);
+    return () => window.removeEventListener("aplus-data-updated", refresh);
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
     apiFetch("/api/v1/admin/kids-champ/calendar/tasks").then(async (response) => {
       if (!response.ok) throw new Error("Calendar tasks could not be loaded.");
       const body = await response.json() as Array<{id:string;date:string;title:string;details?:string;completedAt?:string}>;
-      setTasks(body.filter((item) => item.date === taskDate).map((item) => ({id:item.id,time:"--:--",title:item.title,detail:item.details||"No additional details",complete:Boolean(item.completedAt)})));
-    }).catch((reason) => notify(reason instanceof Error ? reason.message : "Calendar tasks could not be loaded."));
+      if (!cancelled) setTasks(body.filter((item) => item.date === taskDate).map((item) => ({id:item.id,title:item.title,detail:item.details||"No additional details",complete:Boolean(item.completedAt)})));
+    }).catch((reason) => { if (!cancelled) notify(reason instanceof Error ? reason.message : "Calendar tasks could not be loaded."); })
+      .finally(() => { if (!cancelled) setTasksLoading(false); });
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskDate]);
+  }, [taskDate, dataReload]);
   useEffect(() => {
+    let cancelled = false;
     Promise.all([
       apiFetch("/api/v1/admin/kids-champ/submissions"),
       apiFetch("/api/v1/admin/kids-champ/batches"),
     ]).then(async ([submissionResponse, batchResponse]) => {
-      const submissionItems = submissionResponse.ok ? await submissionResponse.json() as AdminSubmissionResponse[] : [];
-      const batchItems = batchResponse.ok ? await batchResponse.json() as AdminBatchResponse[] : [];
-      setDaySubmissions(submissionItems.filter((item) => item.submittedAt.slice(0, 10) === taskDate));
-      setDayBatches(batchItems.filter((item) => item.createdAt.slice(0, 10) === taskDate || item.telecastDate === taskDate));
-    }).catch(() => notify("Daily operations could not be loaded."));
+      if (!submissionResponse.ok || !batchResponse.ok) throw new Error("Daily operations could not be loaded.");
+      const submissionBody = await submissionResponse.json() as AdminSubmissionResponse[] | AdminSubmissionPageResponse;
+      const submissionItems = Array.isArray(submissionBody) ? submissionBody : submissionBody.items;
+      const batchItems = await batchResponse.json() as AdminBatchResponse[];
+      if (!cancelled) {
+        setDaySubmissions(submissionItems.filter((item) => item.submittedAt.slice(0, 10) === taskDate));
+        setDayBatches(batchItems.filter((item) => item.createdAt.slice(0, 10) === taskDate || item.telecastDate === taskDate));
+      }
+    }).catch(() => { if (!cancelled) notify("Daily operations could not be loaded."); })
+      .finally(() => { if (!cancelled) setOperationsLoading(false); });
+    return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskDate]);
+  }, [taskDate, dataReload]);
   async function approveSubmission(item: AdminSubmissionResponse) {
-    const response = await apiFetch("/api/v1/admin/kids-champ/submissions/approve", {
-      method: "POST",
-      body: JSON.stringify({ submissionIds: [item.id] }),
-    });
-    const body = await response.json().catch(() => null);
-    if (!response.ok) { notify(body?.message || "Approval could not be saved."); return; }
-    setDaySubmissions((current) => current.map((entry) => entry.id === item.id ? { ...entry, reviewStatus: "APPROVED" } : entry));
-    notify("Submission approved and ZIP processing started.");
+    setApprovingId(item.id);
+    try {
+      const response = await apiFetch("/api/v1/admin/kids-champ/submissions/approve", {
+        method: "POST",
+        body: JSON.stringify({ submissionIds: [item.id] }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { notify(body?.message || "Approval could not be saved."); return; }
+      setDaySubmissions((current) => current.map((entry) => entry.id === item.id ? { ...entry, reviewStatus: "APPROVED" } : entry));
+      notify("Submission approved and ZIP processing started.");
+    } catch { notify("Approval could not be saved."); }
+    finally { setApprovingId(null); }
   }
   async function previewPhoto(item: AdminSubmissionResponse) {
     if (photoPreview?.id === item.id) { setPhotoPreview(null); return; }
@@ -5377,8 +5583,42 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
     if (photoPreview) URL.revokeObjectURL(photoPreview.url);
     setPhotoPreview({ id: item.id, url });
   }
+  useEffect(() => () => { if (photoPreview) URL.revokeObjectURL(photoPreview.url); }, [photoPreview]);
+  async function createTask() {
+    if (!taskTitle.trim()) { notify("Enter a task title."); return; }
+    setTaskSaving(true);
+    try {
+      const response = await apiFetch("/api/v1/admin/kids-champ/calendar/tasks", { method: "POST", body: JSON.stringify({ date: taskDate, title: taskTitle.trim(), details: taskDetails.trim() || null }) });
+      const body = await response.json().catch(() => null) as {id?:string;title?:string;details?:string;completedAt?:string;message?:string}|null;
+      if (!response.ok || !body?.id) { notify(body?.message || "Task could not be created."); return; }
+      setTasks((current) => current.some((item) => item.id === body.id) ? current : [...current, { id: body.id!, title: body.title || taskTitle.trim(), detail: body.details || "No additional details", complete: Boolean(body.completedAt) }]);
+      setTaskTitle(""); setTaskDetails(""); setNewTaskOpen(false); setActiveSection("tasks");
+      notify("Calendar task added.");
+    } catch { notify("Task could not be created."); }
+    finally { setTaskSaving(false); }
+  }
+  async function toggleTask(task: CalendarTask) {
+    setUpdatingTaskId(task.id);
+    try {
+      const response = await apiFetch(`/api/v1/admin/kids-champ/calendar/tasks/${task.id}`, { method: "PATCH", body: JSON.stringify({ completed: !task.complete }) });
+      if (!response.ok) { notify("Task status could not be saved."); return; }
+      setTasks((current) => current.map((item) => item.id === task.id ? { ...item, complete: !item.complete } : item));
+    } catch { notify("Task status could not be saved."); }
+    finally { setUpdatingTaskId(null); }
+  }
+  async function deleteTask(task: CalendarTask) {
+    setUpdatingTaskId(task.id);
+    try {
+      const response = await apiFetch(`/api/v1/admin/kids-champ/calendar/tasks/${task.id}`, { method: "DELETE" });
+      if (!response.ok) { notify("Task could not be deleted."); return; }
+      setTasks((current) => current.filter((item) => item.id !== task.id));
+      notify("Calendar task deleted.");
+    } catch { notify("Task could not be deleted."); }
+    finally { setUpdatingTaskId(null); }
+  }
   return (
     <div>
+      {operationsLoading || tasksLoading ? <p className="mb-3 rounded-[10px] bg-blue-50 px-3 py-2 text-[11px] font-semibold text-blue-700">Loading daily operations…</p> : null}
       <div className="grid grid-cols-2 gap-3 tablet:grid-cols-3">
         {[
           ["Submissions", String(daySubmissions.length), "submissions"],
@@ -5390,7 +5630,7 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
           <button
             type="button"
             key={label}
-            onClick={() => { setActiveSection(action as typeof activeSection); onNavigate?.(action as "submissions" | "zips" | "telecasts" | "tasks" | "warnings", dateLabel); }}
+            onClick={() => setActiveSection(action as typeof activeSection)}
             className={`rounded-[16px] border p-5 text-left transition hover:border-blue-300 ${activeSection === action ? "border-blue-400 bg-blue-50" : "border-[#E0E7EF] bg-white"}`}
           >
             <p className="text-[25px] font-semibold">{value}</p>
@@ -5400,7 +5640,7 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
       </div>
       {activeSection === "submissions" ? (
         <div className="mt-5 rounded-[16px] border border-[#E0E7EF] bg-white p-4">
-          <h3 className="text-[15px] font-semibold">Received on this day</h3>
+          <div className="flex items-center justify-between gap-3"><h3 className="text-[15px] font-semibold">Received on this day</h3>{onNavigate ? <button type="button" onClick={() => onNavigate("submissions", dateLabel)} className="text-[11px] font-bold text-blue-700 hover:underline">Open filtered submissions →</button> : null}</div>
           <div className="mt-3 space-y-2">
             {daySubmissions.map((item) => (
               <article key={item.id} className="flex flex-wrap items-center gap-3 rounded-[12px] border border-[#E5EBF2] p-3">
@@ -5408,7 +5648,7 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
                   <strong className="block truncate text-[13px] text-[#263650]">{item.childName}</strong>
                   <span className="text-[11px] text-[#7A879A]">{item.trackingCode} · {item.hometown} · age {item.ageAtSubmission} · {item.reviewStatus.replaceAll("_", " ")}</span>
                 </div>
-                <button type="button" onClick={() => void approveSubmission(item)} disabled={item.reviewStatus === "APPROVED"} className="rounded-[8px] bg-emerald-600 px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-40">{item.reviewStatus === "APPROVED" ? "Approved" : "Approve"}</button>
+                <button type="button" onClick={() => void approveSubmission(item)} disabled={item.reviewStatus === "APPROVED" || approvingId === item.id} className="rounded-[8px] bg-emerald-600 px-3 py-2 text-[11px] font-semibold text-white disabled:opacity-40">{item.reviewStatus === "APPROVED" ? "Approved" : approvingId === item.id ? "Approving…" : "Approve"}</button>
                 <button type="button" onClick={() => void previewPhoto(item)} className="rounded-[8px] border border-blue-200 px-3 py-2 text-[11px] font-semibold text-blue-700">Photo</button>
                 {photoPreview?.id === item.id ? <Image src={photoPreview.url} alt={`Artwork submitted by ${item.childName}`} width={1200} height={440} unoptimized className="mt-2 max-h-[440px] w-full rounded-[12px] bg-[#F2F5F8] object-contain" /> : null}
               </article>
@@ -5419,7 +5659,7 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
       ) : null}
       {activeSection === "zips" || activeSection === "telecasts" || activeSection === "warnings" ? (
         <div className="mt-5 rounded-[16px] border border-[#E0E7EF] bg-white p-4">
-          <h3 className="text-[15px] font-semibold">{activeSection === "zips" ? "ZIPs created" : activeSection === "telecasts" ? "Telecasts scheduled" : "Warnings and deadlines"}</h3>
+          <div className="flex items-center justify-between gap-3"><h3 className="text-[15px] font-semibold">{activeSection === "zips" ? "ZIPs created" : activeSection === "telecasts" ? "Telecasts scheduled" : "Warnings and deadlines"}</h3>{onNavigate && activeSection !== "warnings" ? <button type="button" onClick={() => onNavigate(activeSection, dateLabel)} className="text-[11px] font-bold text-blue-700 hover:underline">Open ZIP workspace →</button> : null}</div>
           <div className="mt-3 space-y-2">
             {dayBatches.filter((item) => activeSection === "zips" ? item.createdAt.slice(0, 10) === taskDate : activeSection === "telecasts" ? item.telecastDate === taskDate : item.status !== "DELETED" && item.daysRemaining <= 0).map((item) => (
               <article key={item.id} className="rounded-[12px] border border-[#E5EBF2] p-3 text-[12px]">
@@ -5427,6 +5667,7 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
                 <p className="mt-1 text-[#7A879A]">{item.photoCount} photos · {item.status} · {item.telecastDate ? `telecast ${item.telecastDate}` : `${item.daysRemaining} days remaining`}</p>
               </article>
             ))}
+            {!dayBatches.filter((item) => activeSection === "zips" ? item.createdAt.slice(0, 10) === taskDate : activeSection === "telecasts" ? item.telecastDate === taskDate : item.status !== "DELETED" && item.daysRemaining <= 0).length ? <p className="py-5 text-center text-[12px] text-[#7A879A]">No records for this section.</p> : null}
           </div>
         </div>
       ) : null}
@@ -5447,7 +5688,8 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
         </div>
       </div>
       {activeSection === "tasks" ? <div className="mt-5 space-y-2 rounded-[16px] border border-[#E0E7EF] bg-white p-4">
-        <h3 className="text-[15px] font-semibold">Open tasks</h3>
+        <div className="flex items-center justify-between gap-3"><div><h3 className="text-[15px] font-semibold">Daily tasks</h3><p className="mt-1 text-[11px] text-[#7A879A]">Add, complete, or remove work for {dateLabel}.</p></div><button type="button" onClick={() => setNewTaskOpen((open) => !open)} className="rounded-[8px] bg-blue-600 px-3 py-2 text-[11px] font-bold text-white">{newTaskOpen ? "Cancel" : "+ Add task"}</button></div>
+        {newTaskOpen ? <div className="rounded-[12px] border border-blue-200 bg-blue-50/50 p-3"><label className="block text-[11px] font-semibold text-[#526178]">Task title<input value={taskTitle} maxLength={160} onChange={(event) => setTaskTitle(event.target.value)} className={`${fieldClass} mt-1.5`} placeholder="What needs to be done?" autoFocus /></label><label className="mt-3 block text-[11px] font-semibold text-[#526178]">Details (optional)<textarea value={taskDetails} maxLength={1000} onChange={(event) => setTaskDetails(event.target.value)} className="mt-1.5 min-h-20 w-full rounded-[10px] border border-[#D8E2EC] bg-white p-3 text-[12px] outline-none focus:border-[#2488F4]" placeholder="Notes for the operations team" /></label><div className="mt-3 flex justify-end"><button type="button" onClick={() => void createTask()} disabled={taskSaving || !taskTitle.trim()} className={`${primaryButton} disabled:opacity-50`}>{taskSaving ? "Adding…" : "Add task"}</button></div></div> : null}
         {tasks.map((task) => (
           <article
             key={task.id}
@@ -5456,16 +5698,11 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
             <input
               type="checkbox"
               checked={task.complete}
-              onChange={() => { void apiFetch(`/api/v1/admin/kids-champ/calendar/tasks/${task.id}`,{method:"PATCH",body:JSON.stringify({completed:!task.complete})}).then((response)=>{if(response.ok)setTasks((current)=>current.map((item)=>item.id===task.id?{...item,complete:!item.complete}:item));else notify("Task status could not be saved.");}); }}
+              disabled={updatingTaskId === task.id}
+              onChange={() => void toggleTask(task)}
               className="mt-0.5 size-4 accent-emerald-600"
             />
-            <span className="w-14 shrink-0 text-[12px] font-semibold text-[#0877EF]">
-              {task.time}
-            </span>
-            <button
-              type="button"
-              className="min-w-0 flex-1 text-left"
-            >
+            <div className="min-w-0 flex-1">
               <strong
                 className={`block text-[13px] text-[#344660] ${task.complete ? "line-through opacity-60" : ""}`}
               >
@@ -5474,16 +5711,18 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
               <span className="mt-1 block text-[11px] text-[#7A879A]">
                 {task.detail}
               </span>
-            </button>
+            </div>
             <button
-              onClick={() => { void apiFetch(`/api/v1/admin/kids-champ/calendar/tasks/${task.id}`,{method:"DELETE"}).then((response)=>{if(response.ok)setTasks((current)=>current.filter((item)=>item.id!==task.id));else notify("Task could not be deleted.");}); }}
-              className="text-[11px] font-semibold text-red-600"
+              type="button"
+              disabled={updatingTaskId === task.id}
+              onClick={() => void deleteTask(task)}
+              className="text-[11px] font-semibold text-red-600 disabled:opacity-40"
             >
               Delete
             </button>
           </article>
         ))}
-        {!tasks.length ? <p className="py-5 text-center text-[12px] text-[#7A879A]">No open tasks for this day.</p> : null}
+        {!tasks.length && !tasksLoading ? <p className="py-5 text-center text-[12px] text-[#7A879A]">No tasks for this day. Add one when work needs to be tracked.</p> : null}
       </div> : null}
     </div>
   );
@@ -5698,7 +5937,7 @@ export function AccountManagementWorkspace({notify}:{notify:(message:string)=>vo
         <div className={`mt-5 rounded-[13px] border p-4 ${config?.lastTestStatus==="SUCCESS"?"border-emerald-200 bg-emerald-50":config?.lastTestStatus==="FAILED"?"border-red-200 bg-red-50":"border-[#E0E7EF] bg-[#F8FAFC]"}`}><p className="text-[11px] font-semibold uppercase text-[#7A879A]">Latest delivery status</p><p className="mt-2 text-[13px] font-semibold">{config?.lastTestStatus||"Not tested"}</p><p className="mt-1 text-[11px] text-[#66758B]">{config?.lastTestMessage||"Save the account, then send a test."}</p>{config?.lastTestedAt?<p className="mt-2 text-[10px] text-[#8490A2]">{new Date(config.lastTestedAt).toLocaleString()}</p>:null}</div>
       </div>
     </div>:null}
-    {tab==="templates"&&isSuperAdmin?<div className="mt-5 rounded-[18px] border border-[#E0E7EF] bg-white p-5"><h3 className="text-[16px] font-semibold">WhatsApp template management</h3><p className="mt-1 max-w-2xl text-[12px] leading-5 text-[#7A879A]">Templates are used by the message queue after Meta approves them. The next implementation slice will add template sync, approval state, language variants and variable previews here—without exposing Meta credentials to Admins.</p><div className="mt-4 grid gap-3 tablet:grid-cols-3">{["Reminder episode","Submission received","ZIP ready"].map(name=><div key={name} className="rounded-[13px] border border-[#E3EAF3] bg-[#FAFCFF] p-4"><p className="text-[12px] font-semibold">{name}</p><p className="mt-1 text-[11px] text-[#78869A]">Meta template · awaiting sync</p></div>)}</div></div>:null}
+    {tab==="templates"&&isSuperAdmin?<WhatsAppTemplatesPanel notify={notify}/>:null}
     {tab==="history"&&isSuperAdmin?<div className="mt-5 rounded-[18px] border border-[#E0E7EF] bg-white p-5"><h3 className="text-[16px] font-semibold">Admin history</h3><p className="mt-1 text-[12px] text-[#7A879A]">Append-only record of changes made by administrators.</p><div className="mt-4 space-y-3">{history.slice(0,100).map(item=><div key={`${item.createdAt}-${item.action}`} className="border-l-2 border-[#1680F7] pl-4"><p className="text-[12px] font-semibold">{item.action.replaceAll("_"," ")}</p><p className="mt-1 text-[11px] text-[#596A82]">{item.actor} · {item.details}</p><p className="mt-1 text-[10px] text-[#9AA6B7]">{new Date(item.createdAt).toLocaleString()}</p></div>)}{history.length===0?<p className="py-8 text-center text-[12px] text-[#7A879A]">No administrator changes have been recorded yet.</p>:null}</div></div>:null}
     {editingAccount?<div className="fixed inset-0 z-[140] grid place-items-center bg-[#0D1B33]/35 p-4"><div className="w-full max-w-lg rounded-[20px] bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><h3 className="text-[18px] font-semibold">Edit Kids account</h3><p className="mt-1 text-[12px] text-[#718097]">Changes are saved to the account and Admin history.</p></div><button onClick={()=>setEditingAccount(null)} className="text-lg text-[#6C7A90]">×</button></div><div className="mt-5 grid gap-4"><label className="text-[11px] font-semibold text-[#526178]">Parent or guardian name<input value={accountDraft.accountHolderName} onChange={e=>setAccountDraft({...accountDraft,accountHolderName:e.target.value})} className={`${fieldClass} mt-1`}/></label><label className="text-[11px] font-semibold text-[#526178]">Email address<input value={accountDraft.email} onChange={e=>setAccountDraft({...accountDraft,email:e.target.value})} className={`${fieldClass} mt-1`}/></label><label className="text-[11px] font-semibold text-[#526178]">Phone number<input value={accountDraft.phoneE164} onChange={e=>setAccountDraft({...accountDraft,phoneE164:e.target.value})} className={`${fieldClass} mt-1`}/></label><label className="text-[11px] font-semibold text-[#526178]">Account status<select value={accountDraft.status} onChange={e=>setAccountDraft({...accountDraft,status:e.target.value})} className={`${fieldClass} mt-1`}><option>ACTIVE</option><option>PENDING_VERIFICATION</option><option>LOCKED</option><option>SUSPENDED</option><option>DELETION_PENDING</option></select></label></div><div className="mt-6 flex justify-end gap-3"><button onClick={()=>setEditingAccount(null)} className={secondaryButton}>Cancel</button><button onClick={()=>void saveAccount()} disabled={savingAccount||!accountDraft.accountHolderName||!accountDraft.email||!accountDraft.phoneE164} className={`${primaryButton} disabled:opacity-40`}>{savingAccount?"Saving…":"Save changes"}</button></div></div></div>:null}
     {deleteDialog?<div className="fixed inset-0 z-[145] grid place-items-center bg-[#0D1B33]/35 p-4"><div className="w-full max-w-md rounded-[20px] bg-white p-6 shadow-2xl"><h3 className="text-[18px] font-semibold text-red-700">Delete account?</h3><p className="mt-2 text-[12px] leading-5 text-[#687890]">{deleteDialog.name} will lose access. Their account is retained securely and can be restored later; no child data is permanently erased.</p><label className="mt-4 block text-[11px] font-semibold text-[#526178]">Reason for this action<textarea value={deleteReason} onChange={e=>setDeleteReason(e.target.value)} className={`${fieldClass} mt-1 min-h-20`} placeholder="Required for the admin history"/></label><div className="mt-6 flex justify-end gap-3"><button onClick={()=>{setDeleteDialog(null);setDeleteReason("");}} className={secondaryButton}>Cancel</button><button onClick={()=>void deleteAccount()} disabled={!deleteReason.trim()} className="h-10 rounded-[10px] bg-red-600 px-4 text-[12px] font-semibold text-white disabled:opacity-40">Delete safely</button></div></div></div>:null}
@@ -5707,10 +5946,16 @@ export function AccountManagementWorkspace({notify}:{notify:(message:string)=>vo
 
 export function AccountManagementAdminPage() {
   const [notice,setNotice]=useState("");
+  const [liveVersion,setLiveVersion]=useState(0);
   function notify(message:string){setNotice(message);window.setTimeout(()=>setNotice(""),4000);}
+  useEffect(()=>{
+    const refresh=()=>setLiveVersion((current)=>current+1);
+    window.addEventListener("aplus-data-updated",refresh);
+    return()=>window.removeEventListener("aplus-data-updated",refresh);
+  },[]);
   return <>
     <header className="relative overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_92%_75%,rgba(220,239,255,.78)_0_2px,transparent_3px),linear-gradient(135deg,#fff_0%,#f5faff_100%)] px-6 py-8 shadow-[0_10px_28px_rgba(43,86,138,.05)] tablet:px-8 tablet:py-10"><i className="pointer-events-none absolute left-[2%] top-[44%] text-2xl text-violet-100">✦</i><i className="pointer-events-none absolute left-[57%] top-10 text-3xl text-[#C7D2FE]">◆</i><i className="pointer-events-none absolute left-[67%] top-[58%] text-3xl text-[#F7DFA4]">✦</i><i className="pointer-events-none absolute right-[34%] top-9 size-3 rounded-full bg-[#FFC2C7]"/><div className="relative z-10 flex flex-col gap-5 tablet:flex-row tablet:items-end tablet:justify-between"><div><p className="text-[13px] font-medium text-[#2488F4]">Page manager</p><h1 className="mt-1 text-[32px] font-semibold tracking-[-.04em] text-[#132447] tablet:text-[44px]">Account Management <span className="text-[#FFB300]">✦</span></h1><p className="mt-2 max-w-2xl text-[14px] leading-6 text-[#6E7C91]">Manage family accounts, administrator access, WhatsApp services and a complete record of changes.</p></div><div className="flex gap-3"><div className="rounded-[12px] border border-[#DDE8F5] bg-white/90 px-4 py-3 text-[12px] font-semibold text-[#40516B] shadow-sm">🔒 Protected controls</div></div></div></header>
-    <div className="mt-6"><AccountManagementWorkspace notify={notify}/></div>
+    <div className="mt-6"><AccountManagementWorkspace key={`account-management-${liveVersion}`} notify={notify}/></div>
     {notice?<div className="fixed bottom-5 right-5 z-[130] max-w-md rounded-[12px] bg-[#17243D] px-4 py-3 text-[12px] font-semibold text-white shadow-xl">{notice}</div>:null}
     <KidsChampLoadingScreen />
   </>;
@@ -5753,6 +5998,12 @@ export default function KidsChampAdmin() {
       })
       .catch(() => undefined);
     return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const refresh = () => setLiveVersion((current) => current + 1);
+    window.addEventListener("aplus-data-updated", refresh);
+    return () => window.removeEventListener("aplus-data-updated", refresh);
   }, []);
 
   useEffect(() => {
@@ -6001,6 +6252,7 @@ export default function KidsChampAdmin() {
             notify={notify}
           />
         ) : null}
+        {workspace === "Messaging" ? <WhatsAppMessagingWorkspace key={`messaging-${liveVersion}`} notify={notify} /> : null}
         {workspace === "Account & Management" ? (
           <AccountManagementWorkspace key={`account-management-${liveVersion}`} notify={notify} />
         ) : null}
@@ -6008,17 +6260,17 @@ export default function KidsChampAdmin() {
 
       {calendarOpen ? (
         <CalendarModal
-          key={`calendar-${liveVersion}`}
+          key="calendar"
           onClose={() => setCalendarOpen(false)}
           onOpenDay={(dateLabel) => {
             setCalendarOpen(false);
-            setCalendarWorkspaceFilter({ date: new Date(dateLabel).toISOString().slice(0, 10), mode: "submitted" });
-            changeWorkspace("Submissions");
+            setDrawer({ kind: "calendar", title: dateLabel });
           }}
           onNavigate={(section, dateLabel) => {
             setCalendarOpen(false);
             if (section === "submissions") {
-              setCalendarWorkspaceFilter({ date: new Date(dateLabel).toISOString().slice(0, 10), mode: "submitted" });
+              const date = dateLabelToCalendarKey(dateLabel);
+              if (date) setCalendarWorkspaceFilter({ date, mode: "submitted" });
               changeWorkspace("Submissions");
               return;
             }
@@ -6030,7 +6282,7 @@ export default function KidsChampAdmin() {
       ) : null}
       {drawer ? (
         <SideDrawer
-          key={`${drawer.kind}-${drawer.kind === "calendar" ? liveVersion : drawer.title}`}
+          key={`${drawer.kind}-${drawer.title}`}
           title={drawer.title}
           wide={drawer.kind === "calendar"}
           onBack={drawer.kind === "calendar" ? () => { setDrawer(null); setCalendarOpen(true); } : undefined}
