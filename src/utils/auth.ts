@@ -1,6 +1,23 @@
 import { backendFetch } from "@/utils/backendActivity";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081").replace(/\/$/, "");
+let activeApiRequests = 0;
+
+function publishApiActivity() {
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("aplus-api-activity", { detail: { count: activeApiRequests } }));
+}
+
+function publishDataUpdated(path: string, method: string) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("aplus-data-updated", { detail: { path, method } }));
+  }
+}
+
+function publishOperationFinished(success: boolean) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("aplus-operation-finished", { detail: { success } }));
+  }
+}
 
 function getAccessToken() {
   return window.sessionStorage.getItem("aplus-access-token")
@@ -121,17 +138,30 @@ async function refreshAccessToken() {
   return result.accessToken;
 }
 
-export async function apiFetch(path: string, init: RequestInit = {}) {
+export type ApiFetchInit = RequestInit & {
+  /**
+   * Use for internal maintenance requests that are immediately followed by an
+   * explicit refresh.  They should not remount every live workspace.
+   */
+  notifyDataUpdated?: boolean;
+};
+
+export async function apiFetch(path: string, init: ApiFetchInit = {}) {
+  const { notifyDataUpdated = true, ...requestInit } = init;
+  // Reads update their panel in place; only data-changing requests show the blocking save screen.
+  const tracked = !path.endsWith("/events") && Boolean(requestInit.method && !["GET", "HEAD"].includes(requestInit.method.toUpperCase()));
+  if (tracked) { activeApiRequests += 1; publishApiActivity(); }
+  try {
   let token = getAccessToken();
   if (!token) token = await refreshAccessToken();
 
-  const isFormData = typeof FormData !== "undefined" && init.body instanceof FormData;
+  const isFormData = typeof FormData !== "undefined" && requestInit.body instanceof FormData;
   const request = (accessToken: string | null) => backendFetch(`${API_BASE_URL}${path}`, {
-    ...init,
+    ...requestInit,
     credentials: "include",
     headers: {
-      ...(init.body && !isFormData ? { "Content-Type": "application/json" } : {}),
-      ...init.headers,
+      ...(requestInit.body && !isFormData ? { "Content-Type": "application/json" } : {}),
+      ...requestInit.headers,
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
   });
@@ -141,7 +171,19 @@ export async function apiFetch(path: string, init: RequestInit = {}) {
     token = await refreshAccessToken();
     if (token) response = await request(token);
   }
+  // A completed write has committed on the API. Let every mounted admin workspace
+  // reload its server-backed data without waiting for the next poll or navigation.
+  if (tracked) {
+    if (response.ok && notifyDataUpdated) publishDataUpdated(path, requestInit.method!.toUpperCase());
+    publishOperationFinished(response.ok);
+  }
   return response;
+  } catch (error) {
+    if (tracked) publishOperationFinished(false);
+    throw error;
+  } finally {
+    if (tracked) { activeApiRequests = Math.max(0, activeApiRequests - 1); publishApiActivity(); }
+  }
 }
 
 export async function logout() {

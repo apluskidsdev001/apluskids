@@ -3,6 +3,15 @@ import PublishAllButton from "@/components/admin/PublishAllButton";
 
 const pageCards = [
   {
+    title: "Home Page",
+    description: "Manage the hero, shortcuts, live card, special events and shared Home sections.",
+    href: "/admin/home",
+    preview: "/?adminPreview=1",
+    colour: "bg-[#FFF2E9] text-[#E95B1D]",
+    icon: "H",
+    features: ["Hero", "Shortcuts", "Special events"],
+  },
+  {
     title: "Watch Page",
     description: "Manage titles, categories, YouTube programs, trailers and shorts.",
     href: "/admin/watch",
@@ -47,7 +56,7 @@ export default function AdminDashboardPage() {
 
       <section className="mt-8 grid gap-4 tablet:grid-cols-3">
         {[
-          ["3", "Editable pages"],
+          ["4", "Editable pages"],
           ["Draft", "Publishing mode"],
           ["Local", "Storage status"],
         ].map(([value, label]) => (

@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import type { CSSProperties } from "react";
-import { useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  defaultWeeklySchedule,
+  scheduleDayNames,
+  type ScheduleDayName,
+  type WeeklySchedule,
+} from "@/components/admin/adminData";
+import { useAdminDisplayContent } from "@/components/admin/useAdminStorage";
+import { getYouTubeThumbnail } from "@/components/trailers/youtube";
 import TVScheduleCard from "./TVScheduleCard";
 import TVSchedulePopup from "./TVSchedulePopup";
 
@@ -17,72 +25,69 @@ type ScheduleItem = {
   links: { label: string; href: string }[];
 };
 
-const scheduleItems: ScheduleItem[] = [
-  {
-    id: "morning-radio",
-    name: "A plus Radio",
-    timePeriod: "10.00AM - 12.00AM",
-    description:
-      "A bright morning program with songs, messages, shout-outs, and gentle learning moments for families.",
-    contact: "+94 77 111 2222",
-    trailerUrl: "https://www.youtube.com/watch?v=XqZsoesa55w",
-    links: [{ label: "Program Page", href: "/watch" }],
-  },
-  {
-    id: "kids-champ",
-    name: "Kids Champ",
-    timePeriod: "12.00PM - 02.00PM",
-    description:
-      "A fun challenge show where children learn, play, answer questions, and celebrate confidence.",
-    contact: "+94 77 222 3333",
-    trailerUrl: "https://www.youtube.com/watch?v=BELlZKpi1Zs",
-    links: [{ label: "Watch Trailer", href: "/watch" }],
-  },
-  {
-    id: "story-hour",
-    name: "Story Hour",
-    timePeriod: "02.00PM - 03.00PM",
-    description:
-      "A calm storytelling block with animated tales, moral stories, and reading-friendly episodes.",
-    contact: "+94 77 333 4444",
-    trailerUrl: "https://www.youtube.com/watch?v=F4tHL8reNCs",
-    links: [{ label: "More Stories", href: "/watch" }],
-  },
-  {
-    id: "music-time",
-    name: "Music Time",
-    timePeriod: "03.00PM - 04.00PM",
-    description:
-      "A sing-along program with rhythm activities, kid-friendly songs, and movement breaks.",
-    contact: "+94 77 444 5555",
-    trailerUrl: "https://www.youtube.com/watch?v=XqZsoesa55w",
-    links: [{ label: "Song List", href: "/watch" }],
-  },
-  {
-    id: "learning-time",
-    name: "Learning Time",
-    timePeriod: "04.00PM - 05.00PM",
-    description:
-      "A playful learning block covering letters, numbers, colors, nature, and everyday curiosity.",
-    contact: "+94 77 555 6666",
-    trailerUrl: "https://www.youtube.com/watch?v=e_04ZrNroTo",
-    links: [{ label: "Learning Hub", href: "/watch" }],
-  },
-  {
-    id: "bedtime",
-    name: "Bedtime Stories",
-    timePeriod: "07.00PM - 08.00PM",
-    description:
-      "Soft bedtime stories and relaxing animated moments for a peaceful end to the day.",
-    contact: "+94 77 666 7777",
-    trailerUrl: "https://www.youtube.com/watch?v=F4tHL8reNCs",
-    links: [{ label: "Night Schedule", href: "/watch" }],
-  },
-];
+function getTodayName(date: Date): ScheduleDayName {
+  return scheduleDayNames[(date.getDay() + 6) % 7];
+}
+
+function timeToMinutes(time: string) {
+  const [hours = "0", minutes = "0"] = time.trim().replace(":", ".").split(".");
+  const parsedHours = Number(hours);
+  const parsedMinutes = Number(minutes);
+  return Number.isFinite(parsedHours) && Number.isFinite(parsedMinutes)
+    ? parsedHours * 60 + parsedMinutes
+    : Number.POSITIVE_INFINITY;
+}
 
 export default function TVScheduleSection() {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [activeProgram, setActiveProgram] = useState<ScheduleItem>();
+  const [now, setNow] = useState<Date | null>(null);
+  const weeklySchedule = useAdminDisplayContent<WeeklySchedule>(
+    "aplus-admin-watch-schedule",
+    "aplus-published-watch-schedule",
+    defaultWeeklySchedule,
+  );
+
+  useEffect(() => {
+    const refreshTime = () => setNow(new Date());
+    refreshTime();
+    const timer = window.setInterval(refreshTime, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const { currentProgramId, scheduleItems } = useMemo(() => {
+    const referenceTime = now ?? new Date(0);
+    const today = now ? getTodayName(referenceTime) : "Monday";
+    const entries = [...(weeklySchedule[today] ?? defaultWeeklySchedule[today])].sort(
+      (left, right) => timeToMinutes(left.time) - timeToMinutes(right.time),
+    );
+    const nowMinutes = referenceTime.getHours() * 60 + referenceTime.getMinutes();
+    const currentEntry = now
+      ? [...entries].reverse().find((entry) => timeToMinutes(entry.time) <= nowMinutes) ?? entries[0]
+      : entries[0];
+    const orderedEntries = currentEntry
+      ? [currentEntry, ...entries.filter((entry) => entry.id !== currentEntry.id)]
+      : entries;
+
+    return {
+      currentProgramId: currentEntry?.id,
+      scheduleItems: orderedEntries.map((entry) => ({
+        id: entry.id,
+        name: entry.title,
+        timePeriod: `${entry.time} · Today`,
+        thumbnail: entry.youtubeUrl ? getYouTubeThumbnail(entry.youtubeUrl) : undefined,
+        description: `${entry.title} is scheduled today at ${entry.time} on A Plus Kids TV.`,
+        contact: "Dialog TV Channel 48",
+        trailerUrl: entry.youtubeUrl ?? "",
+        links: [{ label: "View Full Schedule", href: "/watch" }],
+      })),
+    };
+  }, [now, weeklySchedule]);
+
+  useEffect(() => {
+    if (!now || !currentProgramId) return;
+    scrollerRef.current?.scrollTo({ left: 0, behavior: "auto" });
+  }, [currentProgramId, now]);
 
   function scrollByCards(direction: "left" | "right") {
     scrollerRef.current?.scrollBy({
@@ -95,9 +100,14 @@ export default function TVScheduleSection() {
     <section className="w-full bg-white px-5 py-6 md:px-8 md:py-7">
       <div className="mx-auto max-w-[1720px]">
         <div data-scroll-reveal="slide-right" className="mb-5 flex items-center justify-between md:mb-6">
-          <h2 className="text-[20px] font-bold leading-none text-[#071B63] md:text-[28px]">
-            TV Schedule
-          </h2>
+          <div>
+            <h2 className="text-[20px] font-bold leading-none text-[#071B63] md:text-[28px]">
+              TV Schedule
+            </h2>
+            <p className="mt-2 text-[11px] font-medium text-[#647797] md:text-[13px]">
+              Today&apos;s current program appears first.
+            </p>
+          </div>
           <Link href="/watch" className="text-[13px] font-bold text-[#0077ff] md:text-[16px]">
             <span className="md:hidden">View Full Schedule</span>
             <span className="hidden md:inline">View All</span>
@@ -115,11 +125,13 @@ export default function TVScheduleSection() {
           </button>
           <div
             ref={scrollerRef}
+            data-focus-strip
             className="flex snap-x flex-col gap-3 overflow-x-visible scroll-smooth pb-5 [scrollbar-width:none] md:flex-row md:gap-12 md:overflow-x-auto [&::-webkit-scrollbar]:hidden"
           >
             {scheduleItems.map((item, index) => (
               <div
                 key={item.id}
+                data-focus-item
                 data-scroll-reveal="pop"
                 style={{ "--reveal-delay": `${index * 60}ms` } as CSSProperties}
                 className="snap-start"
@@ -128,6 +140,7 @@ export default function TVScheduleSection() {
                   name={item.name}
                   timePeriod={item.timePeriod}
                   thumbnail={item.thumbnail}
+                  isCurrent={item.id === currentProgramId}
                   onClick={() => setActiveProgram(item)}
                 />
               </div>
@@ -145,10 +158,7 @@ export default function TVScheduleSection() {
       </div>
 
       {activeProgram ? (
-        <TVSchedulePopup
-          program={activeProgram}
-          onClose={() => setActiveProgram(undefined)}
-        />
+        <TVSchedulePopup program={activeProgram} onClose={() => setActiveProgram(undefined)} />
       ) : null}
     </section>
   );

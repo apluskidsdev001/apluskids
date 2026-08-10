@@ -1,8 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import type { CSSProperties } from "react";
 import { useRef, useState } from "react";
+import type { HomeSpecialEvent } from "@/components/admin/adminData";
+import { useAdminDisplayContent } from "@/components/admin/useAdminStorage";
 import SpecialEventCard from "./SpecialEventCard";
 import SpecialEventPopup from "./SpecialEventPopup";
 
@@ -11,11 +12,10 @@ type SpecialEvent = {
   name: string;
   date: string;
   place: string;
-  thumbnail?: string;
+  youtubeUrl: string;
   description: string;
   guests: string[];
   contact: string;
-  links: { label: string; href: string }[];
 };
 
 const specialEvents: SpecialEvent[] = [
@@ -24,72 +24,78 @@ const specialEvents: SpecialEvent[] = [
     name: "A plus Radio",
     date: "25 Jun 2026",
     place: "Badulla",
+    youtubeUrl: "https://www.youtube.com/watch?v=AwJR-7lrHWE",
     description:
       "A live family radio event with games, music, kids interviews, prize moments, and safe entertainment for young viewers.",
     guests: ["A Plus presenters", "Kids singers", "Parent guests"],
     contact: "+94 77 123 4567",
-    links: [{ label: "Event Info", href: "/watch" }],
   },
   {
     id: "kids-fiesta",
     name: "Kids Fiesta",
     date: "28 Jun 2026",
     place: "Colombo",
+    youtubeUrl: "https://www.youtube.com/watch?v=XqZsoesa55w",
     description:
       "A colorful kids festival with stage activities, learning corners, character meetups, and family-friendly performances.",
     guests: ["Dance teams", "Story hosts", "A Plus mascots"],
     contact: "+94 77 234 5678",
-    links: [{ label: "Register", href: "/watch" }],
   },
   {
     id: "talent-show",
     name: "Talent Show",
     date: "05 Jul 2026",
     place: "Kandy",
+    youtubeUrl: "https://www.youtube.com/watch?v=BELlZKpi1Zs",
     description:
       "A showcase for young singers, dancers, speakers, and creative performers from around the island.",
     guests: ["Junior performers", "Guest judges", "Music coaches"],
     contact: "+94 77 345 6789",
-    links: [{ label: "Apply Now", href: "/watch" }],
   },
   {
     id: "story-day",
     name: "Story Day",
     date: "12 Jul 2026",
     place: "Galle",
+    youtubeUrl: "https://www.youtube.com/watch?v=F4tHL8reNCs",
     description:
       "An interactive storytelling event with reading circles, puppet moments, and imagination games.",
     guests: ["Storytellers", "Teachers", "Kids readers"],
     contact: "+94 77 456 7890",
-    links: [{ label: "Learn More", href: "/watch" }],
   },
   {
     id: "music-party",
     name: "Music Party",
     date: "19 Jul 2026",
     place: "Matara",
+    youtubeUrl: "https://www.youtube.com/watch?v=e_04ZrNroTo",
     description:
       "A cheerful music event with sing-alongs, rhythm games, and family performances.",
     guests: ["Kids bands", "A Plus hosts", "Music teachers"],
     contact: "+94 77 567 8901",
-    links: [{ label: "Watch Updates", href: "/watch" }],
   },
   {
     id: "art-camp",
     name: "Art Camp",
     date: "26 Jul 2026",
     place: "Jaffna",
+    youtubeUrl: "https://www.youtube.com/watch?v=gQKbGLVY9Wk",
     description:
       "A creative workshop for drawing, coloring, crafts, and confidence-building activities.",
     guests: ["Art mentors", "Craft teams", "Young artists"],
     contact: "+94 77 678 9012",
-    links: [{ label: "Join Event", href: "/watch" }],
   },
 ];
 
 export default function SpecialEventsSection() {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [activeEvent, setActiveEvent] = useState<SpecialEvent>();
+  const managedEvents = useAdminDisplayContent<HomeSpecialEvent[]>(
+    "aplus-admin-home-events",
+    "aplus-published-home-events",
+    specialEvents.map((event) => ({ ...event, active: true })),
+  );
+  const visibleEvents = managedEvents.filter((event) => event.active);
 
   function scrollByCards(direction: "left" | "right") {
     scrollerRef.current?.scrollBy({
@@ -106,9 +112,9 @@ export default function SpecialEventsSection() {
             <span className="md:hidden">Events</span>
             <span className="hidden md:inline">Special Events</span>
           </h2>
-          <Link href="/watch" className="text-[13px] font-bold text-[#0077ff] md:text-[16px]">
-            View All
-          </Link>
+          <span className="text-[12px] font-medium text-[#67809F] tablet:text-[14px]">
+            Event videos coming soon
+          </span>
         </div>
 
         <div className="relative">
@@ -122,11 +128,13 @@ export default function SpecialEventsSection() {
           </button>
           <div
             ref={scrollerRef}
-            className="flex snap-x gap-3 overflow-x-auto scroll-smooth pb-5 [scrollbar-width:none] md:gap-12 [&::-webkit-scrollbar]:hidden"
+            data-focus-strip
+            className="flex snap-x gap-3 overflow-x-auto overflow-y-hidden scroll-smooth pb-5 [scrollbar-width:none] md:gap-12 [&::-webkit-scrollbar]:hidden"
           >
-            {specialEvents.map((event, index) => (
+            {visibleEvents.map((event, index) => (
               <div
                 key={event.id}
+                data-focus-item
                 data-scroll-reveal="pop"
                 style={{ "--reveal-delay": `${index * 60}ms` } as CSSProperties}
                 className="snap-start"
@@ -135,7 +143,7 @@ export default function SpecialEventsSection() {
                   name={event.name}
                   date={event.date}
                   place={event.place}
-                  thumbnail={event.thumbnail}
+                  youtubeUrl={event.youtubeUrl}
                   onClick={() => setActiveEvent(event)}
                 />
               </div>

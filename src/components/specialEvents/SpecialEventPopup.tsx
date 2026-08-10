@@ -1,3 +1,5 @@
+import { getYouTubeEmbedUrl } from "@/components/trailers/youtube";
+
 type SpecialEventPopupProps = {
   event: {
     name: string;
@@ -6,7 +8,7 @@ type SpecialEventPopupProps = {
     description: string;
     guests: string[];
     contact: string;
-    links: { label: string; href: string }[];
+    youtubeUrl: string;
   };
   onClose: () => void;
 };
@@ -15,7 +17,7 @@ export default function SpecialEventPopup({
   event,
   onClose,
 }: SpecialEventPopupProps) {
-  const primaryLink = event.links[0];
+  const embedUrl = getYouTubeEmbedUrl(event.youtubeUrl);
 
   return (
     <div className="fixed inset-0 z-[80] grid place-items-center bg-[#07256f]/88 px-5 py-6 backdrop-blur-sm">
@@ -53,18 +55,16 @@ export default function SpecialEventPopup({
               {event.description}
             </p>
 
-            <div className="mt-8 h-[250px] max-w-[650px] overflow-hidden rounded-[34px] bg-[radial-gradient(circle_at_25%_45%,rgba(255,255,255,0.72),transparent_22%),linear-gradient(135deg,#d7c8ff_0%,#ffc4eb_48%,#dff3ff_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_20px_44px_rgba(86,39,255,0.14)]">
-              <div className="flex h-full items-end justify-between px-8 pb-7">
-                <div className="grid h-36 w-36 place-items-center rounded-full bg-[#0c84e8] text-[54px] font-bold text-[#ffc20a] shadow-[0_16px_34px_rgba(7,27,99,0.22)]">
-                  A+
-                </div>
-                <div className="mb-5 rounded-[20px] bg-[#ff5aa9] px-8 py-4 text-[34px] font-bold text-white shadow-[0_12px_28px_rgba(255,73,176,0.24)]">
-                  ON AIR
-                </div>
-                <div className="grid h-36 w-44 place-items-center rounded-[32px] bg-[#ffc20a] text-[52px] font-bold text-[#0c84e8] shadow-[0_16px_34px_rgba(7,27,99,0.2)]">
-                  TV
-                </div>
-              </div>
+            <div className="mt-8 aspect-video max-w-[650px] overflow-hidden rounded-[28px] bg-black shadow-[0_20px_44px_rgba(7,27,99,0.2)]">
+              {embedUrl ? (
+                <iframe
+                  title={`${event.name} video`}
+                  src={embedUrl}
+                  className="h-full w-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              ) : null}
             </div>
 
             <h4 className="mt-7 text-[24px] font-bold text-[#071B63]">
@@ -126,17 +126,14 @@ export default function SpecialEventPopup({
               </div>
             </div>
 
-            {primaryLink ? (
-              <a
-                href={primaryLink.href}
-                className="relative mt-3 flex h-16 items-center justify-center gap-4 rounded-[28px] bg-[linear-gradient(180deg,#ffd83d,#ffb51f)] text-[24px] font-bold text-[#071B63] shadow-[0_12px_24px_rgba(255,181,31,0.28)]"
-              >
-                <span className="grid h-9 w-9 place-items-center rounded-full bg-[#071B63] text-[17px] text-[#ffc20a]">
-                  *
-                </span>
-                {primaryLink.label}
-              </a>
-            ) : null}
+            <a
+              href={event.youtubeUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="relative mt-3 flex h-14 items-center justify-center gap-3 rounded-[24px] bg-[linear-gradient(180deg,#ffd83d,#ffb51f)] text-[18px] font-bold text-[#071B63] shadow-[0_12px_24px_rgba(255,181,31,0.28)]"
+            >
+              Watch temporary event video
+            </a>
           </aside>
         </div>
       </div>
