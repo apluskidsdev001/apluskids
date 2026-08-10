@@ -25,15 +25,17 @@ export default function AdminShell({ children }: { children: ReactNode }) {
 
   const checkConnection = useCallback(async () => {
     try {
-      const response = await apiFetch("/api/v1/admin/kids-champ/overview");
-      if (response.status === 401) {
-        setAccess("forbidden");
-        router.replace(`/login?returnTo=${encodeURIComponent(pathname)}`);
-        return false;
-      }
-      const body=await response.json().catch(()=>null) as {message?:string;code?:string}|null;
+      const response = await apiFetch("/api/v1/health");
+      const body=await response.json().catch(()=>null) as {message?:string;status?:string}|null;
       setConnection(response.ok ? "online" : "offline");
-      setConnectionDetails(response.ok?"The Kids Champ API and database are responding normally.":body?.message||`The API returned HTTP ${response.status}.`);
+      setConnectionDetails(response.ok && body?.status === "UP" ? "The Kids Champ API and database are responding normally." : body?.message||`The API returned HTTP ${response.status}.`);
+      if (response.ok) {
+        const adminResponse = await apiFetch("/api/v1/admin/kids-champ/overview");
+        if (adminResponse.status === 401 || adminResponse.status === 403) {
+          setAccess("forbidden");
+          router.replace(`/login?returnTo=${encodeURIComponent(pathname)}`);
+        }
+      }
       return response.ok;
     } catch {
       setConnection("offline");
