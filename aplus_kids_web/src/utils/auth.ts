@@ -1,17 +1,6 @@
 import { backendFetch } from "@/utils/backendActivity";
 
-function resolveApiBaseUrl() {
-  const configured = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
-  if (configured) return configured;
-  if (typeof window !== "undefined") {
-    const hostname = window.location.hostname;
-    const privateLanHost = /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/.test(hostname);
-    if (privateLanHost) return `http://${hostname}:8081`;
-  }
-  return "http://localhost:8081";
-}
-
-const API_BASE_URL = resolveApiBaseUrl();
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081").replace(/\/$/, "");
 let activeApiRequests = 0;
 
 function publishApiActivity() {
@@ -24,9 +13,9 @@ function publishDataUpdated(path: string, method: string) {
   }
 }
 
-function publishOperationFinished(success: boolean, path: string, status?: number, message?: string) {
+function publishOperationFinished(success: boolean) {
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent("aplus-operation-finished", { detail: { success, path, status, message } }));
+    window.dispatchEvent(new CustomEvent("aplus-operation-finished", { detail: { success } }));
   }
 }
 
@@ -186,14 +175,11 @@ export async function apiFetch(path: string, init: ApiFetchInit = {}) {
   // reload its server-backed data without waiting for the next poll or navigation.
   if (tracked) {
     if (response.ok && notifyDataUpdated) publishDataUpdated(path, requestInit.method!.toUpperCase());
-    const failure = !response.ok
-      ? await response.clone().json().catch(() => null) as { message?: string } | null
-      : null;
-    publishOperationFinished(response.ok, path, response.status, failure?.message);
+    publishOperationFinished(response.ok);
   }
   return response;
   } catch (error) {
-    if (tracked) publishOperationFinished(false, path, undefined, error instanceof Error ? error.message : undefined);
+    if (tracked) publishOperationFinished(false);
     throw error;
   } finally {
     if (tracked) { activeApiRequests = Math.max(0, activeApiRequests - 1); publishApiActivity(); }

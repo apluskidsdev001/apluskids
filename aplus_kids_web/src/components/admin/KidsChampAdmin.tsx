@@ -7,13 +7,13 @@ import { KidsChampStatusBadge as StatusBadge } from "./KidsChampStatusBadge";
 import { KidsChampWhatsAppIcon as WhatsAppIcon } from "./KidsChampWhatsAppIcon";
 import { KidsChampConfirmationDialog as ConfirmationDialog } from "./KidsChampConfirmationDialog";
 import { WhatsAppConsentControl, WhatsAppMessagingWorkspace, WhatsAppTemplatesPanel } from "./KidsChampWhatsAppMessaging";
-import { AdminNotice, getAdminFriendlyErrorMessage, useAdminNotice } from "./AdminNotice";
 
 function KidsChampLoadingScreen() {
-  const [loading,setLoading]=useState(false);
-  useEffect(()=>{const update=(event:Event)=>{const active=((event as CustomEvent<{count:number}>).detail?.count||0)>0;setLoading(active);};window.addEventListener("aplus-api-activity",update);return()=>window.removeEventListener("aplus-api-activity",update);},[]);
-  if(!loading)return null;
-  return <div className="fixed inset-0 z-[300] grid place-items-center bg-[#102044]/20 backdrop-blur-[1px]" role="status" aria-live="polite"><div className="flex items-center gap-3 rounded-[18px] border border-white/70 bg-white px-6 py-5 shadow-2xl"><span className="size-6 animate-spin rounded-full border-[3px] border-[#B8DAFF] border-t-[#1689F7]"/><div><p className="text-[14px] font-semibold text-[#172A4B]">Saving your changes</p><p className="mt-0.5 text-[11px] text-[#708099]">Please wait while the update is completed.</p></div></div></div>;
+  const [loading,setLoading]=useState(false); const [finished,setFinished]=useState<"success"|"error"|null>(null);
+  useEffect(()=>{let timer:number|undefined;const update=(event:Event)=>{const active=((event as CustomEvent<{count:number}>).detail?.count||0)>0;setLoading(active);if(active){if(timer)window.clearTimeout(timer);setFinished(null);}};const complete=(event:Event)=>{const success=Boolean((event as CustomEvent<{success:boolean}>).detail?.success);setFinished(success?"success":"error");if(timer)window.clearTimeout(timer);timer=window.setTimeout(()=>setFinished(null),2600);};window.addEventListener("aplus-api-activity",update);window.addEventListener("aplus-operation-finished",complete);return()=>{window.removeEventListener("aplus-api-activity",update);window.removeEventListener("aplus-operation-finished",complete);if(timer)window.clearTimeout(timer);};},[]);
+  if(!loading&&!finished)return null;
+  const successful=finished==="success"&&!loading;
+  return <div className="fixed inset-0 z-[300] grid place-items-center bg-[#102044]/20 backdrop-blur-[1px]" role="status" aria-live="polite"><div className="flex items-center gap-3 rounded-[18px] border border-white/70 bg-white px-6 py-5 shadow-2xl">{loading?<span className="size-6 animate-spin rounded-full border-[3px] border-[#B8DAFF] border-t-[#1689F7]"/>:<span className={`grid size-6 place-items-center rounded-full text-[14px] font-bold text-white ${successful?"bg-emerald-500":"bg-red-500"}`}>{successful?"✓":"!"}</span>}<div><p className="text-[14px] font-semibold text-[#172A4B]">{loading?"Saving your changes":successful?"Finished successfully":"Could not finish the action"}</p><p className="mt-0.5 text-[11px] text-[#708099]">{loading?"Please wait while the database is updated.":successful?"Live data has been refreshed.":"No changes were applied. Please review the message and try again."}</p></div></div></div>;
 }
 type MockSubmission = {
   id: string; participantId: string; phone: string; trackingCode: string; childName: string; initials: string; age: number; location: string; category: string;
@@ -1764,7 +1764,7 @@ function SubmissionsWorkspace({
         if (!cancelled) {
           setRecords([]);
           setBackendState("error");
-          setConnectionReason(getAdminFriendlyErrorMessage(reason instanceof Error ? reason.message : undefined, "service connection"));
+          setConnectionReason(reason instanceof Error?reason.message:"The Kids Champ service could not be reached.");
           setLastConnectionCheck(new Date());
         }
       });
@@ -2585,7 +2585,7 @@ function WhatsAppCampaignModal({
       }),
     });
     const body = await response.json().catch(() => null) as { id?: string; message?: string } | null;
-    setRecipients((current) => current.map((item) => targets.includes(item.id) ? { ...item, status: response.ok ? "Queued" : "Error", campaignId: body?.id, attempts: item.attempts + 1, selected: !response.ok, failureReason: response.ok ? undefined : getAdminFriendlyErrorMessage(body?.message, "message delivery") } : item));
+    setRecipients((current) => current.map((item) => targets.includes(item.id) ? { ...item, status: response.ok ? "Queued" : "Error", campaignId: body?.id, attempts: item.attempts + 1, selected: !response.ok, failureReason: response.ok ? undefined : body?.message } : item));
     setSending(false);
     notify(response.ok ? `${targetRecipients.length} personalized WhatsApp messages queued in one campaign.` : body?.message || "The WhatsApp campaign could not be queued.");
   }
@@ -3144,7 +3144,7 @@ function TvZipWorkspace({
   const [zipRecords, setZipRecords] = useState<ZipBatch[]>([]);
   const [zipSearch, setZipSearch] = useState("");
   const [editingZipId, setEditingZipId] = useState<string | null>(null);
-  const [zipStatus, setZipStatus] = useState<ZipRecordFilter>("All");
+  const [zipStatus, setZipStatus] = useState("All");
   const [binOpen, setBinOpen] = useState(false);
   const [binSelected, setBinSelected] = useState<Set<string>>(new Set());
   const [campaignZip, setCampaignZip] = useState<ZipBatch | null>(null);
@@ -3164,10 +3164,9 @@ function TvZipWorkspace({
   const [manualZipDate, setManualZipDate] = useState("");
   const [manualZipFrom, setManualZipFrom] = useState("");
   const [manualZipTo, setManualZipTo] = useState("");
-  const [zipProgress, setZipProgress] = useState({ readyPhotos: 0, activeTargetSize: Math.max(1, Number(commonSettings.batchSize) || 1), nextTargetSize: Math.max(1, Number(commonSettings.batchSize) || 1) });
-  const loadBatches = async (quiet = false) => {
-    try {
-      const response = await apiFetch("/api/v1/admin/kids-champ/batches");
+  const [zipProgress, setZipProgress] = useState({ readyPhotos: 0, activeTargetSize: commonSettings.batchSize, nextTargetSize: commonSettings.batchSize });
+  const loadBatches = () => apiFetch("/api/v1/admin/kids-champ/batches")
+    .then(async (response) => {
       if (!response.ok) throw new Error("ZIP batches could not be loaded.");
       setZipRecords(((await response.json()) as AdminBatchResponse[]).map(toZipBatch));
       return true;
@@ -3200,13 +3199,20 @@ function TvZipWorkspace({
   };
   useEffect(() => {
     const refreshZipQueue = async () => {
-      // Approval already starts automatic ZIP creation in the backend. Opening
-      // this page must only read queue state; it must not trigger a recovery
-      // write request or show an action error before the admin clicks anything.
-      await Promise.all([loadZipProgress(), loadBatches()]);
+      // This mount-time maintenance request is followed by the local refresh
+      // below.  Do not publish a global update here: it would remount this
+      // workspace, call this endpoint again, and create an update loop.
+      const processing = await apiFetch("/api/v1/admin/kids-champ/batches/process-automatic", { method: "POST", notifyDataUpdated: false });
+      if (!processing.ok) {
+        const failure = await processing.json().catch(() => null) as { message?: string } | null;
+        notify(failure?.message || "Automatic ZIP processing could not be started. Restart the API and try again.");
+      }
+      await loadBatches();
+      const response = await apiFetch("/api/v1/admin/kids-champ/batches/progress");
+      if (response.ok) setZipProgress(await response.json());
     };
     void refreshZipQueue();
-    apiFetch("/api/v1/admin/kids-champ/submissions").then(async(response)=>{if(!response.ok)throw new Error("Approved submissions could not be loaded for ZIP recovery.");const submissions=((await response.json()) as AdminSubmissionResponse[]).map(toMockSubmission);setBatchSubmissions(submissions);const pending=submissions.filter((item)=>item.reviewStatus==="Approved"&&item.fileStatus==="Ready");setPendingZipSubmissions(pending);setPendingZipSelected(new Set());}).catch((reason)=>notify(reason instanceof Error?reason.message:"Approved submissions could not be loaded for ZIP recovery."));
+    apiFetch("/api/v1/admin/kids-champ/submissions").then(async(response)=>{if(response.ok){const submissions=((await response.json()) as AdminSubmissionResponse[]).map(toMockSubmission);setBatchSubmissions(submissions);const pending=submissions.filter((item)=>item.reviewStatus==="Approved"&&item.fileStatus==="Ready");setPendingZipSubmissions(pending);setPendingZipSelected(new Set());}}).catch(()=>undefined);
   // load once when this workspace mounts
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -3237,10 +3243,7 @@ function TvZipWorkspace({
         item.code.toLowerCase().includes(zipSearch.toLowerCase())) &&
       (initialOverviewView !== "telecasted" || item.telecastCompleted) &&
       (zipStatus === "All" ||
-        (zipStatus === "Downloaded" && item.downloaded) ||
-        (zipStatus === "Not downloaded" && !item.downloaded) ||
-        (zipStatus === "Edited" && item.edited) ||
-        (zipStatus === "Not edited" && !item.edited)),
+        (zipStatus === "All" || item.status === zipStatus)),
   );
   const visibleManualZipSubmissions = useMemo(() => pendingZipSubmissions.filter((item) => {
     const query = manualZipSearch.trim().toLowerCase();
@@ -3259,26 +3262,18 @@ function TvZipWorkspace({
       notify("Download this ZIP before deleting its archive.");
       return;
     }
-    try {
-      const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${item.id}`, { method: "DELETE" });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) { notify(body?.message || "The ZIP archive could not be deleted."); return; }
-      await loadBatches(true);
-      notify(`${code} moved to the ZIP Bin. Its ZIP file and artwork files were deleted; sender and submission details remain available.`);
-    } catch {
-      notify("The ZIP archive could not be deleted.");
-    }
+    const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${item.id}`, { method: "DELETE" });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) { notify(body?.message || "The ZIP archive could not be deleted."); return; }
+    await loadBatches();
+    notify(`${code} moved to the ZIP Bin. Its details remain available until the Bin is cleared.`);
   }
   async function clearZipBin() {
     const batchIds=[...binSelected]; if(!batchIds.length)return;
-    try {
-      const response=await apiFetch("/api/v1/admin/kids-champ/batches/bin",{method:"DELETE",body:JSON.stringify({batchIds})});
-      const body=await response.json().catch(()=>null);
-      if(!response.ok){notify(body?.message||"The selected ZIP Bin records could not be cleared.");return;}
-      setBinSelected(new Set());await loadBatches(true);notify(`${batchIds.length} ZIP record${batchIds.length===1?"":"s"} permanently cleared from the Bin.`);
-    } catch {
-      notify("The selected ZIP Bin records could not be cleared.");
-    }
+    const response=await apiFetch("/api/v1/admin/kids-champ/batches/bin",{method:"DELETE",body:JSON.stringify({batchIds})});
+    const body=await response.json().catch(()=>null);
+    if(!response.ok){notify(body?.message||"The selected ZIP Bin records could not be cleared.");return;}
+    setBinSelected(new Set());await loadBatches();notify(`${batchIds.length} ZIP record${batchIds.length===1?"":"s"} permanently cleared from the Bin.`);
   }
 
   async function createPendingZip() {
@@ -3407,7 +3402,7 @@ function TvZipWorkspace({
             Manage ZIP details, telecast dates and participant notifications.
           </p>
         </div>
-        <span className="self-start rounded-full bg-emerald-50 px-4 py-2 text-[12px] font-semibold text-emerald-700">Automatic ZIP: {zipProgress.readyPhotos} waiting · {zipProgress.activeTargetSize} per batch</span>
+        <span className="rounded-full bg-emerald-50 px-4 py-2 text-[12px] font-semibold text-emerald-700">Automatic ZIP: {zipProgress.readyPhotos} waiting · {zipProgress.activeTargetSize} per batch</span>
       </div>
       <button
         onClick={() => setSettingsOpen(true)}
@@ -3445,9 +3440,6 @@ function TvZipWorkspace({
             <button type="button" onClick={() => setAdvancedZipRecoveryOpen((value) => !value)} className={secondaryButton}>
               {advancedZipRecoveryOpen ? "Close advanced recovery" : "Advanced ZIP recovery"}
             </button>
-            <button type="button" onClick={()=>void retryAutomaticQueue()} disabled={retryingAutomaticZip} className={advancedZipRecoveryOpen ? `${secondaryButton} disabled:cursor-not-allowed disabled:opacity-45` : "hidden"}>
-              {retryingAutomaticZip ? "Checking queue…" : "Retry automatic queue"}
-            </button>
             <button type="button" onClick={()=>setPendingZipSelected((current)=>new Set([...current,...visibleManualZipSubmissions.filter((item)=>!item.batchId).map((item)=>item.id)]))} disabled={!visibleManualZipSubmissions.some((item)=>!item.batchId)} className={advancedZipRecoveryOpen ? secondaryButton : "hidden"}>
               Select all
             </button>
@@ -3464,7 +3456,7 @@ function TvZipWorkspace({
             <input value={zipRecoveryReason} onChange={(event) => setZipRecoveryReason(event.target.value)} className={`${fieldClass} mt-1`} placeholder="Why must this ZIP be created manually?" />
           </label>
           <div className="grid gap-2 tablet:grid-cols-4"><input value={manualZipSearch} onChange={(event)=>setManualZipSearch(event.target.value)} className={fieldClass} placeholder="Search name, code or hometown" /><select value={manualZipStatus} onChange={(event)=>setManualZipStatus(event.target.value as typeof manualZipStatus)} className={fieldClass}><option>Ready to ZIP</option><option>Already ZIPped</option><option>All</option></select><select value={manualZipDateMode} onChange={(event)=>setManualZipDateMode(event.target.value as typeof manualZipDateMode)} className={fieldClass}><option>Any time</option><option>Specific date</option><option>Date range</option></select>{manualZipDateMode === "Specific date" ? <input type="date" value={manualZipDate} onChange={(event)=>setManualZipDate(event.target.value)} className={fieldClass} /> : manualZipDateMode === "Date range" ? <div className="flex gap-2"><input type="date" value={manualZipFrom} onChange={(event)=>setManualZipFrom(event.target.value)} className={`${fieldClass} min-w-0`} /><input type="date" value={manualZipTo} onChange={(event)=>setManualZipTo(event.target.value)} className={`${fieldClass} min-w-0`} /></div> : <span className="flex items-center text-[11px] font-semibold text-amber-800">{visibleManualZipSubmissions.length} matching photos</span>}</div>
-          <p className="text-[10px] text-amber-800">Archive photo names use: <strong>001_child name_hometown.png</strong>. Existing archives are corrected automatically on their next download.</p>
+          <p className="text-[10px] text-amber-800">New archive names use: <strong>ZipPhotoId001_name_age_Hometown</strong>. Already ZIPped photos are view-only.</p>
         </div> : null}
         <p className="mx-5 mb-5 rounded-[10px] border border-emerald-100 bg-white px-4 py-3 text-[12px] text-emerald-800">
           {zipProgress.readyPhotos >= zipProgress.activeTargetSize ? `${Math.floor(zipProgress.readyPhotos / zipProgress.activeTargetSize)} ZIP batch${Math.floor(zipProgress.readyPhotos / zipProgress.activeTargetSize) === 1 ? " is" : "es are"} ready to create automatically.` : `${zipProgress.readyPhotos} approved photo${zipProgress.readyPhotos === 1 ? " is" : "s are"} waiting. ${Math.max(0, zipProgress.activeTargetSize - zipProgress.readyPhotos)} more needed before the next ZIP begins.`}
@@ -3489,7 +3481,7 @@ function TvZipWorkspace({
               {binOpen ? "Deleted ZIP details stay here until you permanently clear them." : "Deleted ZIP archives are moved to the Bin."}
             </p>
           </div>
-          <div className="flex w-full flex-wrap gap-2 tablet:w-auto tablet:justify-end">
+          <div className="flex gap-2">
             <button type="button" onClick={() => { setBinOpen((value)=>!value); setBinSelected(new Set()); }} className={`${secondaryButton} min-w-[108px] whitespace-nowrap ${binOpen ? "border-red-300 bg-red-50 text-red-700" : ""}`}>
               {binOpen ? "Back to ZIPs" : `ZIP Bin (${zipRecords.filter((item)=>item.deleted).length})`}
             </button>
@@ -3507,10 +3499,9 @@ function TvZipWorkspace({
               aria-label="Filter ZIP records"
             >
               <option>All</option>
-              <option>Downloaded</option>
-              <option>Not downloaded</option>
-              <option>Edited</option>
-              <option>Not edited</option>
+              <option>Ready</option>
+              <option>Creating ZIP</option>
+              <option>Queued</option>
             </select>
           </div>
         </div>
@@ -3518,7 +3509,7 @@ function TvZipWorkspace({
           {visibleZips.map((item) => (
             <article
               key={item.code}
-              className={`grid items-center gap-3 px-5 py-4 transition hover:bg-[#F8FAFC] ${binOpen ? "desktop:grid-cols-[32px_1fr_110px_170px_100px_90px_270px]" : "desktop:grid-cols-[1fr_110px_170px_100px_90px_270px]"} ${item.deleted ? "bg-red-50/35" : ""}`}
+              className={`grid items-center gap-3 px-5 py-4 transition hover:bg-[#F8FAFC] ${binOpen ? "tablet:grid-cols-[32px_1fr_110px_170px_100px_90px_270px]" : "tablet:grid-cols-[1fr_110px_170px_100px_90px_270px]"} ${item.deleted ? "bg-red-50/35" : ""}`}
             >
               {binOpen ? <input type="checkbox" checked={Boolean(item.id&&binSelected.has(item.id))} onChange={()=>item.id&&setBinSelected((current)=>{const next=new Set(current);if(next.has(item.id!))next.delete(item.id!);else next.add(item.id!);return next;})} className="size-4 accent-red-600" aria-label={`Select ${item.code} for permanent deletion`} /> : null}
               <button
@@ -6072,7 +6063,7 @@ export function AccountManagementWorkspace({notify}:{notify:(message:string)=>vo
       <div className="rounded-[18px] border border-[#E0E7EF] bg-white p-5">
         <h3 className="text-[17px] font-semibold">Test message delivery</h3><p className="mt-1 text-[11px] text-[#7A879A]">Sends one connection-test message through the saved Meta sender.</p>
         <button onClick={()=>void testConnection()} disabled={testingConnection||!config?.tokenConfigured} className={`${secondaryButton} mt-4 w-full disabled:opacity-40`}>{testingConnection?"Checking Meta connection…":"Test Meta connection"}</button>
-        {connection?<div className={`mt-3 rounded-[12px] border p-3 text-[11px] ${connection.success?"border-emerald-200 bg-emerald-50":"border-red-200 bg-red-50"}`}><p className="font-semibold">{connection.success ? connection.message : getAdminFriendlyErrorMessage(connection.message, "WhatsApp connection")}</p>{connection.success ? connection.solutions.map(solution=><p key={solution} className="mt-1 text-[#65748A]">• {solution}</p>) : <p className="mt-1 text-[#65748A]">Check the saved WhatsApp account details, then run the test again.</p>}</div>:null}
+        {connection?<div className={`mt-3 rounded-[12px] border p-3 text-[11px] ${connection.success?"border-emerald-200 bg-emerald-50":"border-red-200 bg-red-50"}`}><p className="font-semibold">{connection.message}</p>{connection.solutions.map(solution=><p key={solution} className="mt-1 text-[#65748A]">• {solution}</p>)}</div>:null}
         <label className="mt-5 block text-[11px] font-semibold text-[#526178]">Recipient number<input value={testPhone} onChange={e=>setTestPhone(e.target.value)} className={`${fieldClass} mt-1`} placeholder="07XXXXXXXX"/></label>
         <button onClick={()=>void test()} disabled={testing||!config?.tokenConfigured||!testPhone} className="mt-3 h-10 w-full rounded-[10px] bg-[#20B15A] text-[12px] font-semibold text-white disabled:opacity-40">{testing?"Sending…":"Send test WhatsApp message"}</button>
         <div className={`mt-5 rounded-[13px] border p-4 ${config?.lastTestStatus==="SUCCESS"?"border-emerald-200 bg-emerald-50":config?.lastTestStatus==="FAILED"?"border-red-200 bg-red-50":"border-[#E0E7EF] bg-[#F8FAFC]"}`}><p className="text-[11px] font-semibold uppercase text-[#7A879A]">Latest delivery status</p><p className="mt-2 text-[13px] font-semibold">{config?.lastTestStatus||"Not tested"}</p><p className="mt-1 text-[11px] text-[#66758B]">{config?.lastTestStatus === "FAILED" ? getAdminFriendlyErrorMessage(config.lastTestMessage, "WhatsApp delivery") : config?.lastTestMessage||"Save the account, then send a test."}</p>{config?.lastTestedAt?<p className="mt-2 text-[10px] text-[#8490A2]">{new Date(config.lastTestedAt).toLocaleString()}</p>:null}</div>
@@ -6086,8 +6077,9 @@ export function AccountManagementWorkspace({notify}:{notify:(message:string)=>vo
 }
 
 export function AccountManagementAdminPage() {
-  const { notice, notify, dismissNotice } = useAdminNotice();
+  const [notice,setNotice]=useState("");
   const [liveVersion,setLiveVersion]=useState(0);
+  function notify(message:string){setNotice(message);window.setTimeout(()=>setNotice(""),4000);}
   useEffect(()=>{
     const refresh=()=>setLiveVersion((current)=>current+1);
     window.addEventListener("aplus-data-updated",refresh);
@@ -6096,7 +6088,7 @@ export function AccountManagementAdminPage() {
   return <>
     <header className="relative overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_92%_75%,rgba(220,239,255,.78)_0_2px,transparent_3px),linear-gradient(135deg,#fff_0%,#f5faff_100%)] px-6 py-8 shadow-[0_10px_28px_rgba(43,86,138,.05)] tablet:px-8 tablet:py-10"><i className="pointer-events-none absolute left-[2%] top-[44%] text-2xl text-violet-100">✦</i><i className="pointer-events-none absolute left-[57%] top-10 text-3xl text-[#C7D2FE]">◆</i><i className="pointer-events-none absolute left-[67%] top-[58%] text-3xl text-[#F7DFA4]">✦</i><i className="pointer-events-none absolute right-[34%] top-9 size-3 rounded-full bg-[#FFC2C7]"/><div className="relative z-10 flex flex-col gap-5 tablet:flex-row tablet:items-end tablet:justify-between"><div><p className="text-[13px] font-medium text-[#2488F4]">Page manager</p><h1 className="mt-1 text-[32px] font-semibold tracking-[-.04em] text-[#132447] tablet:text-[44px]">Account Management <span className="text-[#FFB300]">✦</span></h1><p className="mt-2 max-w-2xl text-[14px] leading-6 text-[#6E7C91]">Manage family accounts, administrator access, WhatsApp services and a complete record of changes.</p></div><div className="flex gap-3"><div className="rounded-[12px] border border-[#DDE8F5] bg-white/90 px-4 py-3 text-[12px] font-semibold text-[#40516B] shadow-sm">🔒 Protected controls</div></div></div></header>
     <div className="mt-6"><AccountManagementWorkspace key={`account-management-${liveVersion}`} notify={notify}/></div>
-    <AdminNotice notice={notice} onDismiss={dismissNotice} />
+    {notice?<div className="fixed bottom-5 right-5 z-[130] max-w-md rounded-[12px] bg-[#17243D] px-4 py-3 text-[12px] font-semibold text-white shadow-xl">{notice}</div>:null}
     <KidsChampLoadingScreen />
   </>;
 }

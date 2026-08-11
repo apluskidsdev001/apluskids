@@ -44,9 +44,11 @@ public class KidsChampAdminController {
     @PostMapping("/campaign-recipients/retry") @ResponseStatus(HttpStatus.NO_CONTENT) void retryRecipients(JwtAuthenticationToken a,@RequestBody RecipientActionRequest r){admin(a);service.retryRecipients(subject(a),r.recipientIds());}
     @PostMapping("/campaign-recipients/ignore") @ResponseStatus(HttpStatus.NO_CONTENT) void ignoreRecipients(JwtAuthenticationToken a,@RequestBody RecipientActionRequest r){admin(a);service.ignoreRecipients(subject(a),r.recipientIds());}
     @PostMapping("/campaign-recipients/delete") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteRecipients(JwtAuthenticationToken a,@RequestBody RecipientActionRequest r){admin(a);service.deleteRecipients(subject(a),r.recipientIds());}
-    @GetMapping("/whatsapp/config") KidsChampWhatsAppAdminService.ConfigResponse whatsappConfig(JwtAuthenticationToken a){admin(a);return whatsapp.config();}
-    @PutMapping("/whatsapp/config") KidsChampWhatsAppAdminService.ConfigResponse saveWhatsappConfig(JwtAuthenticationToken a,@RequestBody KidsChampWhatsAppAdminService.ConfigRequest r){admin(a);return whatsapp.save(r);}
-    @PostMapping("/whatsapp/test") KidsChampWhatsAppAdminService.TestResponse testWhatsapp(JwtAuthenticationToken a,@RequestBody WhatsAppTestRequest r){admin(a);return whatsapp.test(r.phone());}
+    @GetMapping("/whatsapp/config") KidsChampWhatsAppAdminService.ConfigResponse whatsappConfig(JwtAuthenticationToken a){superAdmin(a);return whatsapp.config();}
+    @PutMapping("/whatsapp/config") KidsChampWhatsAppAdminService.ConfigResponse saveWhatsappConfig(JwtAuthenticationToken a,@RequestBody KidsChampWhatsAppAdminService.ConfigRequest r){superAdmin(a);var saved=whatsapp.save(r);service.auditAdministratorAction(subject(a),"WHATSAPP_CREDENTIALS_UPDATED","WHATSAPP_CONFIG",UUID.nameUUIDFromBytes("kids-champ-whatsapp".getBytes()),"WhatsApp Cloud API credentials were updated.");return saved;}
+    @PostMapping("/whatsapp/connection-test") KidsChampWhatsAppAdminService.ConnectionTestResponse testWhatsappConnection(JwtAuthenticationToken a){superAdmin(a);var result=whatsapp.connectionTest();service.auditAdministratorAction(subject(a),"WHATSAPP_CONNECTION_TESTED","WHATSAPP_CONFIG",UUID.nameUUIDFromBytes("kids-champ-whatsapp".getBytes()),result.message());return result;}
+    @PostMapping("/whatsapp/test") KidsChampWhatsAppAdminService.TestResponse testWhatsapp(JwtAuthenticationToken a,@RequestBody WhatsAppTestRequest r){superAdmin(a);var result=whatsapp.test(r.phone());service.auditAdministratorAction(subject(a),"WHATSAPP_TEST_MESSAGE_SENT","WHATSAPP_CONFIG",UUID.nameUUIDFromBytes("kids-champ-whatsapp".getBytes()),result.message());return result;}
+    @GetMapping("/admin-history") List<KidsChampAdminService.ActivityResponse> adminHistory(JwtAuthenticationToken a){superAdmin(a);return service.activity();}
     @PatchMapping("/submissions/{id}/review") KidsChampAdminSubmissionResponse review(JwtAuthenticationToken a,@PathVariable UUID id,@RequestBody ReviewRequest r){admin(a);return service.review(subject(a),id,r.status(),r.reason());}
     @PostMapping("/submissions/approve") KidsChampAdminService.ApprovalResponse approve(JwtAuthenticationToken a,@RequestBody ApproveSubmissionsRequest r){admin(a);return service.approve(subject(a),r.submissionIds());}
     @PatchMapping("/submissions/{id}") KidsChampAdminSubmissionResponse update(JwtAuthenticationToken a,@PathVariable UUID id,@RequestBody UpdateRequest r){admin(a);return service.update(subject(a),id,r.category(),r.internalNote(),r.reviewerId(),r.selectedForTv());}
@@ -78,6 +80,11 @@ public class KidsChampAdminController {
         List<String> roles=a.getToken().getClaimAsStringList("roles");
         if(roles==null||roles.stream().noneMatch(r->r.equals("ROLE_ADMIN")||r.equals("ROLE_SUPER_ADMIN")))
             throw new lk.apluskids.platform.common.error.ApiException(HttpStatus.FORBIDDEN,"ADMIN_REQUIRED","Administrator access is required.");
+    }
+    private void superAdmin(JwtAuthenticationToken a){
+        List<String> roles=a.getToken().getClaimAsStringList("roles");
+        if(roles==null||roles.stream().noneMatch("ROLE_SUPER_ADMIN"::equals))
+            throw new lk.apluskids.platform.common.error.ApiException(HttpStatus.FORBIDDEN,"SUPER_ADMIN_REQUIRED","Super Admin access is required for administrator accounts, credentials, and history.");
     }
     record ReviewRequest(ReviewStatus status,String reason){} record BatchRequest(int limit,boolean includeRemainder){}
     record UpdateRequest(String category,String internalNote,UUID reviewerId,Boolean selectedForTv){}

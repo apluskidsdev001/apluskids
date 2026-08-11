@@ -27,11 +27,8 @@ export default function AdminShell({ children }: { children: ReactNode }) {
     try {
       const response = await apiFetch("/api/v1/health");
       const body=await response.json().catch(()=>null) as {message?:string;status?:string}|null;
-      const healthy = response.ok && body?.status === "UP";
-      setConnection(healthy ? "online" : "offline");
-      setConnectionDetails(healthy
-        ? "The Kids Champ service and database are responding normally."
-        : "The admin service is not ready. Some live actions may be unavailable. Please try the connection check again shortly.");
+      setConnection(response.ok ? "online" : "offline");
+      setConnectionDetails(response.ok && body?.status === "UP" ? "The Kids Champ API and database are responding normally." : body?.message||`The API returned HTTP ${response.status}.`);
       if (response.ok) {
         const adminResponse = await apiFetch("/api/v1/admin/kids-champ/overview");
         if (adminResponse.status === 401 || adminResponse.status === 403) {
@@ -42,7 +39,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
       return response.ok;
     } catch {
       setConnection("offline");
-      setConnectionDetails("The admin service cannot be reached right now. Live changes are unavailable until the connection returns.");
+      setConnectionDetails("The API server could not be reached. Check that the backend is running on port 8081 and that PostgreSQL is available.");
       return false;
     }
   }, [pathname, router]);
@@ -85,7 +82,7 @@ export default function AdminShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <main className="mx-auto max-w-[1420px] px-4 py-7 tablet:px-7 laptop:px-8 laptop:py-9">{children}</main>
-        {connectionPopup?<div className="fixed inset-0 z-[180] grid place-items-center bg-[#102044]/30 p-4"><div className="w-full max-w-md rounded-[18px] bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-[11px] font-bold uppercase tracking-[.14em] text-[#2488F4]">System connection</p><h2 className="mt-1 text-[19px] font-semibold">{connection==="online"?"Database connected":connection==="checking"?"Checking connection":"Database disconnected"}</h2></div><button onClick={()=>setConnectionPopup(false)} aria-label="Close connection details" className="grid size-8 place-items-center rounded-full bg-[#F1F5F9] text-[#50627E]">×</button></div><div className={`mt-5 rounded-[12px] border p-4 text-[12px] leading-5 ${connection==="online"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-red-200 bg-red-50 text-red-800"}`}>{connectionDetails}</div>{connection!=="online"?<div className="mt-4 rounded-[12px] bg-[#F7FAFE] p-4 text-[12px] leading-5 text-[#526178]"><p className="font-semibold text-[#263852]">What you can do</p><ul className="mt-2 list-disc space-y-1 pl-4"><li>Check your internet or local network connection.</li><li>Wait a moment, then run the connection check again.</li><li>Contact system support if the service stays unavailable.</li></ul></div>:null}<button onClick={()=>void checkConnection()} className="mt-5 h-10 w-full rounded-[10px] bg-[#1689F7] text-[12px] font-semibold text-white">Check again</button></div></div>:null}
+        {connectionPopup?<div className="fixed inset-0 z-[180] grid place-items-center bg-[#102044]/30 p-4"><div className="w-full max-w-md rounded-[18px] bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-[11px] font-bold uppercase tracking-[.14em] text-[#2488F4]">System connection</p><h2 className="mt-1 text-[19px] font-semibold">{connection==="online"?"Database connected":connection==="checking"?"Checking connection":"Database disconnected"}</h2></div><button onClick={()=>setConnectionPopup(false)} className="grid size-8 place-items-center rounded-full bg-[#F1F5F9] text-[#50627E]">×</button></div><div className={`mt-5 rounded-[12px] border p-4 text-[12px] leading-5 ${connection==="online"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-red-200 bg-red-50 text-red-800"}`}>{connectionDetails}</div>{connection!=="online"?<div className="mt-4 rounded-[12px] bg-[#F7FAFE] p-4 text-[12px] leading-5 text-[#526178]"><p className="font-semibold text-[#263852]">Common fixes</p><ul className="mt-2 list-disc space-y-1 pl-4"><li>Start the A+ Kids API on port 8081.</li><li>Confirm PostgreSQL is running and the database credentials are valid.</li><li>Retry after the API health check succeeds.</li></ul></div>:null}<button onClick={()=>void checkConnection()} className="mt-5 h-10 w-full rounded-[10px] bg-[#1689F7] text-[12px] font-semibold text-white">Check again</button></div></div>:null}
       </div>
     </div>
   );
