@@ -141,6 +141,7 @@ function toZipBatch(item: AdminBatchResponse): ZipBatch {
   };
 }
 type ZipBatch = { id?: string; code:string;photos:number;size:string;status:string;expires:string;progress:number;telecastStatus:string;telecastDate:string;telecastCompleted:boolean;recipientIds:string[];edited:boolean;editedAt:string;deleted:boolean;deletedAt:string;downloaded:boolean;downloadedAt:string;createdAt:string };
+type ZipRecordFilter = "All" | "Downloaded" | "Not downloaded" | "Edited" | "Not edited";
 type ParticipantRecord = {
   reference: string;
   name: string;
@@ -182,7 +183,8 @@ type DrawerState = {
   onSaveSubmission?: (submission: MockSubmission) => void;
   zipBatch?: ZipBatch;
   onDeleteZip?: (code: string) => void;
-  onUpdateZip?: (zip: ZipBatch) => void;
+  onUpdateZip?: (zip: ZipBatch) => ZipBatch | null | Promise<ZipBatch | null>;
+  onDownloadZip?: (zip: ZipBatch) => void | Promise<void>;
   participant?: ParticipantRecord;
   onSaveParticipant?: (participant: ParticipantRecord) => void;
 } | null;
@@ -2466,7 +2468,7 @@ function LegacyWhatsAppQueueModal({ onClose, notify, initialFilter = "ALL" }: { 
         <div className="min-h-0 overflow-y-auto border-b border-[#E3E9F0] p-4 tablet:border-b-0 tablet:border-r">
           <div className="mb-3 flex flex-wrap items-center gap-2"><select value={campaignFilter} onChange={(event) => { setSelectedCampaigns(new Set()); setCampaignFilter(event.target.value); }} className="rounded-[8px] border border-[#D8E2EC] px-2 py-1 text-[11px]"><option value="ALL">All campaigns</option><option value="ATTENTION">Needs attention</option><option value="FAILED">Failed only</option><option value="QUEUED">Queued</option><option value="COMPLETED">Sent</option><option value="PARTIAL">Partially sent</option></select><button onClick={() => setSelectedCampaigns(new Set(visibleCampaigns.map((item) => item.id)))} className="text-[11px] font-semibold text-[#0877EF]">Select filtered</button><button onClick={() => void actOnSelectedCampaigns("retry")} disabled={!selectedCampaigns.size} className="rounded-[8px] bg-emerald-600 px-2 py-1 text-[10px] font-semibold text-white disabled:opacity-40">Retry selected</button><button onClick={() => void actOnSelectedCampaigns("ignore")} disabled={!selectedCampaigns.size} className="rounded-[8px] border border-slate-300 px-2 py-1 text-[10px] font-semibold disabled:opacity-40">Ignore selected</button><button onClick={() => void actOnSelectedCampaigns("delete")} disabled={!selectedCampaigns.size} className="rounded-[8px] border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-700 disabled:opacity-40">Delete selected</button></div>{loading ? <p className="p-3 text-[12px] text-[#7A879A]">Loading queue…</p> : visibleCampaigns.length ? visibleCampaigns.map((item) => <div key={item.id} className={`mb-2 flex items-start gap-2 rounded-[12px] border p-3 ${selectedId === item.id ? "border-emerald-300 bg-emerald-50" : "border-[#E1E7EE]"}`}><input type="checkbox" checked={selectedCampaigns.has(item.id)} onChange={() => setSelectedCampaigns((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })} className="mt-1 size-4 accent-emerald-600" aria-label={`Select campaign ${item.id}`} /><button onClick={() => { setDeliveries([]); setSelectedId(item.id); }} className="min-w-0 flex-1 text-left"><div className="flex justify-between gap-2"><strong className="text-[12px]">{item.recipientCount} recipient{item.recipientCount === 1 ? "" : "s"}</strong><StatusBadge label={item.status === "COMPLETED" ? "Sent" : item.status === "PARTIAL" ? "Partial" : item.status === "FAILED" ? "Error" : "Queued"} /></div><p className="mt-1 truncate text-[10px] text-[#7A879A]">{item.messageTemplate}</p></button></div>) : <p className="p-3 text-[12px] text-[#7A879A]">No WhatsApp campaigns match this filter.</p>}
         </div>
-        <div className="min-h-0 overflow-y-auto p-4">{selectedId ? <>{["Queued", "Sending", "Sent", "Failed", "Ignored"].map((label) => <span key={label} className="mr-2 text-[11px] text-[#66758B]">{label}: {deliveries.filter((item) => (label === "Failed" ? item.status === "FAILED" : item.status === label.toUpperCase())).length}</span>)}<div className="mt-4 divide-y divide-[#EDF1F5] rounded-[12px] border border-[#E1E7EE]">{deliveries.map((item) => <div key={item.id} className="flex items-center gap-3 p-3"><div className="min-w-0 flex-1"><strong className="block text-[12px]">{item.name}</strong><p className="text-[10px] text-[#8490A2]">{item.destination} · attempt {item.attempts}</p>{item.failureReason ? <p className="mt-1 text-[10px] text-red-700">{item.failureReason}</p> : null}</div><StatusBadge label={item.status === "FAILED" ? "Error" : item.status === "SKIPPED" ? "Ignored" : item.status === "READ" ? "Read" : item.status === "DELIVERED" ? "Delivered" : item.status === "SENT" ? "Accepted" : item.status === "SENDING" ? "Sending" : item.status === "DELETED" ? "Deleted" : "Queued"} /></div>)}</div></> : <p className="pt-8 text-center text-[12px] text-[#7A879A]">Select a campaign to see its messages.</p>}</div>
+        <div className="min-h-0 overflow-y-auto p-4">{selectedId ? <>{["Queued", "Sending", "Sent", "Failed", "Ignored"].map((label) => <span key={label} className="mr-2 text-[11px] text-[#66758B]">{label}: {deliveries.filter((item) => (label === "Failed" ? item.status === "FAILED" : item.status === label.toUpperCase())).length}</span>)}<div className="mt-4 divide-y divide-[#EDF1F5] rounded-[12px] border border-[#E1E7EE]">{deliveries.map((item) => <div key={item.id} className="flex items-center gap-3 p-3"><div className="min-w-0 flex-1"><strong className="block text-[12px]">{item.name}</strong><p className="text-[10px] text-[#8490A2]">{item.destination} · attempt {item.attempts}</p>{item.failureReason ? <p className="mt-1 text-[10px] text-red-700">{getAdminFriendlyErrorMessage(item.failureReason, "message delivery")}</p> : null}</div><StatusBadge label={item.status === "FAILED" ? "Error" : item.status === "SKIPPED" ? "Ignored" : item.status === "READ" ? "Read" : item.status === "DELIVERED" ? "Delivered" : item.status === "SENT" ? "Accepted" : item.status === "SENDING" ? "Sending" : item.status === "DELETED" ? "Deleted" : "Queued"} /></div>)}</div></> : <p className="pt-8 text-center text-[12px] text-[#7A879A]">Select a campaign to see its messages.</p>}</div>
       </div>
     </section>
   </div>;
@@ -2956,17 +2958,54 @@ type ZipCommonSettings = {
   expiryDays: number;
   warningDays: number;
 };
+type ZipQueueCountPolicy = "KEEP_CURRENT" | "APPLY_NEW";
 
 function ZipCommonSettingsModal({
   settings,
+  readyPhotos,
+  activeTargetSize,
   onSave,
   onClose,
 }: {
   settings: ZipCommonSettings;
-  onSave: (settings: ZipCommonSettings) => void;
+  readyPhotos: number;
+  activeTargetSize: number;
+  onSave: (settings: ZipCommonSettings, queueCountPolicy: ZipQueueCountPolicy) => Promise<boolean>;
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState(settings);
+  const [saving, setSaving] = useState(false);
+  const [choosingQueueCount, setChoosingQueueCount] = useState(false);
+  const validationMessage = !Number.isInteger(draft.batchSize) || draft.batchSize < 1
+    ? "Batch size must be at least 1 photo."
+    : !Number.isInteger(draft.expiryDays) || draft.expiryDays < 1
+      ? "Expiry must be at least 1 day."
+      : !Number.isInteger(draft.warningDays) || draft.warningDays < 0
+        ? "Warning days cannot be negative."
+        : draft.warningDays >= draft.expiryDays
+          ? "Warning days must be less than the expiry period."
+          : "";
+
+  async function persistZipSettings(queueCountPolicy: ZipQueueCountPolicy) {
+    if (validationMessage || saving) return;
+    setSaving(true);
+    try {
+      const saved = await onSave(draft, queueCountPolicy);
+      if (saved) onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function saveZipSettings() {
+    if (validationMessage || saving) return;
+    if (draft.batchSize !== settings.batchSize && readyPhotos > 0) {
+      setChoosingQueueCount(true);
+      return;
+    }
+    void persistZipSettings("APPLY_NEW");
+  }
+
   return (
     <div
       className="fixed inset-0 z-[115] grid place-items-center bg-[#102A56]/45 p-4 backdrop-blur-[2px]"
@@ -3009,6 +3048,7 @@ function ZipCommonSettingsModal({
               type="number"
               min="1"
               value={draft.batchSize}
+              disabled={saving}
               onChange={(event) =>
                 setDraft({ ...draft, batchSize: Number(event.target.value) })
               }
@@ -3021,6 +3061,7 @@ function ZipCommonSettingsModal({
               type="number"
               min="1"
               value={draft.expiryDays}
+              disabled={saving}
               onChange={(event) =>
                 setDraft({ ...draft, expiryDays: Number(event.target.value) })
               }
@@ -3033,6 +3074,7 @@ function ZipCommonSettingsModal({
               type="number"
               min="0"
               value={draft.warningDays}
+              disabled={saving}
               onChange={(event) =>
                 setDraft({ ...draft, warningDays: Number(event.target.value) })
               }
@@ -3040,20 +3082,38 @@ function ZipCommonSettingsModal({
             />
           </label>
         </div>
-        <footer className="flex justify-end gap-2 border-t border-[#E3E9F0] p-4">
-          <button onClick={onClose} className={secondaryButton}>
-            Cancel
-          </button>
-          <button
-            onClick={() => {
-              onSave(draft);
-              onClose();
-            }}
-            className={primaryButton}
-          >
-            Save settings
-          </button>
-        </footer>
+        {validationMessage ? <p role="alert" className="mx-5 mb-5 rounded-[10px] border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-medium text-amber-900">{validationMessage}</p> : null}
+        {!validationMessage && draft.batchSize !== settings.batchSize && (draft.batchSize < 10 || draft.batchSize > 500) ? (
+          <p className="mx-5 mb-5 rounded-[10px] border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] font-medium text-blue-900">
+            {draft.batchSize < 10
+              ? "This count can create many small ZIP files when several photos are waiting."
+              : "A large photo count can create a very large ZIP that takes longer to generate and download."}
+          </p>
+        ) : null}
+        {choosingQueueCount ? (
+          <div className="mx-5 mb-5 rounded-[12px] border border-amber-200 bg-amber-50 p-4" role="alertdialog" aria-labelledby="zip-queue-count-title">
+            <h3 id="zip-queue-count-title" className="text-[14px] font-semibold text-amber-950">Apply which photo count to the current queue?</h3>
+            <p className="mt-1 text-[11px] leading-5 text-amber-900">
+              {readyPhotos} approved photo{readyPhotos === 1 ? " is" : "s are"} waiting. The current ZIP is targeting {activeTargetSize} photos, and the new count is {draft.batchSize}.
+            </p>
+            <div className="mt-4 flex flex-col-reverse gap-2 tablet:flex-row tablet:justify-end">
+              <button type="button" onClick={() => setChoosingQueueCount(false)} disabled={saving} className={secondaryButton}>Cancel</button>
+              <button type="button" onClick={() => void persistZipSettings("APPLY_NEW")} disabled={saving} className={secondaryButton}>Apply {draft.batchSize} now</button>
+              <button type="button" onClick={() => void persistZipSettings("KEEP_CURRENT")} disabled={saving} className={primaryButton}>{saving ? "Saving…" : `Finish current ZIP with ${activeTargetSize}`}</button>
+            </div>
+          </div>
+        ) : (
+          <footer className="flex justify-end gap-2 border-t border-[#E3E9F0] p-4">
+            <button onClick={onClose} disabled={saving} className={secondaryButton}>Cancel</button>
+            <button
+              onClick={saveZipSettings}
+              disabled={Boolean(validationMessage) || saving}
+              className={`${primaryButton} disabled:cursor-not-allowed disabled:opacity-45`}
+            >
+              {saving ? "Saving…" : "Save settings"}
+            </button>
+          </footer>
+        )}
       </section>
     </div>
   );
@@ -3071,11 +3131,12 @@ function TvZipWorkspace({
   openZip: (
     item: ZipBatch,
     onDelete: (code: string) => void,
-    onUpdate: (zip: ZipBatch) => void,
+    onUpdate: (zip: ZipBatch) => ZipBatch | null | Promise<ZipBatch | null>,
+    onDownload: (zip: ZipBatch) => void | Promise<void>,
   ) => void;
   notify: (message: string) => void;
   commonSettings: ZipCommonSettings;
-  onSettingsChange: (settings: ZipCommonSettings) => void;
+  onSettingsChange: (settings: ZipCommonSettings, queueCountPolicy: ZipQueueCountPolicy) => Promise<boolean>;
   createRequest: string[];
   onCreateRequestHandled: () => void;
   initialOverviewView: OverviewZipView;
@@ -3094,6 +3155,7 @@ function TvZipWorkspace({
   const [pendingZipSubmissions, setPendingZipSubmissions] = useState<MockSubmission[]>([]);
   const [pendingZipSelected, setPendingZipSelected] = useState<Set<string>>(new Set());
   const [creatingPendingZip, setCreatingPendingZip] = useState(false);
+  const [retryingAutomaticZip, setRetryingAutomaticZip] = useState(false);
   const [advancedZipRecoveryOpen, setAdvancedZipRecoveryOpen] = useState(false);
   const [zipRecoveryReason, setZipRecoveryReason] = useState("");
   const [manualZipSearch, setManualZipSearch] = useState("");
@@ -3107,8 +3169,34 @@ function TvZipWorkspace({
     .then(async (response) => {
       if (!response.ok) throw new Error("ZIP batches could not be loaded.");
       setZipRecords(((await response.json()) as AdminBatchResponse[]).map(toZipBatch));
-    })
-    .catch((reason) => notify(reason instanceof Error ? reason.message : "ZIP batches could not be loaded."));
+      return true;
+    } catch (reason) {
+      if (!quiet) notify(reason instanceof Error ? reason.message : "ZIP batches could not be loaded.");
+      return false;
+    }
+  };
+  const loadZipProgress = async (quiet = false) => {
+    try {
+      const response = await apiFetch("/api/v1/admin/kids-champ/batches/progress");
+      if (!response.ok) throw new Error("ZIP queue status could not be loaded.");
+      const body = await response.json() as { readyPhotos?: number; activeTargetSize?: number; nextTargetSize?: number };
+      const progress = {
+        readyPhotos: Math.max(0, Number(body.readyPhotos) || 0),
+        activeTargetSize: Math.max(1, Number(body.activeTargetSize) || commonSettings.batchSize || 1),
+        nextTargetSize: Math.max(1, Number(body.nextTargetSize) || commonSettings.batchSize || 1),
+      };
+      setZipProgress(progress);
+      return progress;
+    } catch (reason) {
+      if (!quiet) notify(reason instanceof Error ? reason.message : "ZIP queue status could not be loaded.");
+      return null;
+    }
+  };
+  const saveZipCommonSettings = async (next: ZipCommonSettings, queueCountPolicy: ZipQueueCountPolicy) => {
+    const saved = await onSettingsChange(next, queueCountPolicy);
+    if (saved) await Promise.all([loadZipProgress(true), loadBatches(true)]);
+    return saved;
+  };
   useEffect(() => {
     const refreshZipQueue = async () => {
       // This mount-time maintenance request is followed by the local refresh
@@ -3193,48 +3281,90 @@ function TvZipWorkspace({
     if(!submissionIds.length)return;
     if(!zipRecoveryReason.trim()){notify("Add a recovery reason before creating a manual ZIP.");return;}
     setCreatingPendingZip(true);
-    const response=await apiFetch("/api/v1/admin/kids-champ/batches/selected",{method:"POST",body:JSON.stringify({submissionIds,reason:zipRecoveryReason.trim()})});
-    const body=await response.json().catch(()=>null);
-    setCreatingPendingZip(false);
-    if(!response.ok){notify(body?.message||"The selected ZIP could not be created.");return;}
-    setZipRecords((current)=>[{...toZipBatch(body as AdminBatchResponse),recipientIds:submissionIds},...current]);
-    setPendingZipSubmissions((current)=>current.filter((item)=>!pendingZipSelected.has(item.id)));
-    setPendingZipSelected(new Set());
-    setZipRecoveryReason("");
-    setZipProgress((current)=>({...current,readyPhotos:Math.max(0,current.readyPhotos-submissionIds.length)}));
-    notify(`ZIP batch created with ${submissionIds.length} approved submission${submissionIds.length===1?"":"s"}.`);
+    try {
+      const response=await apiFetch("/api/v1/admin/kids-champ/batches/selected",{method:"POST",body:JSON.stringify({submissionIds,reason:zipRecoveryReason.trim()})});
+      const body=await response.json().catch(()=>null);
+      if(!response.ok){notify(body?.message||"The selected ZIP could not be created.");return;}
+      setZipRecords((current)=>[{...toZipBatch(body as AdminBatchResponse),recipientIds:submissionIds},...current]);
+      setPendingZipSubmissions((current)=>current.filter((item)=>!pendingZipSelected.has(item.id)));
+      setPendingZipSelected(new Set());
+      setZipRecoveryReason("");
+      setZipProgress((current)=>({...current,readyPhotos:Math.max(0,current.readyPhotos-submissionIds.length)}));
+      notify(`ZIP batch created with ${submissionIds.length} approved submission${submissionIds.length===1?"":"s"}.`);
+    } catch {
+      notify("The selected ZIP could not be created.");
+    } finally {
+      setCreatingPendingZip(false);
+    }
+  }
+  async function retryAutomaticQueue() {
+    if (retryingAutomaticZip) return;
+    if (zipProgress.readyPhotos < zipProgress.activeTargetSize) {
+      notify(`The automatic queue needs ${zipProgress.activeTargetSize - zipProgress.readyPhotos} more approved photo${zipProgress.activeTargetSize - zipProgress.readyPhotos === 1 ? "" : "s"} before a ZIP can be created.`);
+      return;
+    }
+    setRetryingAutomaticZip(true);
+    try {
+      const response = await apiFetch("/api/v1/admin/kids-champ/batches/process-automatic", { method: "POST", notifyDataUpdated: false });
+      if (!response.ok) {
+        notify("The automatic ZIP queue could not be restarted. Existing ZIP records were not changed.");
+        return;
+      }
+      await Promise.all([loadBatches(true), loadZipProgress(true)]);
+      notify("Automatic ZIP recovery completed and the queue was refreshed.");
+    } catch {
+      notify("The automatic ZIP queue could not be restarted. Existing ZIP records were not changed.");
+    } finally {
+      setRetryingAutomaticZip(false);
+    }
   }
   async function updateZip(updated: ZipBatch) {
-    if (!updated.id || !updated.telecastDate) return;
-    const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${updated.id}/schedule`, {
-      method: "PATCH",
-      body: JSON.stringify({ telecastDate: updated.telecastDate, alternateTelecastDate: null }),
-    });
-    const body = await response.json().catch(() => null);
-    if (!response.ok) { notify(body?.message || "The telecast schedule could not be saved."); return; }
-    setZipRecords((current) => current.map((item) => item.id === updated.id ? toZipBatch(body as AdminBatchResponse) : item));
-    notify(`${updated.code} updated.`);
+    if (!updated.id || !updated.telecastDate) return null;
+    try {
+      const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${updated.id}/schedule`, {
+        method: "PATCH",
+        body: JSON.stringify({ telecastDate: updated.telecastDate, alternateTelecastDate: null }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { notify(body?.message || "The telecast schedule could not be saved."); return null; }
+      const saved = toZipBatch(body as AdminBatchResponse);
+      setZipRecords((current) => current.map((item) => item.id === updated.id ? saved : item));
+      notify(`${updated.code} updated.`);
+      return saved;
+    } catch {
+      notify("The telecast schedule could not be saved.");
+      return null;
+    }
   }
   async function completeTelecast(item: ZipBatch) {
     if (!item.id || !item.telecastDate || item.telecastCompleted) return;
-    const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${item.id}/telecast-complete`, { method: "POST" });
-    const body = await response.json().catch(() => null);
-    if (!response.ok) { notify(body?.message || "The telecast could not be marked complete."); return; }
-    setZipRecords((current) => current.map((record) => record.id === item.id ? toZipBatch(body as AdminBatchResponse) : record));
-    notify(`${item.code} marked as telecast completed.`);
+    try {
+      const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${item.id}/telecast-complete`, { method: "POST" });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { notify(body?.message || "The telecast could not be marked complete."); return; }
+      setZipRecords((current) => current.map((record) => record.id === item.id ? toZipBatch(body as AdminBatchResponse) : record));
+      notify(`${item.code} marked as telecast completed.`);
+    } catch {
+      notify("The telecast could not be marked complete.");
+    }
   }
   async function toggleEdited(item: ZipBatch) {
     if (!item.id || !item.downloaded || editingZipId) return;
     setEditingZipId(item.id);
-    const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${item.id}/edited`, {
-      method: "PATCH",
-      body: JSON.stringify({ edited: !item.edited }),
-    });
-    const body = await response.json().catch(() => null);
-    setEditingZipId(null);
-    if (!response.ok) { notify(body?.message || "The edited status could not be saved."); return; }
-    setZipRecords((current) => current.map((record) => record.id === item.id ? toZipBatch(body as AdminBatchResponse) : record));
-    notify(`${item.code} edited status saved to the database.`);
+    try {
+      const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${item.id}/edited`, {
+        method: "PATCH",
+        body: JSON.stringify({ edited: !item.edited }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { notify(body?.message || "The edited status could not be saved."); return; }
+      setZipRecords((current) => current.map((record) => record.id === item.id ? toZipBatch(body as AdminBatchResponse) : record));
+      notify(`${item.code} edited status saved to the database.`);
+    } catch {
+      notify("The edited status could not be saved.");
+    } finally {
+      setEditingZipId(null);
+    }
   }
   async function downloadZip(item: ZipBatch) {
     if (item.deleted || item.status !== "Ready" || item.progress !== 100) {
@@ -3242,22 +3372,26 @@ function TvZipWorkspace({
       return;
     }
     if (!item.id) return;
-    const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${item.id}/download`);
-    if (!response.ok) { notify("The ZIP archive could not be downloaded."); return; }
-    const url = URL.createObjectURL(await response.blob());
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${item.code}.zip`;
-    link.click();
-    URL.revokeObjectURL(url);
-    setZipRecords((current) =>
-      current.map((record) =>
-        record.code === item.code
-          ? { ...record, downloaded: true, downloadedAt: "2026-08-01" }
-          : record,
-      ),
-    );
-    notify(`${item.code} manifest downloaded.`);
+    try {
+      const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${item.id}/download`);
+      if (!response.ok) { notify("The ZIP archive could not be downloaded."); return; }
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${item.code}.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+      setZipRecords((current) =>
+        current.map((record) =>
+          record.code === item.code
+            ? { ...record, downloaded: true, downloadedAt: new Date().toISOString().slice(0, 10) }
+            : record,
+        ),
+      );
+      notify(`${item.code} downloaded.`);
+    } catch {
+      notify("The ZIP archive could not be downloaded.");
+    }
   }
   return (
     <section className="space-y-3">
@@ -3272,18 +3406,18 @@ function TvZipWorkspace({
       </div>
       <button
         onClick={() => setSettingsOpen(true)}
-        className="flex w-full items-center justify-between rounded-[16px] border border-[#DCE5EF] bg-white p-4 text-left shadow-[0_8px_20px_rgba(35,69,118,.03)] transition hover:border-[#BFDDFB] hover:shadow-sm"
+        className="flex w-full flex-col items-stretch gap-4 rounded-[16px] border border-[#DCE5EF] bg-white p-4 text-left shadow-[0_8px_20px_rgba(35,69,118,.03)] transition hover:border-[#BFDDFB] hover:shadow-sm tablet:flex-row tablet:items-center tablet:justify-between"
       >
-        <span className="flex items-center gap-4">
-          <span className="grid size-10 place-items-center rounded-full bg-[#EDF6FF] text-[24px] text-[#0877EF]">◷</span>
-          <span>
+        <span className="flex min-w-0 items-center gap-4">
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-[#EDF6FF] text-[24px] text-[#0877EF]">◷</span>
+          <span className="min-w-0">
           <strong className="text-[14px] text-[#263852]">ZIP retention</strong>
           <span className="mt-1 block text-[11px] text-[#7A879A]">
             Batch size, default expiry and warning periods.
           </span>
           </span>
         </span>
-        <span className="flex flex-wrap items-center justify-end gap-2">
+        <span className="flex flex-wrap items-center justify-start gap-2 tablet:justify-end">
           <span className="rounded-[8px] border border-blue-200 bg-blue-50 px-3 py-2 text-[10px] font-semibold text-blue-700">
             {commonSettings.batchSize} photos / batch
           </span>
@@ -3302,7 +3436,7 @@ function TvZipWorkspace({
             <h3 className="flex items-center gap-2 text-[18px] font-semibold text-emerald-950"><span className="grid size-9 place-items-center rounded-full bg-emerald-100 text-xl text-emerald-600">☁</span>Automatic ZIP queue</h3>
             <p className="mt-1 text-[12px] text-emerald-800">Approved photos are added automatically. The ZIP starts when the configured batch size is reached.</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button type="button" onClick={() => setAdvancedZipRecoveryOpen((value) => !value)} className={secondaryButton}>
               {advancedZipRecoveryOpen ? "Close advanced recovery" : "Advanced ZIP recovery"}
             </button>
@@ -3355,13 +3489,14 @@ function TvZipWorkspace({
             <input
               value={zipSearch}
               onChange={(event) => setZipSearch(event.target.value)}
-              className={`${fieldClass} w-56`}
+              className={`${fieldClass} w-full tablet:w-56`}
               placeholder="Search ZIP code"
             />
             <select
               value={zipStatus}
-              onChange={(event) => setZipStatus(event.target.value)}
-              className={`${fieldClass} w-40`}
+              onChange={(event) => setZipStatus(event.target.value as ZipRecordFilter)}
+              className={`${fieldClass} w-full tablet:w-40`}
+              aria-label="Filter ZIP records"
             >
               <option>All</option>
               <option>Ready</option>
@@ -3378,7 +3513,7 @@ function TvZipWorkspace({
             >
               {binOpen ? <input type="checkbox" checked={Boolean(item.id&&binSelected.has(item.id))} onChange={()=>item.id&&setBinSelected((current)=>{const next=new Set(current);if(next.has(item.id!))next.delete(item.id!);else next.add(item.id!);return next;})} className="size-4 accent-red-600" aria-label={`Select ${item.code} for permanent deletion`} /> : null}
               <button
-                onClick={() => openZip(item, deleteZip, updateZip)}
+                onClick={() => openZip(item, deleteZip, updateZip, downloadZip)}
                 className="text-left"
               >
                 <span className="flex items-center gap-2">
@@ -3391,8 +3526,8 @@ function TvZipWorkspace({
                 </span>
               </button>
               <button
-                onClick={() => openZip(item, deleteZip, updateZip)}
-                className="flex justify-center [&>span]:min-w-[110px] [&>span]:justify-center"
+                onClick={() => openZip(item, deleteZip, updateZip, downloadZip)}
+                className="flex justify-start desktop:justify-center [&>span]:min-w-[110px] [&>span]:justify-center"
                 title="Open ZIP generation details"
               >
                 <StatusBadge label={item.deleted ? "Deleted" : item.status} />
@@ -3405,10 +3540,11 @@ function TvZipWorkspace({
                   disabled={item.deleted || item.telecastCompleted}
                   onChange={(event) => {
                     const telecastDate = event.target.value;
-                    setZipRecords((current) => current.map((record) => record.id === item.id
-                      ? { ...record, telecastDate, telecastStatus: telecastDate ? "Scheduled" : "Not telecasted" }
-                      : record));
-                    if (telecastDate) void updateZip({ ...item, telecastDate, telecastStatus: "Scheduled" });
+                    if (!telecastDate) {
+                      notify("Choose a telecast date before saving the schedule.");
+                      return;
+                    }
+                    void updateZip({ ...item, telecastDate, telecastStatus: "Scheduled" });
                   }}
                   className="mt-1 h-9 w-full rounded-[8px] border border-[#D8E2EC] bg-white px-2 text-[11px] font-medium normal-case tracking-normal text-[#344660] outline-none focus:border-[#2488F4] disabled:cursor-not-allowed disabled:bg-[#F3F5F8] disabled:text-[#A5AFBC]"
                   aria-label={`Telecast date for ${item.code}`}
@@ -3416,9 +3552,9 @@ function TvZipWorkspace({
                 <span className="mt-1 block normal-case tracking-normal"><StatusBadge label={item.telecastStatus} /></span>
               </label>
               <button
-                onClick={() => openZip(item, deleteZip, updateZip)}
+                onClick={() => openZip(item, deleteZip, updateZip, downloadZip)}
                 className="text-left text-[12px] text-[#66758B]"
-                title="Edit expiry"
+                title="Open ZIP retention details"
               >
                 Expires: {item.expires}
               </button>
@@ -3441,7 +3577,7 @@ function TvZipWorkspace({
                 />
                 Edited
               </label>
-              <div className="flex items-center justify-end gap-2">
+              <div className="flex flex-wrap items-center justify-start gap-2 desktop:justify-end">
                 <button
                   onClick={() => void completeTelecast(item)}
                   disabled={!item.telecastDate || item.telecastCompleted || item.deleted}
@@ -3460,7 +3596,7 @@ function TvZipWorkspace({
                   <WhatsAppIcon />
                 </button>
                 <button
-                  onClick={() => openZip(item, deleteZip, updateZip)}
+                  onClick={() => openZip(item, deleteZip, updateZip, downloadZip)}
                   disabled={item.deleted}
                   className="w-[46px] rounded-[8px] border border-violet-200 bg-violet-50 px-2 py-2 text-[10px] font-semibold text-violet-700 disabled:opacity-35"
                 >
@@ -3478,7 +3614,7 @@ function TvZipWorkspace({
                       ? `Downloaded ${item.downloadedAt}`
                       : item.status !== "Ready" || item.progress !== 100
                         ? `ZIP generation is ${item.progress}% complete`
-                        : "Download ZIP manifest"
+                        : "Download ZIP archive"
                   }
                   className={`w-[94px] rounded-[8px] border px-2 py-2 text-[10px] font-semibold disabled:opacity-35 ${item.downloaded ? "border-emerald-300 bg-emerald-100 text-emerald-800" : "border-blue-200 bg-blue-50 text-blue-700"}`}
                 >
@@ -3527,17 +3663,16 @@ function TvZipWorkspace({
       {settingsOpen ? (
         <ZipCommonSettingsModal
           settings={commonSettings}
-          onSave={(settings) => {
-            onSettingsChange(settings);
-            notify("ZIP retention settings saved.");
-          }}
+          readyPhotos={zipProgress.readyPhotos}
+          activeTargetSize={zipProgress.activeTargetSize}
+          onSave={saveZipCommonSettings}
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}
       {deleteCode ? (
         <ConfirmationDialog
           title={`Delete ${deleteCode} archive?`}
-          description="The downloadable file will be removed, but its ZIP details, telecast record and edit history will remain available for audit purposes."
+          description="The ZIP file and artwork files inside this batch will be deleted. Sender, submission, telecast and ZIP details will remain available in the ZIP Bin."
           confirmLabel="Delete archive"
           onCancel={() => setDeleteCode("")}
           onConfirm={() => {
@@ -5031,32 +5166,33 @@ function ZipBatchDetailsEditor({
   item,
   onSave,
   onDelete,
+  onDownload,
   close,
   notify,
 }: {
   item: ZipBatch;
-  onSave?: (zip: ZipBatch) => void;
+  onSave?: (zip: ZipBatch) => ZipBatch | null | Promise<ZipBatch | null>;
   onDelete?: (code: string) => void;
+  onDownload?: (zip: ZipBatch) => void | Promise<void>;
   close: () => void;
   notify: (message: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  function save() {
-    const telecastStatus = !draft.telecastDate
-      ? "Not telecasted"
-      : draft.telecastDate <= "2026-08-01"
-        ? "Telecasted"
-        : "Scheduled";
+  async function save() {
+    if (!draft.telecastDate) {
+      notify("Choose a telecast date before saving the schedule.");
+      return;
+    }
     const updated = {
       ...item,
-      expires: draft.expires,
       telecastDate: draft.telecastDate,
-      telecastStatus,
     };
-    setDraft(updated);
-    onSave?.(updated);
+    if (!onSave) return;
+    const saved = await onSave(updated);
+    if (!saved) return;
+    setDraft(saved);
     setEditing(false);
   }
   return (
@@ -5084,16 +5220,11 @@ function ZipBatchDetailsEditor({
         </div>
         {editing ? (
           <div className="mt-5 grid grid-cols-2 gap-3">
-            <label className="text-[10px] font-semibold uppercase text-[#8793A5]">
-              Expires in
-              <input
-                value={draft.expires}
-                onChange={(event) =>
-                  setDraft({ ...draft, expires: event.target.value })
-                }
-                className={`${fieldClass} mt-1`}
-              />
-            </label>
+            <div className="rounded-[11px] bg-[#F5F8FB] p-3">
+              <p className="text-[10px] font-semibold uppercase text-[#8793A5]">Retention</p>
+              <p className="mt-1 text-[14px] font-semibold text-[#344660]">{draft.expires}</p>
+              <p className="mt-1 text-[10px] font-normal normal-case text-[#7A879A]">Set when this ZIP was generated</p>
+            </div>
             <label className="text-[10px] font-semibold uppercase text-[#8793A5]">
               Telecast date
               <input
@@ -5107,7 +5238,7 @@ function ZipBatchDetailsEditor({
             </label>
             <p className="col-span-2 rounded-[10px] bg-blue-50 p-3 text-[11px] text-blue-800">
               ZIP status, progress and telecast status are automatic and cannot
-              be edited manually.
+              be edited manually. Retention is fixed when each ZIP is generated.
             </p>
           </div>
         ) : (
@@ -5143,7 +5274,7 @@ function ZipBatchDetailsEditor({
       <div className="mt-5 grid grid-cols-2 gap-2">
         {editing ? (
           <>
-            <button onClick={save} className={primaryButton}>
+            <button onClick={() => void save()} className={primaryButton}>
               Save changes
             </button>
             <button
@@ -5163,12 +5294,12 @@ function ZipBatchDetailsEditor({
               disabled={draft.deleted}
               className={`${primaryButton} disabled:opacity-40`}
             >
-              Edit expiry / date
+              Edit telecast date
             </button>
             <button
               onClick={() => {
+                void onDownload?.(draft);
                 close();
-                notify("Use the Download button in ZIP records to download the archive.");
               }}
               disabled={
                 draft.status !== "Ready" ||
@@ -5193,7 +5324,7 @@ function ZipBatchDetailsEditor({
       {confirmDelete ? (
         <ConfirmationDialog
           title={`Delete ${draft.code} archive?`}
-          description="The archive file will be removed while all ZIP, telecast and editor audit details remain available."
+          description="The ZIP file and artwork files inside this batch will be deleted. Sender, submission, telecast and ZIP details will remain available in the ZIP Bin."
           confirmLabel="Delete archive"
           onCancel={() => setConfirmDelete(false)}
           onConfirm={() => {
@@ -5783,6 +5914,7 @@ function DrawerContent({
         item={drawer.zipBatch}
         onSave={drawer.onUpdateZip}
         onDelete={drawer.onDeleteZip}
+        onDownload={drawer.onDownloadZip}
         close={close}
         notify={notify}
       />
@@ -5934,7 +6066,7 @@ export function AccountManagementWorkspace({notify}:{notify:(message:string)=>vo
         {connection?<div className={`mt-3 rounded-[12px] border p-3 text-[11px] ${connection.success?"border-emerald-200 bg-emerald-50":"border-red-200 bg-red-50"}`}><p className="font-semibold">{connection.message}</p>{connection.solutions.map(solution=><p key={solution} className="mt-1 text-[#65748A]">• {solution}</p>)}</div>:null}
         <label className="mt-5 block text-[11px] font-semibold text-[#526178]">Recipient number<input value={testPhone} onChange={e=>setTestPhone(e.target.value)} className={`${fieldClass} mt-1`} placeholder="07XXXXXXXX"/></label>
         <button onClick={()=>void test()} disabled={testing||!config?.tokenConfigured||!testPhone} className="mt-3 h-10 w-full rounded-[10px] bg-[#20B15A] text-[12px] font-semibold text-white disabled:opacity-40">{testing?"Sending…":"Send test WhatsApp message"}</button>
-        <div className={`mt-5 rounded-[13px] border p-4 ${config?.lastTestStatus==="SUCCESS"?"border-emerald-200 bg-emerald-50":config?.lastTestStatus==="FAILED"?"border-red-200 bg-red-50":"border-[#E0E7EF] bg-[#F8FAFC]"}`}><p className="text-[11px] font-semibold uppercase text-[#7A879A]">Latest delivery status</p><p className="mt-2 text-[13px] font-semibold">{config?.lastTestStatus||"Not tested"}</p><p className="mt-1 text-[11px] text-[#66758B]">{config?.lastTestMessage||"Save the account, then send a test."}</p>{config?.lastTestedAt?<p className="mt-2 text-[10px] text-[#8490A2]">{new Date(config.lastTestedAt).toLocaleString()}</p>:null}</div>
+        <div className={`mt-5 rounded-[13px] border p-4 ${config?.lastTestStatus==="SUCCESS"?"border-emerald-200 bg-emerald-50":config?.lastTestStatus==="FAILED"?"border-red-200 bg-red-50":"border-[#E0E7EF] bg-[#F8FAFC]"}`}><p className="text-[11px] font-semibold uppercase text-[#7A879A]">Latest delivery status</p><p className="mt-2 text-[13px] font-semibold">{config?.lastTestStatus||"Not tested"}</p><p className="mt-1 text-[11px] text-[#66758B]">{config?.lastTestStatus === "FAILED" ? getAdminFriendlyErrorMessage(config.lastTestMessage, "WhatsApp delivery") : config?.lastTestMessage||"Save the account, then send a test."}</p>{config?.lastTestedAt?<p className="mt-2 text-[10px] text-[#8490A2]">{new Date(config.lastTestedAt).toLocaleString()}</p>:null}</div>
       </div>
     </div>:null}
     {tab==="templates"&&isSuperAdmin?<WhatsAppTemplatesPanel notify={notify}/>:null}
@@ -5965,7 +6097,7 @@ export default function KidsChampAdmin() {
   const [workspace, setWorkspace] = useState<Workspace>("Overview");
   const [drawer, setDrawer] = useState<DrawerState>(null);
   const [privacy, setPrivacy] = useState(false);
-  const [notice, setNotice] = useState("");
+  const { notice, notify, dismissNotice } = useAdminNotice();
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [settings, setSettings] = useState<KidsChampSettings>(
     defaultKidsChampSettings,
@@ -6015,7 +6147,7 @@ export default function KidsChampAdmin() {
       })
       .catch(() => notify("Kids Champ settings could not be loaded."));
     return () => { active = false; };
-  }, [liveVersion]);
+  }, [liveVersion, notify]);
 
   useEffect(() => {
     const hashWorkspace = workspaces.find(
@@ -6034,20 +6166,22 @@ export default function KidsChampAdmin() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  async function saveSettings(next: KidsChampSettings) {
-    const response = await apiFetch("/api/v1/admin/kids-champ/settings", {
-      method: "PUT",
-      body: JSON.stringify(next),
-    });
-    const body = await response.json().catch(() => null);
-    if (!response.ok) { notify(body?.message || "Settings could not be saved."); return; }
-    setSettings({ ...defaultKidsChampSettings, ...body });
-    notify("Kids Champ settings saved to the backend.");
-  }
-
-  function notify(message: string) {
-    setNotice(message);
-    window.setTimeout(() => setNotice(""), 2600);
+  async function saveSettings(next: KidsChampSettings, zipQueueCountPolicy?: ZipQueueCountPolicy) {
+    try {
+      const response = await apiFetch("/api/v1/admin/kids-champ/settings", {
+        method: "PUT",
+        body: JSON.stringify({ ...next, zipQueueCountPolicy }),
+        notifyDataUpdated: false,
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { notify(body?.message || "ZIP retention settings could not be saved."); return false; }
+      setSettings({ ...defaultKidsChampSettings, ...body });
+      notify("ZIP retention settings saved.");
+      return true;
+    } catch {
+      notify("ZIP retention settings could not be saved.");
+      return false;
+    }
   }
 
   function openDrawer(kind: DrawerKind, title: string) {
@@ -6118,14 +6252,7 @@ export default function KidsChampAdmin() {
         </div>
       </header>
 
-      {notice ? (
-        <div
-          role="status"
-          className="fixed right-5 top-20 z-[120] rounded-[12px] bg-[#17243D] px-4 py-3 text-[13px] font-medium text-white shadow-xl"
-        >
-          {notice}
-        </div>
-      ) : null}
+      <AdminNotice notice={notice} onDismiss={dismissNotice} />
 
       <nav
         className="mt-5 overflow-x-auto rounded-[28px] border border-[#E2EAF4] bg-white p-2.5 shadow-[0_12px_30px_rgba(30,72,123,.12)] [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -6207,29 +6334,30 @@ export default function KidsChampAdmin() {
         ) : null}
         {workspace === "ZIP" ? (
           <TvZipWorkspace
-            key={`zips-${liveVersion}-${overviewZipView}`}
+            key={`zips-${overviewZipView}`}
             commonSettings={{
               batchSize: settings.zipBatchSize,
               expiryDays: settings.zipExpiryDays,
               warningDays: settings.zipWarningDays,
             }}
-            onSettingsChange={(next) =>
+            onSettingsChange={(next, queueCountPolicy) =>
               saveSettings({
                 ...settings,
                 zipBatchSize: next.batchSize,
                 zipExpiryDays: next.expiryDays,
                 zipWarningDays: next.warningDays,
-              })
+              }, queueCountPolicy)
             }
             createRequest={zipCreateRequest}
             onCreateRequestHandled={() => setZipCreateRequest([])}
-            openZip={(zipBatch, onDeleteZip, onUpdateZip) =>
+            openZip={(zipBatch, onDeleteZip, onUpdateZip, onDownloadZip) =>
               setDrawer({
                 kind: "zips",
                 title: "ZIP details",
                 zipBatch,
                 onDeleteZip,
                 onUpdateZip,
+                onDownloadZip,
               })
             }
             notify={notify}
