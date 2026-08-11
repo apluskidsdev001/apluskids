@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useMemo, useState } from "react";
 import { defaultCategories, defaultVideos, defaultWeeklySchedule, scheduleDayNames, type AdminVideo, type ScheduleDayName } from "./adminData";
 import { makeAdminId, publishAdminKeys, useAdminStorage } from "./useAdminStorage";
+import { AdminNotice, useAdminNotice } from "./AdminNotice";
 
 type WatchCopy = { pageTitle: string; pageDescription: string; programsTitle: string; trailersTitle: string; categoriesTitle: string };
 type EditorTab = "Videos" | "Categories" | "TV Schedule" | "Titles";
@@ -35,7 +36,7 @@ export default function WatchAdmin() {
   const [categoryIcon, setCategoryIcon] = useState("✨");
   const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState<"All" | AdminVideo["type"]>("All");
-  const [notice, setNotice] = useState("");
+  const { notice, notify, dismissNotice } = useAdminNotice();
   const [activeScheduleDay, setActiveScheduleDay] = useState<ScheduleDayName>("Monday");
   const [scheduleTime, setScheduleTime] = useState("");
   const [scheduleTitle, setScheduleTitle] = useState("");
@@ -46,11 +47,6 @@ export default function WatchAdmin() {
     () => videosStore.value.filter((video) => filterType === "All" || video.type === filterType),
     [filterType, videosStore.value],
   );
-
-  function notify(message: string) {
-    setNotice(message);
-    window.setTimeout(() => setNotice(""), 2400);
-  }
 
   function saveVideo() {
     if (!videoForm.title.trim() || !getVideoId(videoForm.youtubeUrl)) {
@@ -133,7 +129,7 @@ export default function WatchAdmin() {
         </div>
       </div>
 
-      {notice ? <div role="status" className="fixed right-5 top-20 z-[100] rounded-[12px] bg-[#17243D] px-4 py-3 text-[13px] font-medium text-white shadow-xl">{notice}</div> : null}
+      <AdminNotice notice={notice} onDismiss={dismissNotice} />
 
       <div className="mt-7 flex gap-2 overflow-x-auto border-b border-[#DCE4ED]">
         {(["Videos", "Categories", "TV Schedule", "Titles"] as EditorTab[]).map((item) => (

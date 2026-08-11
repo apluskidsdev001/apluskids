@@ -20,19 +20,29 @@ export default function AdminShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [access, setAccess] = useState<"allowed" | "forbidden">("allowed");
   const [connection, setConnection] = useState<"checking" | "online" | "offline">("checking");
+  const [connectionDetails,setConnectionDetails]=useState("Checking the Kids Champ API and database connection.");
+  const [connectionPopup,setConnectionPopup]=useState(false);
 
   const checkConnection = useCallback(async () => {
     try {
-      const response = await apiFetch("/api/v1/admin/kids-champ/overview");
-      if (response.status === 401) {
-        setAccess("forbidden");
-        router.replace(`/login?returnTo=${encodeURIComponent(pathname)}`);
-        return false;
+      const response = await apiFetch("/api/v1/health");
+      const body=await response.json().catch(()=>null) as {message?:string;status?:string}|null;
+      const healthy = response.ok && body?.status === "UP";
+      setConnection(healthy ? "online" : "offline");
+      setConnectionDetails(healthy
+        ? "The Kids Champ service and database are responding normally."
+        : "The admin service is not ready. Some live actions may be unavailable. Please try the connection check again shortly.");
+      if (response.ok) {
+        const adminResponse = await apiFetch("/api/v1/admin/kids-champ/overview");
+        if (adminResponse.status === 401 || adminResponse.status === 403) {
+          setAccess("forbidden");
+          router.replace(`/login?returnTo=${encodeURIComponent(pathname)}`);
+        }
       }
-      setConnection(response.ok ? "online" : "offline");
       return response.ok;
     } catch {
       setConnection("offline");
+      setConnectionDetails("The admin service cannot be reached right now. Live changes are unavailable until the connection returns.");
       return false;
     }
   }, [pathname, router]);
@@ -71,10 +81,11 @@ export default function AdminShell({ children }: { children: ReactNode }) {
               <span className="grid size-9 place-items-center rounded-full bg-[#E8F3FF] text-[12px] font-bold text-[#087BF1]">AD</span>
               <div><p className="text-[13px] font-bold text-[#14264A]">Administrator</p><p className="text-[11px] text-[#8190A5]">Local workspace</p></div>
             </div>
-            <button type="button" onClick={() => void checkConnection()} title="Check database connection" className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-[11px] font-bold ${connection === "online" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : connection === "offline" ? "border-red-200 bg-red-50 text-red-700" : "border-amber-200 bg-amber-50 text-amber-700"}`} aria-live="polite"><span className={`size-2 rounded-full ${connection === "online" ? "bg-emerald-500" : connection === "offline" ? "bg-red-500" : "bg-amber-500"}`} />{connection === "online" ? "Database connected" : connection === "offline" ? "Database disconnected" : "Checking database"}</button>
+            <button type="button" onClick={() => {setConnectionPopup(true);void checkConnection();}} title="Open database connection details" className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-[11px] font-bold ${connection === "online" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : connection === "offline" ? "border-red-200 bg-red-50 text-red-700" : "border-amber-200 bg-amber-50 text-amber-700"}`} aria-live="polite"><span className={`size-2 rounded-full ${connection === "online" ? "bg-emerald-500" : connection === "offline" ? "bg-red-500" : "bg-amber-500"}`} />{connection === "online" ? "Database connected" : connection === "offline" ? "Database disconnected" : "Checking database"}</button>
           </div>
         </header>
         <main className="mx-auto max-w-[1420px] px-4 py-7 tablet:px-7 laptop:px-8 laptop:py-9">{children}</main>
+        {connectionPopup?<div className="fixed inset-0 z-[180] grid place-items-center bg-[#102044]/30 p-4"><div className="w-full max-w-md rounded-[18px] bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-[11px] font-bold uppercase tracking-[.14em] text-[#2488F4]">System connection</p><h2 className="mt-1 text-[19px] font-semibold">{connection==="online"?"Database connected":connection==="checking"?"Checking connection":"Database disconnected"}</h2></div><button onClick={()=>setConnectionPopup(false)} aria-label="Close connection details" className="grid size-8 place-items-center rounded-full bg-[#F1F5F9] text-[#50627E]">×</button></div><div className={`mt-5 rounded-[12px] border p-4 text-[12px] leading-5 ${connection==="online"?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-red-200 bg-red-50 text-red-800"}`}>{connectionDetails}</div>{connection!=="online"?<div className="mt-4 rounded-[12px] bg-[#F7FAFE] p-4 text-[12px] leading-5 text-[#526178]"><p className="font-semibold text-[#263852]">What you can do</p><ul className="mt-2 list-disc space-y-1 pl-4"><li>Check your internet or local network connection.</li><li>Wait a moment, then run the connection check again.</li><li>Contact system support if the service stays unavailable.</li></ul></div>:null}<button onClick={()=>void checkConnection()} className="mt-5 h-10 w-full rounded-[10px] bg-[#1689F7] text-[12px] font-semibold text-white">Check again</button></div></div>:null}
       </div>
     </div>
   );

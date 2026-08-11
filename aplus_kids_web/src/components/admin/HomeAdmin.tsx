@@ -15,6 +15,7 @@ import {
   publishAdminKeys,
   useAdminStorage,
 } from "./useAdminStorage";
+import { AdminNotice, useAdminNotice } from "./AdminNotice";
 
 type HomeTab =
   | "Hero"
@@ -59,7 +60,7 @@ export default function HomeAdmin() {
     defaultHomeSpecialEvents,
   );
   const [tab, setTab] = useState<HomeTab>("Hero");
-  const [notice, setNotice] = useState("");
+  const { notice, notify, dismissNotice } = useAdminNotice();
   const [shortcutForm, setShortcutForm] = useState(emptyShortcut);
   const [editingShortcutId, setEditingShortcutId] = useState<string | null>(
     null,
@@ -130,11 +131,6 @@ export default function HomeAdmin() {
     window.setTimeout(() => {
       restoringRef.current = false;
     }, 0);
-  }
-
-  function notify(message: string) {
-    setNotice(message);
-    window.setTimeout(() => setNotice(""), 2400);
   }
 
   function publishHome() {
@@ -317,14 +313,7 @@ export default function HomeAdmin() {
           </button>
         </div>
       </div>
-      {notice ? (
-        <div
-          role="status"
-          className="fixed right-5 top-20 z-[100] rounded-[12px] bg-[#17243D] px-4 py-3 text-[13px] font-medium text-white shadow-xl"
-        >
-          {notice}
-        </div>
-      ) : null}
+      <AdminNotice notice={notice} onDismiss={dismissNotice} />
 
       <div className="mt-7 flex gap-2 overflow-x-auto border-b border-[#DCE4ED]">
         {(

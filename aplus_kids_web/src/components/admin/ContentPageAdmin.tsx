@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ContentItem } from "./adminData";
 import { makeAdminId, publishAdminKeys, useAdminStorage } from "./useAdminStorage";
+import { AdminNotice, useAdminNotice } from "./AdminNotice";
 
 const emptyItem: Omit<ContentItem, "id"> = {
   section: "",
@@ -31,7 +32,7 @@ export default function ContentPageAdmin({
   const store = useAdminStorage(storageKey, defaultItems);
   const [form, setForm] = useState(emptyItem);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [notice, setNotice] = useState("");
+  const { notice, notify, dismissNotice } = useAdminNotice();
   const [isEditing, setIsEditing] = useState(false);
   const [undoState, setUndoState] = useState<ContentItem[] | null>(null);
   const previousStateRef = useRef<ContentItem[] | null>(null);
@@ -57,11 +58,6 @@ export default function ContentPageAdmin({
     setUndoState(null);
     setIsEditing(true);
     window.setTimeout(() => { restoringRef.current = false; }, 0);
-  }
-
-  function notify(message: string) {
-    setNotice(message);
-    window.setTimeout(() => setNotice(""), 2200);
   }
 
   function publishPage() {
@@ -110,7 +106,7 @@ export default function ContentPageAdmin({
         </div>
       </div>
 
-      {notice ? <div role="status" className="fixed right-5 top-20 z-[100] rounded-[12px] bg-[#17243D] px-4 py-3 text-[13px] font-medium text-white shadow-xl">{notice}</div> : null}
+      <AdminNotice notice={notice} onDismiss={dismissNotice} />
 
       {!isEditing ? <div className="mt-6 rounded-[14px] border border-[#D8E8F7] bg-[#EDF6FF] px-4 py-3 text-[13px] text-[#55708F]">View mode is active. Click <strong>Edit Page</strong> to unlock content controls.</div> : null}
 
