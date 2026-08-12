@@ -21,7 +21,7 @@ export default function TrailerCard({
     <button
       type="button"
       onClick={onClick}
-      className="group w-[220px] shrink-0 overflow-hidden rounded-[18px] border border-[#DCE7F2] bg-white p-2 text-left shadow-[0_10px_28px_rgba(24,54,94,0.08)] transition-all duration-300 hover:-translate-y-1 hover:border-[#B7D8F4] hover:shadow-[0_18px_38px_rgba(24,54,94,0.14)] tablet:w-[280px] tablet:rounded-[22px] tablet:p-2.5 laptop:w-[300px] desktop:w-[320px] monitor:w-[350px]"
+      className="group w-full shrink-0 overflow-hidden rounded-[18px] border border-[#DCE7F2] bg-white p-2 text-left shadow-[0_10px_28px_rgba(24,54,94,0.08)] transition-[border-color,box-shadow] duration-300 hover:border-[#B7D8F4] hover:shadow-[0_18px_38px_rgba(24,54,94,0.14)] tablet:rounded-[22px] tablet:p-2.5"
     >
       <span
         className="relative block aspect-video overflow-hidden rounded-[14px] bg-[#DCEEFF] tablet:rounded-[17px]"

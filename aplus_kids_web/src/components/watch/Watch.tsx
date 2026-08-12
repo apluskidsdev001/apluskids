@@ -446,6 +446,25 @@ function KeyedHeroVideo({ src }: { src: string }) {
   );
 }
 
+type FocusLevel = "base" | "active";
+type VerticalFocusLevel = "base" | "active" | "near" | "far";
+
+function getFocusLevel(index: number, activeIndex: number | null): FocusLevel {
+  if (activeIndex === null) return "base";
+  if (index === activeIndex) return "active";
+  return "base";
+}
+
+function getVerticalFocusLevel(
+  index: number,
+  activeIndex: number | null,
+): VerticalFocusLevel {
+  if (activeIndex === null) return "base";
+  if (index === activeIndex) return "active";
+  if (Math.abs(index - activeIndex) === 1) return "near";
+  return "far";
+}
+
 export default function Watch() {
   const scheduleListRef = useRef<HTMLDivElement>(null);
   const dayTabsRef = useRef<HTMLDivElement>(null);
@@ -456,6 +475,10 @@ export default function Watch() {
   const [showAllPrograms, setShowAllPrograms] = useState(false);
   const [showAllTrailers, setShowAllTrailers] = useState(false);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(
+    null,
+  );
+  const [hoveredDayIndex, setHoveredDayIndex] = useState<number | null>(null);
+  const [hoveredScheduleIndex, setHoveredScheduleIndex] = useState<number | null>(
     null,
   );
   const [nowMinutes, setNowMinutes] = useState(
@@ -699,7 +722,7 @@ export default function Watch() {
             <div className="watch-mobile-width mt-5 tablet:mt-6">
               <div
                 data-focus-strip
-                className="flex gap-3 overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="-mx-3 flex gap-3 overflow-x-auto px-3 scroll-px-3 pb-3 [--focus-pop-scale:1.16] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               >
                 {filterTabs.map((tab) => (
                   <button
@@ -821,48 +844,52 @@ export default function Watch() {
             </div>
 
             <div
-              data-focus-strip
-              className="mt-6 flex gap-3 overflow-x-auto px-1 pb-5 [scrollbar-width:none] tablet:gap-4 laptop:grid laptop:grid-cols-7 laptop:overflow-visible laptop:px-0 [&::-webkit-scrollbar]:hidden"
+              className="-mx-3 mt-5 flex gap-3 overflow-x-auto px-3 pb-4 pt-2 [scrollbar-width:none] tablet:mt-6 tablet:gap-4 laptop:mx-auto laptop:max-w-[1190px] laptop:justify-center laptop:overflow-visible laptop:px-0 desktop:max-w-[1300px] monitor:max-w-[1420px] [&::-webkit-scrollbar]:hidden"
             >
               {effectiveCategories.map((category) => (
                 <button
                   key={category.name}
-                  data-focus-item
                   type="button"
                   aria-pressed={activeCategory === category.name}
                   onClick={() => selectCategory(category.name)}
-                  className={`group relative flex h-[112px] w-[126px] shrink-0 flex-col items-center justify-center rounded-[22px] border px-3 text-center transition-all duration-300 hover:-translate-y-1 tablet:h-[126px] tablet:w-[150px] laptop:w-auto ${
+                  className={`group relative flex h-[106px] w-[128px] shrink-0 flex-col items-center justify-center rounded-[20px] border px-3 text-center outline-none transition-[border-color,background-color,box-shadow] duration-200 ease-out focus-visible:ring-4 focus-visible:ring-[#8CCBFF]/45 tablet:h-[112px] tablet:w-[142px] laptop:h-[116px] laptop:w-[150px] desktop:h-[120px] desktop:w-[160px] monitor:h-[124px] monitor:w-[170px] ${
                     activeCategory === category.name
-                      ? "border-[#F04B23] bg-[linear-gradient(145deg,#FFF8F4,#FFF0E8)] shadow-[0_14px_32px_rgba(240,75,35,0.18)]"
-                      : "border-[#E2ECF6] bg-white shadow-[0_10px_24px_rgba(26,61,103,0.08)] hover:border-[#B8D8F2] hover:shadow-[0_16px_32px_rgba(26,61,103,0.13)]"
+                      ? "border-2 border-[#F04B23] bg-[linear-gradient(145deg,#FFF9F5,#FFF1E9)] shadow-[0_12px_28px_rgba(240,75,35,0.16)]"
+                      : "border-[#DCE8F3] bg-white shadow-[0_8px_22px_rgba(26,61,103,0.07)] hover:border-[#9CCBEA] hover:bg-[#FBFDFF] hover:shadow-[0_12px_28px_rgba(26,61,103,0.11)]"
                   }`}
                 >
                   {activeCategory === category.name ? (
-                    <span className="absolute right-2.5 top-2.5 grid h-5 w-5 place-items-center rounded-full bg-[#F04B23] text-[11px] font-semibold text-white">
+                    <span className="absolute right-2.5 top-2.5 grid h-[18px] w-[18px] place-items-center rounded-full bg-[#F04B23] text-[10px] font-semibold text-white shadow-sm">
                       ✓
                     </span>
                   ) : null}
-                  {category.icon.startsWith("/") ? (
+                  {category.name === "All" ? (
+                    <span className="grid h-11 w-11 place-items-center rounded-full bg-[#0877EF] shadow-[0_6px_14px_rgba(8,119,239,0.22)] tablet:h-12 tablet:w-12">
+                      <Image
+                        src={sitePath(category.icon)}
+                        alt=""
+                        width={48}
+                        height={48}
+                        className="h-5 w-5 object-contain brightness-0 invert"
+                      />
+                    </span>
+                  ) : category.icon.startsWith("/") ? (
                     <Image
                       src={sitePath(category.icon)}
                       alt=""
                       width={86}
                       height={86}
-                      className={`h-12 w-12 object-contain transition-transform group-hover:scale-105 tablet:h-14 tablet:w-14 ${
-                        category.name === "All"
-                          ? "rounded-full bg-[#0877EF] p-3 brightness-0 invert"
-                          : ""
-                      }`}
+                      className="h-11 w-11 object-contain transition-transform duration-200 ease-out group-hover:scale-[1.04] tablet:h-12 tablet:w-12 desktop:h-[52px] desktop:w-[52px]"
                     />
                   ) : (
                     <span
                       aria-hidden="true"
-                      className="grid h-12 w-12 place-items-center text-[32px] tablet:h-14 tablet:w-14 tablet:text-[38px]"
+                      className="grid h-11 w-11 place-items-center text-[30px] transition-transform duration-200 ease-out group-hover:scale-[1.04] tablet:h-12 tablet:w-12 tablet:text-[34px] desktop:text-[36px]"
                     >
                       {category.icon}
                     </span>
                   )}
-                  <span className="mt-2.5 text-[13px] font-semibold leading-tight text-[#102A56] tablet:text-[14px]">
+                  <span className="mt-2 text-[12px] font-semibold leading-tight text-[#102A56] tablet:text-[13px] desktop:text-[14px]">
                     {category.name}
                   </span>
                 </button>
@@ -1001,7 +1028,7 @@ export default function Watch() {
 
       {showSchedule ? (
         <section className="scroll-mt-[92px] px-5 py-4 tablet:px-7 laptop:scroll-mt-[132px] laptop:px-10 desktop:px-14 monitor:px-16">
-          <div className="mx-auto flex h-[calc(100svh-112px)] min-h-[650px] max-h-[900px] max-w-[1640px] flex-col laptop:h-[calc(100svh-148px)] laptop:min-h-[620px]">
+          <div className="mx-auto flex h-[1120px] min-h-[1120px] max-w-[1640px] flex-col tablet:h-[1240px] tablet:min-h-[1240px] laptop:h-[calc(100svh+130px)] laptop:min-h-[860px] laptop:max-h-[1080px] desktop:h-[calc(100svh+180px)] desktop:min-h-[920px] desktop:max-h-[1160px] monitor:h-[calc(100svh+220px)] monitor:min-h-[980px] monitor:max-h-[1240px]">
             <div
               className={`relative shrink-0 overflow-hidden rounded-[24px] px-6 py-4 transition-all duration-500 tablet:px-8 tablet:py-5 ${schedulePalette[activeDay].row} ${schedulePalette[activeDay].selected}`}
             >
@@ -1024,73 +1051,73 @@ export default function Watch() {
             <div
               ref={dayTabsRef}
               data-focus-strip
-              className="z-10 mt-4 shrink-0 overflow-x-auto pb-3 pt-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              data-focus-mode="stable"
+              data-focus-kind="day"
+              data-focus-active={hoveredDayIndex === null ? undefined : "true"}
+              onPointerLeave={() => setHoveredDayIndex(null)}
+              className="z-10 mt-5 shrink-0 overflow-x-auto px-3 pb-4 pt-3 [scrollbar-width:none] tablet:mt-6 tablet:px-4 [&::-webkit-scrollbar]:hidden"
             >
-              <div className="flex min-w-max items-center gap-2 px-1 tablet:gap-3">
-                {scheduleDays.map((day) => {
+              <div className="flex min-w-max items-end gap-3 px-1 tablet:gap-4">
+                {scheduleDays.map((day, index) => {
                   const isActive = activeDay === day;
                   const isToday = todayName === day;
 
                   return (
-                    <button
+                    <div
                       key={day}
                       data-focus-item
-                      data-schedule-day={day}
-                      type="button"
-                      onClick={() => {
-                        setActiveDay(day);
-                        setSelectedScheduleId(null);
+                      data-focus-level={getFocusLevel(index, hoveredDayIndex)}
+                      onPointerEnter={(event) => {
+                        if (event.pointerType === "mouse") {
+                          setHoveredDayIndex(index);
+                        }
                       }}
-                      aria-pressed={isActive}
-                      className={`relative min-w-[112px] rounded-[20px] px-4 py-3 text-left transition-all duration-300 tablet:min-w-[132px] tablet:px-5 ${
-                        isActive
-                          ? `${schedulePalette[day].soft} ${schedulePalette[day].selected} -translate-y-1`
-                          : `${schedulePalette[day].soft} opacity-85 hover:-translate-y-0.5 hover:opacity-100`
-                      }`}
+                      className="group"
                     >
-                      <span className="block text-[13px] font-semibold tablet:text-[14px]">
-                        {day}
-                      </span>
-                      <span
-                        className={`mt-0.5 block text-[10px] font-normal ${isActive ? "opacity-70" : "text-[#71809A]"}`}
+                      <button
+                        data-schedule-day={day}
+                        type="button"
+                        onClick={() => {
+                          setActiveDay(day);
+                          setSelectedScheduleId(null);
+                          setHoveredScheduleIndex(null);
+                        }}
+                        onFocus={() => setHoveredDayIndex(index)}
+                        aria-pressed={isActive}
+                        className="h-full w-full text-left"
                       >
-                        {weekDates[day]}
-                        {isToday ? " · Today" : ""}
-                      </span>
-                      {isActive ? (
                         <span
-                          className={`absolute inset-x-5 bottom-0 h-1 rounded-full ${schedulePalette[day].header}`}
-                        />
-                      ) : null}
-                    </button>
+                          data-focus-visual
+                          className={`relative block h-full w-full rounded-[20px] px-4 py-3 transition-[background-color,border-color,box-shadow] duration-200 tablet:px-5 ${
+                            isActive
+                              ? `${schedulePalette[day].soft} ${schedulePalette[day].selected}`
+                              : `${schedulePalette[day].soft} opacity-85 group-hover:opacity-100`
+                          }`}
+                        >
+                          <span className="block text-[13px] font-semibold tablet:text-[14px]">
+                            {day}
+                          </span>
+                          <span
+                            className={`mt-0.5 block text-[10px] font-normal ${isActive ? "opacity-70" : "text-[#71809A]"}`}
+                          >
+                            {weekDates[day]}
+                            {isToday ? " · Today" : ""}
+                          </span>
+                          {isActive ? (
+                            <span
+                              className={`absolute inset-x-5 bottom-0 h-1 rounded-full ${schedulePalette[day].header}`}
+                            />
+                          ) : null}
+                        </span>
+                      </button>
+                    </div>
                   );
                 })}
               </div>
             </div>
 
             <article className="mt-1 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[30px] bg-[radial-gradient(circle_at_85%_8%,rgba(255,255,255,0.98),transparent_34%),linear-gradient(135deg,#F1F7FF_0%,#FFFFFF_48%,#F7F2FF_100%)] shadow-[0_24px_70px_rgba(24,54,94,0.1)]">
-              <header className="flex shrink-0 items-center justify-between gap-4 px-5 py-3 tablet:px-7">
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`h-11 w-2 rounded-full ${schedulePalette[activeDay].header}`}
-                  />
-                  <div>
-                    <h3 className="text-[20px] font-bold text-[#102A56] tablet:text-[23px]">
-                      {activeDay}
-                    </h3>
-                    <p className="mt-0.5 text-[12px] font-medium text-[#71819A]">
-                      {weekDates[activeDay]} · Full day schedule
-                    </p>
-                  </div>
-                </div>
-                {todayName === activeDay ? (
-                  <span className="rounded-full bg-white px-3 py-1.5 text-[11px] font-bold text-[#F04B23] shadow-[0_8px_22px_rgba(7,27,99,0.09)]">
-                    Today
-                  </span>
-                ) : null}
-              </header>
-
-              <div className="flex min-h-0 flex-1 flex-col gap-3 px-3 pb-3 tablet:gap-4 tablet:px-4 tablet:pb-4 laptop:grid laptop:grid-cols-[minmax(340px,0.86fr)_minmax(0,1.14fr)] laptop:gap-5 desktop:px-5 desktop:pb-5">
+              <div className="flex min-h-0 flex-1 flex-col gap-3 px-3 pb-3 pt-4 tablet:gap-4 tablet:px-4 tablet:pb-4 tablet:pt-5 laptop:grid laptop:grid-cols-[minmax(380px,0.92fr)_minmax(0,1.08fr)] laptop:gap-5 desktop:grid-cols-[minmax(420px,0.94fr)_minmax(0,1.06fr)] desktop:px-5 desktop:pb-5">
                 <div className="order-2 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[24px] bg-white/72 shadow-[0_16px_38px_rgba(24,54,94,0.07)] backdrop-blur-xl laptop:order-1">
                   <div className="shrink-0 px-5 pb-2 pt-4">
                     <p className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[#71819A]">
@@ -1103,63 +1130,87 @@ export default function Watch() {
                   <div
                     ref={scheduleListRef}
                     data-focus-list
-                    className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pb-3 pt-1 before:absolute before:bottom-4 before:left-[31px] before:top-2 before:w-px before:bg-[linear-gradient(180deg,transparent,#C9D9EA_12%,#C9D9EA_88%,transparent)] [scrollbar-color:#B8CAE0_transparent] [scrollbar-width:thin] tablet:px-4"
+                    data-focus-mode="stable"
+                    data-focus-active={
+                      hoveredScheduleIndex === null ? undefined : "true"
+                    }
+                    onPointerLeave={() => setHoveredScheduleIndex(null)}
+                    className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-4 pt-3 before:absolute before:bottom-4 before:left-[39px] before:top-2 before:w-px before:bg-[linear-gradient(180deg,transparent,#C9D9EA_12%,#C9D9EA_88%,transparent)] [scrollbar-color:#B8CAE0_transparent] [scrollbar-width:thin] tablet:px-6 tablet:before:left-[47px]"
                   >
-                    {activeSchedule.map((row) => {
+                    {activeSchedule.map((row, index) => {
                       const isCurrent =
                         activeDay === todayName &&
                         row.id === currentScheduleEntry?.id;
                       const isSelected = row.id === selectedScheduleEntry?.id;
                       return (
-                        <button
+                        <div
                           key={row.id}
                           data-schedule-id={row.id}
                           data-focus-row
-                          type="button"
-                          onClick={() => setSelectedScheduleId(row.id)}
-                          aria-pressed={isSelected}
-                          className={`relative z-[1] mb-2 grid min-h-[66px] w-full grid-cols-[16px_72px_minmax(0,1fr)_auto] items-center gap-3 overflow-hidden rounded-[20px] px-3 py-2.5 text-left transition-all duration-300 tablet:grid-cols-[16px_88px_minmax(0,1fr)_auto] tablet:px-4 ${
-                            isCurrent && isSelected
-                              ? `${schedulePalette[activeDay].current} ${schedulePalette[activeDay].selected} -translate-y-0.5`
-                              : isCurrent
-                                ? schedulePalette[activeDay].current
-                                : isSelected
-                                  ? `bg-white ${schedulePalette[activeDay].selected} -translate-y-0.5`
-                                  : "bg-white/45 hover:-translate-y-0.5 hover:bg-white/82 hover:shadow-[0_10px_24px_rgba(24,54,94,0.08)]"
-                          }`}
+                          data-focus-level={getVerticalFocusLevel(
+                            index,
+                            hoveredScheduleIndex,
+                          )}
+                          onPointerEnter={(event) => {
+                            if (event.pointerType === "mouse") {
+                              setHoveredScheduleIndex(index);
+                            }
+                          }}
+                          className="group relative z-[1] mb-2 w-full"
                         >
-                          <span
-                            className={`relative grid h-4 w-4 place-items-center rounded-full ${schedulePalette[activeDay].header} shadow-[0_0_0_5px_rgba(255,255,255,0.9)]`}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedScheduleId(row.id)}
+                            onFocus={() => setHoveredScheduleIndex(index)}
+                            aria-pressed={isSelected}
+                            className="h-full w-full text-left"
                           >
-                            {isCurrent ? (
-                              <span className="absolute h-4 w-4 animate-ping rounded-full bg-current opacity-30" />
-                            ) : null}
-                          </span>
-                          <time
-                            className={`inline-flex h-9 items-center justify-center rounded-full px-3 text-[12px] font-bold tablet:text-[13px] ${schedulePalette[activeDay].soft}`}
-                          >
-                            {row.time}
-                          </time>
-                          <span className="min-w-0 text-[14px] font-semibold leading-snug text-[#243B60] tablet:text-[15px]">
-                            {row.title}
-                          </span>
-                          <span className="flex flex-col items-end gap-1">
-                            {isCurrent ? (
+                            <span
+                              data-focus-visual
+                              className={`relative grid h-full w-full grid-cols-[16px_72px_minmax(0,1fr)_auto] items-center gap-3 overflow-hidden rounded-[20px] px-3 py-2.5 tablet:grid-cols-[16px_88px_minmax(0,1fr)_auto] tablet:px-4 ${
+                                isCurrent && isSelected
+                                  ? `${schedulePalette[activeDay].current} ${schedulePalette[activeDay].selected}`
+                                  : isCurrent
+                                    ? schedulePalette[activeDay].current
+                                    : isSelected
+                                      ? `bg-white ${schedulePalette[activeDay].selected}`
+                                      : "bg-white/45 group-hover:bg-white/82 group-hover:shadow-[0_10px_24px_rgba(24,54,94,0.08)]"
+                              }`}
+                            >
                               <span
-                                className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase ${schedulePalette[activeDay].soft}`}
+                                className={`relative grid h-4 w-4 place-items-center rounded-full ${schedulePalette[activeDay].header} shadow-[0_0_0_5px_rgba(255,255,255,0.9)]`}
                               >
-                                Now
+                                {isCurrent ? (
+                                  <span className="absolute h-4 w-4 animate-ping rounded-full bg-current opacity-30" />
+                                ) : null}
                               </span>
-                            ) : null}
-                            {isSelected ? (
-                              <span
-                                className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase text-white ${schedulePalette[activeDay].header}`}
+                              <time
+                                className={`inline-flex h-9 items-center justify-center rounded-full px-3 text-[12px] font-bold tablet:text-[13px] ${schedulePalette[activeDay].soft}`}
                               >
-                                Selected
+                                {row.time}
+                              </time>
+                              <span className="min-w-0 text-[14px] font-semibold leading-snug text-[#243B60] tablet:text-[15px]">
+                                {row.title}
                               </span>
-                            ) : null}
-                          </span>
-                        </button>
+                              <span className="flex flex-col items-end gap-1">
+                                {isCurrent ? (
+                                  <span
+                                    className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase ${schedulePalette[activeDay].soft}`}
+                                  >
+                                    Now
+                                  </span>
+                                ) : null}
+                                {isSelected ? (
+                                  <span
+                                    className={`rounded-full px-2 py-1 text-[9px] font-bold uppercase text-white ${schedulePalette[activeDay].header}`}
+                                  >
+                                    Selected
+                                  </span>
+                                ) : null}
+                              </span>
+                            </span>
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
