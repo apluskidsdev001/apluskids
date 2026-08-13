@@ -26,10 +26,19 @@ public class KidsChampService {
     private final KidsChampStorage storage;
     private final KidsChampAuditRepository audits;
     private final KidsChampLiveUpdates liveUpdates;
+    private final KidsChampSettingsRepository settings;
 
     public KidsChampService(KidsChampSubmissionRepository submissions, KidsChampGuestContactRepository guests,
-                            ChildProfileRepository children, UserRepository users, KidsChampStorage storage,KidsChampAuditRepository audits,KidsChampLiveUpdates liveUpdates) {
-        this.submissions=submissions; this.guests=guests; this.children=children; this.users=users; this.storage=storage;this.audits=audits;this.liveUpdates=liveUpdates;
+                            ChildProfileRepository children, UserRepository users, KidsChampStorage storage,KidsChampAuditRepository audits,
+                            KidsChampLiveUpdates liveUpdates,KidsChampSettingsRepository settings) {
+        this.submissions=submissions; this.guests=guests; this.children=children; this.users=users; this.storage=storage;this.audits=audits;this.liveUpdates=liveUpdates;this.settings=settings;
+    }
+
+    @Transactional(readOnly=true)
+    public UploadPolicyResponse uploadPolicy(){
+        KidsChampSettingsEntity current=settings.findById((short)1)
+            .orElseThrow(()->bad("SETTINGS_MISSING","Kids Champ upload settings are unavailable."));
+        return new UploadPolicyResponse(current.getMaxFileSizeMb(),KidsChampStorage.ALLOWED_FILE_TYPES);
     }
 
     @Transactional
@@ -38,6 +47,10 @@ public class KidsChampService {
                                     String province, String hometown, String category, String title, String description,
                                     boolean consent, boolean whatsappConsent, MultipartFile photo) {
         if (!consent) throw bad("CONSENT_REQUIRED", "Parent or guardian consent is required.");
+        KidsChampSettingsEntity current=settings.findById((short)1)
+            .orElseThrow(()->bad("SETTINGS_MISSING","Kids Champ settings are unavailable."));
+        if(photo!=null&&photo.getSize()>(long)current.getMaxFileSizeMb()*1024*1024)
+            throw bad("PHOTO_TOO_LARGE","The photo must be "+current.getMaxFileSizeMb()+" MB or smaller.");
         String normalizedCategory = blankToNull(category);
         if (normalizedCategory == null || !Set.of("Drawing", "Painting", "Handcraft").contains(normalizedCategory))
             throw bad("CATEGORY_INVALID", "Choose Drawing, Painting, or Handcraft.");
@@ -51,6 +64,9 @@ public class KidsChampService {
             throw bad("CHILD_REQUIRED", "Please select a child profile.");
         }
         var stored = storage.store(photo);
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization(){
+            @Override public void afterCompletion(int status){if(status!=TransactionSynchronization.STATUS_COMMITTED)storage.deleteBestEffort(stored.storedName());}
+        });
         try {
             KidsChampSubmissionEntity item = new KidsChampSubmissionEntity();
             LocalDate resolvedDob;
@@ -91,7 +107,7 @@ public class KidsChampService {
             item.setFileSize(stored.size()); item.setConsentAcceptedAt(Instant.now());
             if(whatsappConsent)item.setWhatsappConsentAt(Instant.now());
             KidsChampResponse response=KidsChampResponse.from(submissions.save(item));
-            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization(){@Override public void afterCommit(){liveUpdates.publish("SUBMISSION_RECEIVED","SUBMISSION",response.id());}});
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization(){@Override public void afterCommit(){try{liveUpdates.publish("SUBMISSION_RECEIVED","SUBMISSION",response.id());}catch(RuntimeException ignored){}}});
             return response;
         } catch (RuntimeException exception) {
             storage.delete(stored.storedName());
@@ -119,11 +135,13 @@ public class KidsChampService {
 
     @Transactional
     public List<KidsChampResponse> claim(UUID userId,UUID guestId,UUID childId){
+        settings.findLockedById((short)1).orElseThrow(()->bad("SETTINGS_MISSING","Kids Champ settings are unavailable."));
         UserEntity user=users.findByPublicId(userId).orElseThrow(()->bad("ACCOUNT_NOT_FOUND","Account not found."));
         var child=children.findByPublicIdAndUserPublicIdAndDeletedAtIsNull(childId,userId).orElseThrow(()->bad("CHILD_NOT_FOUND","The selected child profile was not found."));
         KidsChampGuestContactEntity guest=guests.findByPublicIdAndClaimedAtIsNull(guestId).orElseThrow(()->bad("GUEST_HISTORY_NOT_FOUND","Guest history was not found or was already claimed."));
         if(!ownsContact(user,guest)) throw new ApiException(HttpStatus.FORBIDDEN,"CLAIM_NOT_VERIFIED","The account's verified phone or email does not match this guest history.");
-        List<KidsChampSubmissionEntity> items=submissions.findAllByGuestContactPublicIdAndDeletedAtIsNullOrderBySubmittedAtDesc(guestId);
+        List<KidsChampSubmissionEntity> items=submissions.findAllByGuestContactPublicIdForUpdate(guestId).stream()
+            .filter(item->item.getDeletedAt()==null).toList();
         items.forEach(item->item.claim(user,child));guest.claim(user);
         KidsChampAuditEntity audit=new KidsChampAuditEntity();audit.setActor(user);audit.setAction("GUEST_HISTORY_CLAIMED");audit.setEntityType("GUEST_CONTACT");audit.setEntityPublicId(guestId);audit.setDetails("Submissions: "+items.size());audits.save(audit);
         return items.stream().map(KidsChampResponse::from).toList();
@@ -148,4 +166,5 @@ public class KidsChampService {
     private String blankToNull(String value) { return value == null || value.isBlank() ? null : value.trim(); }
     private ApiException bad(String code, String message) { return new ApiException(HttpStatus.BAD_REQUEST, code, message); }
     public record ClaimableGuestResponse(UUID id,String parentName,String maskedPhone,int submissionCount,Instant firstSubmittedAt,Instant lastSubmittedAt){}
+    public record UploadPolicyResponse(int maxFileSizeMb,String allowedFileTypes){}
 }

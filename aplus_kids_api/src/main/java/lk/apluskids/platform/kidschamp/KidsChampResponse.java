@@ -28,7 +28,7 @@ public record KidsChampResponse(
             item.getReviewStatus(), item.getRejectionReason(), item.getTelecastStatus(),
             batch == null ? null : batch.getTelecastDate(),
             batch == null ? null : batch.getAlternateTelecastDate(),
-            item.getSubmittedAt(), item.getStoredFilename() != null
+            item.getSubmittedAt(), item.isPhotoAvailable()
         );
     }
 }

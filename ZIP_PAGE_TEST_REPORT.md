@@ -1,197 +1,105 @@
 # Kids Champ ZIP Page Test Report
 
-**Test date:** 2026-08-10  
-**Frontend:** `http://localhost:3000/admin/kids-champ/`  
-**Backend:** `http://localhost:8081`  
-**Database:** Local PostgreSQL, Flyway schema version 28
+**Final test date:** 2026-08-13
 
-## Executive result
+**Branch tested:** `codex/kidschamp-zip-integration`
 
-The core ZIP workflow passes the dedicated end-to-end regression suite: changing queue counts, keeping or replacing the active target, automatic ZIP creation, manual/remainder ZIP creation, PNG conversion, filename sequencing, downloads, stable record ordering, edit/schedule/complete operations, deletion, retention cleanup, and ZIP Bin metadata preservation.
+**Frontend:** isolated canonical checkout on `http://localhost:3012`
 
-All four functional defects found in the first test run were fixed and rechecked on 2026-08-10. A dedicated regression now proves that approved records without available artwork are skipped safely instead of crashing manual ZIP generation. Live browser clicking, screenshots, and five-viewport visual verification remain blocked by the browser connector and are not marked as passed.
+**Backend:** isolated canonical build on `http://localhost:8082`
 
-## Safety and cleanup
+**Database:** local PostgreSQL, Flyway schema version 34
 
-- Tests used ten uniquely named `Zip Test...` submissions inside a rollback-only database transaction.
-- Existing unbatched records were changed only inside that transaction and rolled back.
-- The original ZIP photo count was verified after rollback.
-- No `Zip Test...` database rows remained after the test.
-- Only images and archives created by the test were removed from storage.
-- No WhatsApp message or email was sent to a real recipient.
-- Existing administrator profiles and real ZIP records were not modified.
+## Result
 
-## Automated results
+PASS. The ZIP lifecycle, edited checkbox, download ordering, retention, automatic and manual batching, ZIP Bin, friendly errors, upload policy, database connection indicator, and all five responsive layouts passed their final checks. No remaining must-fix blocker was found in the independent integration review.
+
+## Validation summary
 
 | Check | Result | Evidence |
 |---|---:|---|
-| Dedicated ZIP end-to-end workflow | PASS | 2 tests, 0 failures |
-| ZIP queue policy integration | PASS | 1 test, 0 failures |
-| ZIP naming, PNG, retention rules | PASS | 4 tests, 0 failures |
-| Combined ZIP regression suite | PASS | 7 tests, 0 failures |
-| Frontend targeted ESLint | PASS | 0 errors |
-| Frontend production build | PASS | 23 static pages generated |
-| Backend health after restart | PASS | `/api/v1/health` returned `UP` |
-| Frontend route | PASS | `/admin/kids-champ/` returned HTTP 200 |
-| Complete backend suite | FAIL | 20 of 22 tests passed; the same 2 old seed-dependent tests failed |
-| Live browser interaction | BLOCKED | Browser connector did not expose its required safety configuration |
-| Five live viewport screenshots | BLOCKED | Same browser connector limitation |
+| Complete backend suite | PASS | 38 tests, 0 failures, 0 errors, 2 deterministic fixture skips |
+| ZIP lifecycle integration | PASS | 6/6 |
+| ZIP queue integration | PASS | 2/2 |
+| ZIP rules | PASS | 13/13 |
+| CORS security | PASS | 6/6 |
+| Database health controller | PASS | 2/2; live endpoint returned `200 {"status":"UP"}` |
+| Frontend lint | PASS | 0 errors |
+| TypeScript | PASS | `tsc --noEmit` |
+| Production build | PASS | 24/24 routes generated |
+| Browser console | PASS | No errors during the final run |
+| Five responsive sizes | PASS | 390, 768, 1100, 1366, and 1600 px; no page-level horizontal overflow |
 
-## Functional checklist
+The two skipped backend tests are optional legacy bulk-fixture checks. They skip deterministically when the exact 105-readable-photo fixture is not installed; they are not product-code failures.
 
-### ZIP count and current queue
+## Browser interaction results
 
-- PASS: count `0` is rejected.
-- PASS: minimum count `1` is accepted and generates a ZIP at one approved photo.
-- PASS: count `25,000` is accepted, proving the former configured maximum of 500 is removed.
-- PASS: changing the count with queued photos requires an explicit decision.
-- PASS: **Finish current ZIP with old count** keeps the current target and applies the new count to the next ZIP.
-- PASS: **Apply new count now** replaces the active target and generates immediately when the new target is reached.
-- PASS: settings and queue state are stored in the database and restored after the isolated test rollback.
-- NOTE: the backend still uses Java/PostgreSQL integer fields, so the technical numeric ceiling is 2,147,483,647 even though no business maximum is configured.
+- Database status showed **Database connected**.
+- The five filters were present and functional: **All**, **Downloaded**, **Not downloaded**, **Edited**, and **Not edited**.
+- **Advanced ZIP recovery** opened, required a reason, exposed Ready/ZIPped/date filters, and showed the `001_Name_City.png` naming rule.
+- ZIP photo count showed `min=1` and no HTML maximum.
+- The Edited checkbox was ticked and unticked on `KCZIP-20260811-E7085B`; both PATCH requests returned 200, the UI matched the database response, no error notice appeared, and the original unchecked state was restored.
+- Download returned 200. The clicked ZIP stayed at row position 0 before and after download.
+- No live ZIP was manually created or deleted during browser validation. Those destructive paths were exercised in isolated integration tests.
 
-### Automatic generation
+## Functional coverage
 
-- PASS: no ZIP is created below the target.
-- PASS: reaching the target automatically creates exactly one ZIP.
-- PASS: automatic batches of 3, 2, and 1 photos were verified.
-- PASS: the queue becomes empty after all eligible photos are assigned.
-- PASS: one submission cannot be added to a second ZIP.
-- PASS: the active target advances correctly after completing the old-count ZIP.
+### Batch count and automatic queue
 
-### Manual generation and recovery
+- Minimum photo count is 1; there is no business maximum.
+- Changing the count with waiting photos requires **Finish current ZIP with old count** or **Apply new count now**.
+- Emptying an old-count queue through manual recovery makes the next queue use the newly configured count.
+- Approval commits first, then automatic ZIP work runs in bounded transactions; a scheduled retry resumes stranded work.
+- Eligible photos have deterministic ordering by submission time and database ID.
 
-- PASS: incomplete remainder requires confirmation.
-- PASS: confirming the remainder creates the smaller ZIP.
-- PASS: selected approved submissions create a manual recovery ZIP.
-- PASS: unapproved submissions are rejected.
-- PASS: already-batched submissions are rejected.
-- PASS: malformed approved records with a null stored filename are skipped safely and return an admin-friendly `NO_PHOTOS` response when no valid artwork remains.
+### ZIP creation and content
 
-### ZIP content
+- Manual recovery splits selections by the configured count and includes the final remainder.
+- The old single-batch endpoint rejects an oversized selection.
+- Missing, null, unreadable, corrupt, and oversized images cannot poison the queue.
+- Archive photos are converted to real PNG and named `001_Name_City.png` through the final batch count.
+- Original submissions and artwork remain unchanged while an active ZIP is retained.
+- `submissions.csv` neutralizes spreadsheet-formula injection.
 
-- PASS: ZIP photo count matches the batch record.
-- PASS: `submissions.csv` exists and includes every tracking code.
-- PASS: JPEG source images are converted to real PNG bytes.
-- PASS: names use queue-local numbering such as `001_Name_City.png`.
-- PASS: apostrophes and slashes are converted to safe filename spaces.
-- PASS: sequential entry order is deterministic in the downloaded archive.
-- PASS: original submission names, parent details, and tracking metadata remain unchanged.
+### Download, edit, and ordering
 
-### Download and ordering
+- Missing active archives rebuild from retained source photos when possible.
+- Streaming uses a protected snapshot so cleanup cannot truncate an active download.
+- Downloaded state is recorded only after the transfer succeeds.
+- Download and live refresh preserve the visible row order.
+- Edited true/false is pessimistically locked, persisted, and safely rolled back in the UI only when a request really fails.
+- A successful “saved to the database” message is classified as success, not a false generic error.
 
-- PASS: the generated archive exists and has the expected `.zip` filename.
-- PASS: first download records `firstDownloadedAt`.
-- PASS: downloading does not restart retention.
-- PASS: repeated download does not change retention.
-- PASS: downloading does not reorder ZIP records.
-- PASS: marking Edited is blocked before download.
-- PASS: marking and clearing Edited works after download.
-- PASS: the Download button inside the ZIP detail drawer uses the same archive-download handler as the record row.
+### Retention, cleanup, and ZIP Bin
 
-### Telecast controls
+- Retention and warning periods are snapshotted when a ZIP is generated.
+- Download does not restart retention.
+- Migration V33 realigns legacy active rows so a 3-day setting no longer displays the old 10-day deadline.
+- Expiry/manual deletion removes archive and artwork files while keeping sender, submission, member, telecast, and ZIP metadata.
+- Deleted ZIP details move to the ZIP Bin.
+- Failed filesystem cleanup stays visible as retryable cleanup-pending state and cannot be permanently cleared prematurely.
+- Batch/submission locking and optimistic versions prevent concurrent mutation from resurrecting deleted data.
 
-- PASS: past dates are rejected.
-- PASS: an alternate date earlier than the primary date is rejected.
-- PASS: valid primary and alternate dates are saved.
-- PASS: a scheduled ZIP can be marked complete.
-- PASS: the detail drawer no longer calculates telecast status from a hard-coded date; the backend remains the status authority.
+### Errors, security, and connectivity
 
-### Delete, retention, and ZIP Bin
+- Admin failures are mapped to contextual, understandable messages; raw provider, SQL, port, and server exception text is not shown.
+- Stale SSE clients cannot turn a committed Edited update into a false 500 response.
+- Public and admin SSE channels are separated; public events do not expose internal UUIDs or admin actions.
+- SSE reconnect uses bounded backoff.
+- LAN API resolution works for localhost, loopback, and private-host clients while credentialed CORS requires the same trusted host.
+- The frontend/backend default API port is consistently 8081.
+- `/api/v1/health` now verifies the database and drives the header connection status.
+- Upload size is consistently enforced from the admin setting through the public form and backend, with a 50 MB transport ceiling.
+- Upload types are canonically limited to JPG, JPEG, and PNG across settings, public policy, storage, and migration V34.
 
-- PASS: manual deletion is blocked before download.
-- PASS: downloaded ZIP archive can be deleted.
-- PASS: its artwork files are deleted.
-- PASS: child, sender, submission, telecast, and ZIP metadata remain.
-- PASS: the ZIP record receives a deleted timestamp and appears as a deleted/Bin record.
-- PASS: removed artwork cannot return to the automatic queue.
-- PASS: simulated retention expiry performs the same archive/photo cleanup without requiring a prior download.
-- PASS: clearing a selected Bin record marks it purged and hides it from the normal/Bin response.
+## Responsive evidence
 
-### Search, filters, and page controls
+Screenshots were captured outside the repository so no generated test artifacts are included in Git:
 
-Static code-path verification passed for:
+- `390x844` phone
+- `768x1024` tablet
+- `1100x800` laptop
+- `1366x900` desktop
+- `1600x1000` monitor
 
-- ZIP-code search.
-- All, Downloaded, Not downloaded, Edited, and Not edited filters.
-- ZIP Bin toggle, Select all, and Clear selected.
-- Advanced Recovery search, Ready/ZIPped filter, specific-date filter, and date-range filter.
-- Retry automatic queue, Select all, Deselect all, and recovery-reason validation.
-- Telecast date, Complete, WhatsApp eligibility, Edit, Download, and Delete button enable/disable rules.
-- Admin-friendly API error display and filtering of technical error details.
-
-These controls could not be physically clicked in the live browser because browser automation was unavailable. They are therefore source-verified, not visually verified.
-
-## Resolved bugs
-
-### BUG-ZIP-001 - Manual ZIP crashes when an approved record has no stored filename
-
-**Severity:** High  
-**Status:** Resolved and covered by regression test
-
-**Reproduction:**
-
-1. Have an approved, unbatched submission whose `stored_filename` is null while `photo_deleted_at` is also null.
-2. Use the general manual/remainder ZIP generation path.
-3. The repository query selects that submission.
-4. ZIP generation calls `KidsChampStorage.photo(null)` and throws `NullPointerException`.
-
-**User impact:** The admin sees the generic “ZIP action could not be completed” message and cannot generate the requested manual ZIP.
-
-**Cause:** `createBatch` filters `photoDeletedAt` but does not require `storedFilename` to be non-null, unlike the automatic queue query.
-
-**Resolution:** General manual/remainder generation now selects only approved, unbatched rows with an available stored filename. If none remain, it returns an admin-friendly `NO_PHOTOS` response. Selected recovery already validates each selected photo separately.
-
-### BUG-ZIP-002 - Expiry value in the ZIP detail drawer is not persisted
-
-**Severity:** High  
-**Status:** Resolved and verified by lint/build
-
-**Reproduction:**
-
-1. Open a ZIP record.
-2. Click **Edit expiry / date**.
-3. Change only **Expires in** and save.
-4. Nothing is saved when no telecast date exists; with a date, the request sends only telecast fields.
-
-**Cause:** The drawer changes `draft.expires`, but `updateZip` calls only the schedule endpoint and sends `telecastDate` plus `alternateTelecastDate: null`.
-
-**Resolution:** The unsupported expiry editor was removed. The drawer keeps the existing layout, shows retention as read-only, and explains that it is fixed when the ZIP is generated. The edit action now changes only the telecast date.
-
-### BUG-ZIP-003 - Drawer Download button does not download
-
-**Severity:** Medium  
-**Status:** Resolved and verified by lint/build
-
-**Reproduction:**
-
-1. Open a ready ZIP record.
-2. Click **Download** inside the detail drawer.
-3. The drawer closes and shows an instruction to use the list Download button.
-
-**User impact:** A control labelled Download does not perform its named action.
-
-**Resolution:** The drawer Download button is connected to the same `downloadZip` handler used by the record row.
-
-### BUG-ZIP-004 - Hard-coded telecast date in ZIP editor
-
-**Severity:** Medium  
-**Status:** Resolved and verified by lint/build
-
-**Cause:** The drawer calculates telecast state by comparing the selected date with the fixed value `2026-08-01` instead of using the backend completion status/current date.
-
-**Resolution:** The fixed-date comparison and local status override were removed. The schedule/completion endpoints remain the source of telecast status.
-
-## Additional quality findings
-
-1. The Advanced Recovery help text now correctly shows `001_child name_hometown.png`.
-2. The complete backend suite contains old tests tied to mutable shared seed data:
-   - expected 105 bulk records, database contains 905;
-   - expected two matching sample records, found zero in that test state.
-3. The Next.js build warns that multiple lockfiles cause automatic workspace-root inference.
-4. Five responsive tiers are configured globally (mobile baseline, tablet, laptop, desktop, monitor), but live visual behavior at those widths remains unverified because browser automation was blocked.
-
-## Remaining verification work
-
-1. Isolate/reset the old bulk workflow test fixtures before using the complete suite as a release gate.
-2. Repeat all live clicks and screenshots at the five required viewport sizes when the browser connector is available.
+All five showed ZIP retention, automatic queue, recovery, records, filter controls, and connected database status without page-level horizontal overflow.

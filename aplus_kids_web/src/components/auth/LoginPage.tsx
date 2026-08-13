@@ -4,6 +4,7 @@ import Image from "next/image";
 import { type FormEvent, useState } from "react";
 import { sitePath } from "@/utils/sitePath";
 import { backendFetch } from "@/utils/backendActivity";
+import { resolveApiBaseUrl } from "@/utils/auth";
 
 type LoginView = "login" | "forgot" | "sent";
 
@@ -61,7 +62,7 @@ export default function LoginPage({ embedded = false, onCreateAccount, onLoginSu
     setIsLoggingIn(true);
 
     try {
-      const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081").replace(/\/$/, "");
+      const apiBaseUrl = resolveApiBaseUrl();
       const response = await backendFetch(`${apiBaseUrl}/api/v1/auth/login`, {
         method: "POST",
         credentials: "include",
@@ -120,7 +121,7 @@ export default function LoginPage({ embedded = false, onCreateAccount, onLoginSu
     setIsSendingReset(true);
     setMessage("");
     try {
-      const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081").replace(/\/$/, "");
+      const apiBaseUrl = resolveApiBaseUrl();
       const response = await backendFetch(`${apiBaseUrl}/api/v1/auth/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

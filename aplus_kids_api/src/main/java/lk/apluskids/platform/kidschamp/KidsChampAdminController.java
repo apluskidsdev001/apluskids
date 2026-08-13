@@ -7,6 +7,7 @@ import org.springframework.core.io.*;
 import org.springframework.http.*;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.StreamingResponseBody;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
@@ -16,7 +17,7 @@ public class KidsChampAdminController {
     private final KidsChampLiveUpdates liveUpdates;
     private final KidsChampWhatsAppAdminService whatsapp;
     KidsChampAdminController(KidsChampAdminService service,KidsChampLiveUpdates liveUpdates,KidsChampWhatsAppAdminService whatsapp){this.service=service;this.liveUpdates=liveUpdates;this.whatsapp=whatsapp;}
-    @GetMapping(path="/events",produces=MediaType.TEXT_EVENT_STREAM_VALUE) SseEmitter events(JwtAuthenticationToken a){admin(a);return liveUpdates.connect();}
+    @GetMapping(path="/events",produces=MediaType.TEXT_EVENT_STREAM_VALUE) SseEmitter events(JwtAuthenticationToken a){admin(a);return liveUpdates.connectAdmin();}
     @GetMapping("/submissions") List<KidsChampAdminSubmissionResponse> submissions(JwtAuthenticationToken a){admin(a);return service.submissions();}
     @GetMapping("/submissions/page") KidsChampAdminService.SubmissionPageResponse submissionsPage(JwtAuthenticationToken a,@RequestParam(defaultValue="0") int page,@RequestParam(defaultValue="50") int size,@RequestParam(required=false) String search,@RequestParam(required=false) String approval,@RequestParam(required=false) String location,@RequestParam(required=false) String category,@RequestParam(required=false) Integer minAge,@RequestParam(required=false) Integer maxAge,@RequestParam(required=false) LocalDate dateFrom,@RequestParam(required=false) LocalDate dateTo){admin(a);return service.submissionsPage(page,size,search,approval,location,category,minAge,maxAge,dateFrom,dateTo);}
     @GetMapping("/guests") List<KidsChampAdminService.GuestResponse> guests(JwtAuthenticationToken a){admin(a);return service.guests();}
@@ -63,18 +64,28 @@ public class KidsChampAdminController {
     @PatchMapping("/submissions/{id}/preview") KidsChampAdminSubmissionResponse preview(JwtAuthenticationToken a,@PathVariable UUID id,@RequestBody PreviewRequest r){admin(a);return service.preview(subject(a),id,r.previewed());}
     @PostMapping("/batches") @ResponseStatus(HttpStatus.CREATED) KidsChampAdminService.BatchResponse batch(JwtAuthenticationToken a,@RequestBody BatchRequest r){admin(a);return service.createBatch(subject(a),r.limit(),r.includeRemainder());}
     @PostMapping("/batches/selected") @ResponseStatus(HttpStatus.CREATED) KidsChampAdminService.BatchResponse selectedBatch(JwtAuthenticationToken a,@RequestBody SelectedBatchRequest r){admin(a);return service.createSelectedBatch(subject(a),r.submissionIds(),r.reason());}
+    @PostMapping("/batches/selected/split") @ResponseStatus(HttpStatus.CREATED) List<KidsChampAdminService.BatchResponse> splitSelectedBatches(JwtAuthenticationToken a,@RequestBody SelectedBatchRequest r){admin(a);return service.createSelectedBatches(subject(a),r.submissionIds(),r.reason());}
+    @PostMapping("/batches/process-automatic") @ResponseStatus(HttpStatus.NO_CONTENT) void processAutomaticBatches(JwtAuthenticationToken a){admin(a);service.processAutomaticZips(subject(a));}
     @GetMapping("/batches") List<KidsChampAdminService.BatchResponse> batches(JwtAuthenticationToken a){admin(a);return service.batches();}
     @GetMapping("/batches/progress") KidsChampAdminService.ZipProgressResponse zipProgress(JwtAuthenticationToken a){admin(a);return service.zipProgress();}
-    @GetMapping("/batches/{id}/download") ResponseEntity<Resource> download(JwtAuthenticationToken a,@PathVariable UUID id) throws IOException{
-        admin(a);var value=service.download(subject(a),id);return ResponseEntity.ok()
-            .header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(value.filename()).build().toString())
-            .contentType(MediaType.APPLICATION_OCTET_STREAM).contentLength(java.nio.file.Files.size(value.path()))
-            .body(new FileSystemResource(value.path()));
+    @GetMapping("/batches/{id}/download") ResponseEntity<StreamingResponseBody> download(JwtAuthenticationToken a,@PathVariable UUID id) throws IOException{
+        admin(a);var value=service.download(subject(a),id);
+        try{
+            long size=java.nio.file.Files.size(value.path());
+            StreamingResponseBody body=output->{
+                try(var input=java.nio.file.Files.newInputStream(value.path())){input.transferTo(output);output.flush();service.completeDownload(value);}
+                finally{service.releaseDownload(value);}
+            };
+            return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION,ContentDisposition.attachment().filename(value.filename()).build().toString())
+                .contentType(MediaType.APPLICATION_OCTET_STREAM).contentLength(size).body(body);
+        }catch(IOException|RuntimeException exception){service.releaseDownload(value);throw exception;}
     }
     @PatchMapping("/batches/{id}/schedule") KidsChampAdminService.BatchResponse schedule(JwtAuthenticationToken a,@PathVariable UUID id,@RequestBody ScheduleRequest r){admin(a);return service.schedule(subject(a),id,r.telecastDate(),r.alternateTelecastDate());}
     @PostMapping("/batches/{id}/telecast-complete") KidsChampAdminService.BatchResponse completeTelecast(JwtAuthenticationToken a,@PathVariable UUID id){admin(a);return service.completeTelecast(subject(a),id);}
     @PatchMapping("/batches/{id}/edited") KidsChampAdminService.BatchResponse edited(JwtAuthenticationToken a,@PathVariable UUID id,@RequestBody EditedRequest r){admin(a);return service.setEdited(subject(a),id,r.edited());}
     @DeleteMapping("/batches/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteBatch(JwtAuthenticationToken a,@PathVariable UUID id){admin(a);service.deleteBatch(subject(a),id);}
+    @DeleteMapping("/batches/bin") @ResponseStatus(HttpStatus.NO_CONTENT) void clearBatchBin(JwtAuthenticationToken a,@RequestBody BatchIdsRequest r){admin(a);service.clearBatchBin(subject(a),r.batchIds());}
     private UUID subject(JwtAuthenticationToken a){return UUID.fromString(a.getToken().getSubject());}
     private void admin(JwtAuthenticationToken a){
         List<String> roles=a.getToken().getClaimAsStringList("roles");
@@ -92,6 +103,7 @@ public class KidsChampAdminController {
     record ApproveSubmissionsRequest(List<UUID> submissionIds){}
     record ScheduleRequest(LocalDate telecastDate,LocalDate alternateTelecastDate){}
     record EditedRequest(boolean edited){}
+    record BatchIdsRequest(List<UUID> batchIds){}
     record TaskRequest(LocalDate date,String title,String details){} record TaskStatusRequest(boolean completed){} record TaskRescheduleRequest(LocalDate date){}
     record PreviewRequest(boolean previewed){}
     record MergeGuestsRequest(UUID targetId,UUID sourceId){}

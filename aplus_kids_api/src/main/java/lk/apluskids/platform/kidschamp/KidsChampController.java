@@ -15,7 +15,8 @@ public class KidsChampController {
     private final KidsChampLiveUpdates liveUpdates;
     public KidsChampController(KidsChampService service,KidsChampLiveUpdates liveUpdates) { this.service=service;this.liveUpdates=liveUpdates; }
 
-    @GetMapping(path="/events",produces="text/event-stream") SseEmitter events(){return liveUpdates.connect();}
+    @GetMapping(path="/events",produces="text/event-stream") SseEmitter events(){return liveUpdates.connectPublic();}
+    @GetMapping("/upload-policy") KidsChampService.UploadPolicyResponse uploadPolicy(){return service.uploadPolicy();}
 
     @PostMapping(path="/submissions", consumes="multipart/form-data")
     @ResponseStatus(HttpStatus.CREATED)

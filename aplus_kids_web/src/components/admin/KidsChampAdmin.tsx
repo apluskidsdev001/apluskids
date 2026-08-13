@@ -7,13 +7,13 @@ import { KidsChampStatusBadge as StatusBadge } from "./KidsChampStatusBadge";
 import { KidsChampWhatsAppIcon as WhatsAppIcon } from "./KidsChampWhatsAppIcon";
 import { KidsChampConfirmationDialog as ConfirmationDialog } from "./KidsChampConfirmationDialog";
 import { WhatsAppConsentControl, WhatsAppMessagingWorkspace, WhatsAppTemplatesPanel } from "./KidsChampWhatsAppMessaging";
+import { AdminNotice, getAdminFriendlyErrorMessage, useAdminNotice } from "./AdminNotice";
 
 function KidsChampLoadingScreen() {
-  const [loading,setLoading]=useState(false); const [finished,setFinished]=useState<"success"|"error"|null>(null);
-  useEffect(()=>{let timer:number|undefined;const update=(event:Event)=>{const active=((event as CustomEvent<{count:number}>).detail?.count||0)>0;setLoading(active);if(active){if(timer)window.clearTimeout(timer);setFinished(null);}};const complete=(event:Event)=>{const success=Boolean((event as CustomEvent<{success:boolean}>).detail?.success);setFinished(success?"success":"error");if(timer)window.clearTimeout(timer);timer=window.setTimeout(()=>setFinished(null),2600);};window.addEventListener("aplus-api-activity",update);window.addEventListener("aplus-operation-finished",complete);return()=>{window.removeEventListener("aplus-api-activity",update);window.removeEventListener("aplus-operation-finished",complete);if(timer)window.clearTimeout(timer);};},[]);
-  if(!loading&&!finished)return null;
-  const successful=finished==="success"&&!loading;
-  return <div className="fixed inset-0 z-[300] grid place-items-center bg-[#102044]/20 backdrop-blur-[1px]" role="status" aria-live="polite"><div className="flex items-center gap-3 rounded-[18px] border border-white/70 bg-white px-6 py-5 shadow-2xl">{loading?<span className="size-6 animate-spin rounded-full border-[3px] border-[#B8DAFF] border-t-[#1689F7]"/>:<span className={`grid size-6 place-items-center rounded-full text-[14px] font-bold text-white ${successful?"bg-emerald-500":"bg-red-500"}`}>{successful?"✓":"!"}</span>}<div><p className="text-[14px] font-semibold text-[#172A4B]">{loading?"Saving your changes":successful?"Finished successfully":"Could not finish the action"}</p><p className="mt-0.5 text-[11px] text-[#708099]">{loading?"Please wait while the database is updated.":successful?"Live data has been refreshed.":"No changes were applied. Please review the message and try again."}</p></div></div></div>;
+  const [loading,setLoading]=useState(false);
+  useEffect(()=>{const update=(event:Event)=>{const active=((event as CustomEvent<{count:number}>).detail?.count||0)>0;setLoading(active);};window.addEventListener("aplus-api-activity",update);return()=>window.removeEventListener("aplus-api-activity",update);},[]);
+  if(!loading)return null;
+  return <div className="fixed inset-0 z-[300] grid place-items-center bg-[#102044]/20 backdrop-blur-[1px]" role="status" aria-live="polite"><div className="flex items-center gap-3 rounded-[18px] border border-white/70 bg-white px-6 py-5 shadow-2xl"><span className="size-6 animate-spin rounded-full border-[3px] border-[#B8DAFF] border-t-[#1689F7]"/><div><p className="text-[14px] font-semibold text-[#172A4B]">Saving your changes</p><p className="mt-0.5 text-[11px] text-[#708099]">Please wait while the database is updated.</p></div></div></div>;
 }
 type MockSubmission = {
   id: string; participantId: string; phone: string; trackingCode: string; childName: string; initials: string; age: number; location: string; category: string;
@@ -109,6 +109,7 @@ type AdminBatchResponse = {
   photoCount: number;
   firstDownloadedAt?: string;
   editedAt?: string;
+  deleteAfter?: string;
   daysRemaining: number;
   telecastDate?: string;
   alternateTelecastDate?: string;
@@ -116,31 +117,76 @@ type AdminBatchResponse = {
   createdAt: string;
   deletedAt?: string;
   submissionIds: string[];
+  cleanupPending?: boolean;
+  cleanupFailureCount?: number;
+  lastCleanupAttemptAt?: string;
+  warningDays?: number;
+  expiringSoon?: boolean;
 };
 
+function adminDateOnly(value?: string) {
+  if (!value || Number.isNaN(Date.parse(value))) return "";
+  return value.slice(0, 10);
+}
+
+function isAdminBatchExpiringSoon(item: AdminBatchResponse) {
+  const warningDays = Math.max(0, Number(item.warningDays) || 0);
+  return item.status !== "DELETED" && (item.expiringSoon ?? item.daysRemaining <= warningDays);
+}
+
 function toZipBatch(item: AdminBatchResponse): ZipBatch {
+  const deleted = item.status === "DELETED";
+  const daysRemaining = Number.isFinite(Number(item.daysRemaining))
+    ? Math.max(0, Math.ceil(Number(item.daysRemaining)))
+    : 0;
+  const warningDays = Number.isFinite(Number(item.warningDays))
+    ? Math.max(0, Math.floor(Number(item.warningDays)))
+    : 0;
   return {
     id: item.id,
     code: item.batchCode,
     photos: item.photoCount,
     size: "Server archive",
-    status: item.status === "DELETED" ? "Ready" : "Ready",
-    expires: `${item.daysRemaining} days`,
+    status: "Ready",
+    expires: `${daysRemaining} days`,
+    deleteAfter: adminDateOnly(item.deleteAfter),
+    warningDays,
+    expiringSoon: isAdminBatchExpiringSoon(item),
     progress: 100,
     telecastStatus: item.telecastCompletedAt ? "Telecast completed" : item.telecastDate ? "Scheduled" : "Not scheduled",
     telecastDate: item.telecastDate || "",
     telecastCompleted: Boolean(item.telecastCompletedAt),
     recipientIds: item.submissionIds || [],
     edited: Boolean(item.editedAt),
-    editedAt: item.editedAt ? item.editedAt.slice(0, 10) : "",
-    deleted: item.status === "DELETED",
-    deletedAt: item.deletedAt ? item.deletedAt.slice(0, 10) : "",
+    editedAt: adminDateOnly(item.editedAt),
+    deleted,
+    deletedAt: adminDateOnly(item.deletedAt),
     downloaded: Boolean(item.firstDownloadedAt),
-    downloadedAt: item.firstDownloadedAt ? item.firstDownloadedAt.slice(0, 10) : "",
-    createdAt: item.createdAt.slice(0, 10),
+    downloadedAt: adminDateOnly(item.firstDownloadedAt),
+    createdAt: adminDateOnly(item.createdAt) || "Date unavailable",
+    cleanupPending: Boolean(item.cleanupPending),
+    cleanupFailureCount: Math.max(0, Number(item.cleanupFailureCount) || 0),
+    lastCleanupAttemptAt: adminDateOnly(item.lastCleanupAttemptAt),
   };
 }
-type ZipBatch = { id?: string; code:string;photos:number;size:string;status:string;expires:string;progress:number;telecastStatus:string;telecastDate:string;telecastCompleted:boolean;recipientIds:string[];edited:boolean;editedAt:string;deleted:boolean;deletedAt:string;downloaded:boolean;downloadedAt:string;createdAt:string };
+
+function toCreatedZipBatches(value: unknown) {
+  if (!Array.isArray(value) || value.length === 0) {
+    throw new Error("The ZIP service did not return any created batches.");
+  }
+  if (value.some((item) => !item || typeof item !== "object" || !("batchCode" in item) || !("submissionIds" in item))) {
+    throw new Error("The ZIP service returned an unexpected response.");
+  }
+  return (value as AdminBatchResponse[]).map(toZipBatch);
+}
+
+function responseErrorMessage(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || !("message" in value)) return undefined;
+  return typeof value.message === "string" ? value.message : undefined;
+}
+
+type ZipBatch = { id?: string; code:string;photos:number;size:string;status:string;expires:string;deleteAfter:string;warningDays:number;expiringSoon:boolean;progress:number;telecastStatus:string;telecastDate:string;telecastCompleted:boolean;recipientIds:string[];edited:boolean;editedAt:string;deleted:boolean;deletedAt:string;downloaded:boolean;downloadedAt:string;createdAt:string;cleanupPending:boolean;cleanupFailureCount:number;lastCleanupAttemptAt:string };
+const zipBatchKey = (item: ZipBatch) => item.id || item.code;
 type ZipRecordFilter = "All" | "Downloaded" | "Not downloaded" | "Edited" | "Not edited";
 type ParticipantRecord = {
   reference: string;
@@ -262,7 +308,7 @@ type KidsChampSettings = {
 const defaultKidsChampSettings: KidsChampSettings = {
   categories: ["Drawing", "Painting", "Handcraft"],
   maxFileSizeMb: 10,
-  allowedFileTypes: "JPG, JPEG, PNG, WEBP",
+  allowedFileTypes: "JPG, JPEG, PNG",
   automaticTracking: true,
   dailyTelecastLimit: 12,
   defaultTelecastTime: "15:00",
@@ -585,7 +631,7 @@ function OverviewGrowthSection({
       if (!response.ok) throw new Error("Growth data could not be loaded.");
       const body=await response.json() as Array<{date:string;submissions:number;participants:number}>;
       setPoints(body.map((item)=>({label:new Date(`${item.date}T00:00:00`).toLocaleDateString("en-US",{month:"short",day:"numeric"}),submissions:item.submissions,participants:item.participants})));
-    }).catch((reason)=>notify(reason instanceof Error?reason.message:"Growth data could not be loaded."));
+    }).catch((reason)=>notify(getAdminFriendlyErrorMessage(reason instanceof Error?reason.message:undefined,"growth data")));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
@@ -722,9 +768,13 @@ function OverviewCalendar({
         if (item.reviewedAt) metric(item.reviewedAt.slice(0, 10)).reviews += 1;
       });
       batchItems.forEach((item) => {
-        metric(item.createdAt.slice(0, 10)).zips += 1;
+        const createdDate = adminDateOnly(item.createdAt);
+        const expiryDate = adminDateOnly(item.deleteAfter);
+        if (createdDate) metric(createdDate).zips += 1;
         if (item.telecastDate) metric(item.telecastDate).telecasts += 1;
-        if (item.status !== "DELETED" && item.daysRemaining <= 0) metric(item.createdAt.slice(0, 10)).warnings += 1;
+        if (isAdminBatchExpiringSoon(item) && (expiryDate || createdDate)) {
+          metric(expiryDate || createdDate).warnings += 1;
+        }
       });
       taskItems.forEach((item) => {
         if (!item.completedAt) metric(item.date).warnings += 1;
@@ -733,7 +783,7 @@ function OverviewCalendar({
     }).catch((reason) => {
       if (!cancelled) {
         setCalendarMetrics({});
-        setCalendarError(reason instanceof Error ? reason.message : "Calendar activity could not be loaded.");
+        setCalendarError(getAdminFriendlyErrorMessage(reason instanceof Error ? reason.message : undefined, "calendar activity"));
       }
     }).finally(() => { if (!cancelled) setCalendarLoading(false); });
     return () => { cancelled = true; };
@@ -1149,7 +1199,7 @@ function Overview({
       })
       .catch((reason) => {
         setOverviewState("error");
-        notify(reason instanceof Error ? reason.message : "Overview metrics could not be loaded.");
+        notify(getAdminFriendlyErrorMessage(reason instanceof Error ? reason.message : undefined, "overview data"));
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [overviewReload]);
@@ -1748,7 +1798,7 @@ function SubmissionsWorkspace({
     }
     apiFetch(`/api/v1/admin/kids-champ/submissions/page?${params}`)
       .then(async (response) => {
-        if (!response.ok) { const error=await response.json().catch(()=>null) as {message?:string;code?:string}|null; throw new Error(error?.message||`The backend returned HTTP ${response.status}.`); }
+        if (!response.ok) { const error=await response.json().catch(()=>null) as {message?:string;code?:string}|null; throw new Error(getAdminFriendlyErrorMessage(error?.message, "submission records")); }
         const body = (await response.json()) as AdminSubmissionPageResponse;
         if (!cancelled) {
           setRecords(body.items.map(toMockSubmission));
@@ -1764,7 +1814,7 @@ function SubmissionsWorkspace({
         if (!cancelled) {
           setRecords([]);
           setBackendState("error");
-          setConnectionReason(reason instanceof Error?reason.message:"The Kids Champ service could not be reached.");
+          setConnectionReason(getAdminFriendlyErrorMessage(reason instanceof Error?reason.message:undefined,"service connection"));
           setLastConnectionCheck(new Date());
         }
       });
@@ -1789,14 +1839,14 @@ function SubmissionsWorkspace({
           }),
         });
         const body = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(body?.message || "The submission update could not be saved.");
+        if (!response.ok) throw new Error(getAdminFriendlyErrorMessage(body?.message, "submission update"));
         saved = body as AdminSubmissionResponse;
       }
       if (current.reviewStatus !== updated.reviewStatus) {
         const status = updated.reviewStatus === "Approved" ? "APPROVED" : updated.reviewStatus === "Rejected" ? "REJECTED" : updated.reviewStatus === "Under review" ? "UNDER_REVIEW" : "SUBMITTED";
         const response = await apiFetch(`/api/v1/admin/kids-champ/submissions/${updated.id}/review`, { method: "PATCH", body: JSON.stringify({ status, reason: updated.reviewStatus === "Rejected" ? "Rejected from the administrator review panel." : null }) });
         const body = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(body?.message || "The submission review could not be saved.");
+        if (!response.ok) throw new Error(getAdminFriendlyErrorMessage(body?.message, "submission review"));
         saved = body as AdminSubmissionResponse;
       }
       const next = saved ? toMockSubmission(saved) : current;
@@ -1804,7 +1854,7 @@ function SubmissionsWorkspace({
       if (current.childName !== updated.childName || current.trackingCode !== updated.trackingCode || current.age !== updated.age || current.location !== updated.location || current.participantType !== updated.participantType || current.reviewer !== updated.reviewer || current.submittedDate !== updated.submittedDate) notify("Only submission category and review status can be changed here; profile details stay protected in the account record.");
       else notify("Submission changes saved to the backend.");
     } catch (reason) {
-      notify(reason instanceof Error ? reason.message : "The submission update could not be saved.");
+      notify(getAdminFriendlyErrorMessage(reason instanceof Error ? reason.message : undefined, "submission update"));
     }
   }
   const locations = [...new Set(records.map((item) => item.location))].sort();
@@ -1929,7 +1979,7 @@ function SubmissionsWorkspace({
     const failed = results.filter(({ response }) => !response?.ok);
     if (failed.length) {
       const reason = failed[0]?.message ?? "The deletion request could not be completed.";
-      notify(`${failed.length} submission${failed.length === 1 ? "" : "s"} could not be deleted: ${reason}`);
+      notify(getAdminFriendlyErrorMessage(reason, "submission deletion"));
     }
     const deletedIds = new Set(results.filter(({ response }) => response?.ok).map(({ id }) => id));
     setRecords((current) => current.filter((item) => !deletedIds.has(item.id)));
@@ -1952,7 +2002,7 @@ function SubmissionsWorkspace({
     });
     const body = await response.json().catch(() => null) as { approvedCount?: number; alreadyApprovedCount?: number; message?: string } | null;
     if (!response.ok) {
-      notify(body?.message || "The approval could not be saved.");
+      notify(getAdminFriendlyErrorMessage(body?.message, "submission approval"));
       return;
     }
     const approvedIds = new Set(ids);
@@ -2355,7 +2405,7 @@ function useApprovedWhatsAppTemplates(notify: (message: string) => void) {
       const body = await response.json() as MetaWhatsAppTemplate[];
       setTemplates(body.filter((item) => item.status === "APPROVED" && !item.disabled));
     } catch (reason) {
-      notify(reason instanceof Error ? reason.message : "Approved WhatsApp templates could not be loaded.");
+      notify(getAdminFriendlyErrorMessage(reason instanceof Error ? reason.message : undefined, "message templates"));
     } finally {
       setLoading(false);
     }
@@ -2585,9 +2635,9 @@ function WhatsAppCampaignModal({
       }),
     });
     const body = await response.json().catch(() => null) as { id?: string; message?: string } | null;
-    setRecipients((current) => current.map((item) => targets.includes(item.id) ? { ...item, status: response.ok ? "Queued" : "Error", campaignId: body?.id, attempts: item.attempts + 1, selected: !response.ok, failureReason: response.ok ? undefined : body?.message } : item));
+    setRecipients((current) => current.map((item) => targets.includes(item.id) ? { ...item, status: response.ok ? "Queued" : "Error", campaignId: body?.id, attempts: item.attempts + 1, selected: !response.ok, failureReason: response.ok ? undefined : getAdminFriendlyErrorMessage(body?.message, "message delivery") } : item));
     setSending(false);
-    notify(response.ok ? `${targetRecipients.length} personalized WhatsApp messages queued in one campaign.` : body?.message || "The WhatsApp campaign could not be queued.");
+    notify(response.ok ? `${targetRecipients.length} personalized WhatsApp messages queued in one campaign.` : getAdminFriendlyErrorMessage(body?.message, "message campaign"));
   }
 
   useEffect(() => {
@@ -3087,7 +3137,7 @@ function ZipCommonSettingsModal({
           <p className="mx-5 mb-5 rounded-[10px] border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] font-medium text-blue-900">
             {draft.batchSize < 10
               ? "This count can create many small ZIP files when several photos are waiting."
-              : "A large photo count can create a very large ZIP that takes longer to generate and download."}
+              : "This is allowed, but a large photo count can create a very large ZIP that takes longer to generate and download."}
           </p>
         ) : null}
         {choosingQueueCount ? (
@@ -3127,6 +3177,7 @@ function TvZipWorkspace({
   createRequest,
   onCreateRequestHandled,
   initialOverviewView,
+  refreshVersion,
 }: {
   openZip: (
     item: ZipBatch,
@@ -3140,11 +3191,12 @@ function TvZipWorkspace({
   createRequest: string[];
   onCreateRequestHandled: () => void;
   initialOverviewView: OverviewZipView;
+  refreshVersion: number;
 }) {
   const [zipRecords, setZipRecords] = useState<ZipBatch[]>([]);
   const [zipSearch, setZipSearch] = useState("");
   const [editingZipId, setEditingZipId] = useState<string | null>(null);
-  const [zipStatus, setZipStatus] = useState("All");
+  const [zipStatus, setZipStatus] = useState<ZipRecordFilter>("All");
   const [binOpen, setBinOpen] = useState(false);
   const [binSelected, setBinSelected] = useState<Set<string>>(new Set());
   const [campaignZip, setCampaignZip] = useState<ZipBatch | null>(null);
@@ -3155,7 +3207,6 @@ function TvZipWorkspace({
   const [pendingZipSubmissions, setPendingZipSubmissions] = useState<MockSubmission[]>([]);
   const [pendingZipSelected, setPendingZipSelected] = useState<Set<string>>(new Set());
   const [creatingPendingZip, setCreatingPendingZip] = useState(false);
-  const [retryingAutomaticZip, setRetryingAutomaticZip] = useState(false);
   const [advancedZipRecoveryOpen, setAdvancedZipRecoveryOpen] = useState(false);
   const [zipRecoveryReason, setZipRecoveryReason] = useState("");
   const [manualZipSearch, setManualZipSearch] = useState("");
@@ -3165,13 +3216,24 @@ function TvZipWorkspace({
   const [manualZipFrom, setManualZipFrom] = useState("");
   const [manualZipTo, setManualZipTo] = useState("");
   const [zipProgress, setZipProgress] = useState({ readyPhotos: 0, activeTargetSize: commonSettings.batchSize, nextTargetSize: commonSettings.batchSize });
-  const loadBatches = () => apiFetch("/api/v1/admin/kids-champ/batches")
-    .then(async (response) => {
+  const loadBatches = async (quiet = false, preserveExistingOrder = true) => {
+    try {
+      const response = await apiFetch("/api/v1/admin/kids-champ/batches");
       if (!response.ok) throw new Error("ZIP batches could not be loaded.");
-      setZipRecords(((await response.json()) as AdminBatchResponse[]).map(toZipBatch));
+      const batches = ((await response.json()) as AdminBatchResponse[]).map(toZipBatch);
+      const purgeableIds = new Set(batches.filter((item) => item.deleted && !item.cleanupPending && item.id).map((item) => item.id as string));
+      setZipRecords((current) => {
+        if (!preserveExistingOrder || !current.length) return batches;
+        const currentKeys = new Set(current.map(zipBatchKey));
+        const freshByKey = new Map(batches.map((item) => [zipBatchKey(item), item]));
+        const refreshedInCurrentOrder = current.map((item) => freshByKey.get(zipBatchKey(item))).filter((item): item is ZipBatch => Boolean(item));
+        let existingIndex = 0;
+        return batches.map((item) => currentKeys.has(zipBatchKey(item)) ? refreshedInCurrentOrder[existingIndex++] : item);
+      });
+      setBinSelected((current) => new Set([...current].filter((id) => purgeableIds.has(id))));
       return true;
     } catch (reason) {
-      if (!quiet) notify(reason instanceof Error ? reason.message : "ZIP batches could not be loaded.");
+      if (!quiet) notify(getAdminFriendlyErrorMessage(reason instanceof Error ? reason.message : undefined, "ZIP records"));
       return false;
     }
   };
@@ -3188,8 +3250,26 @@ function TvZipWorkspace({
       setZipProgress(progress);
       return progress;
     } catch (reason) {
-      if (!quiet) notify(reason instanceof Error ? reason.message : "ZIP queue status could not be loaded.");
+      if (!quiet) notify(getAdminFriendlyErrorMessage(reason instanceof Error ? reason.message : undefined, "ZIP queue"));
       return null;
+    }
+  };
+  const loadZipSubmissions = async (quiet = false) => {
+    try {
+      const response = await apiFetch("/api/v1/admin/kids-champ/submissions");
+      if (!response.ok) throw new Error("Approved submissions could not be loaded for ZIP recovery.");
+      const body = await response.json() as AdminSubmissionResponse[] | AdminSubmissionPageResponse;
+      const submissionItems = Array.isArray(body) ? body : body.items;
+      const submissions = submissionItems.map(toMockSubmission);
+      const pending = submissions.filter((item) => item.reviewStatus === "Approved" && item.fileStatus === "Ready");
+      const eligibleIds = new Set(pending.filter((item) => !item.batchId).map((item) => item.id));
+      setBatchSubmissions(submissions);
+      setPendingZipSubmissions(pending);
+      setPendingZipSelected((current) => new Set([...current].filter((id) => eligibleIds.has(id))));
+      return true;
+    } catch (reason) {
+      if (!quiet) notify(getAdminFriendlyErrorMessage(reason instanceof Error ? reason.message : undefined, "ZIP recovery submissions"));
+      return false;
     }
   };
   const saveZipCommonSettings = async (next: ZipCommonSettings, queueCountPolicy: ZipQueueCountPolicy) => {
@@ -3199,43 +3279,39 @@ function TvZipWorkspace({
   };
   useEffect(() => {
     const refreshZipQueue = async () => {
-      // This mount-time maintenance request is followed by the local refresh
-      // below.  Do not publish a global update here: it would remount this
-      // workspace, call this endpoint again, and create an update loop.
-      const processing = await apiFetch("/api/v1/admin/kids-champ/batches/process-automatic", { method: "POST", notifyDataUpdated: false });
-      if (!processing.ok) {
-        const failure = await processing.json().catch(() => null) as { message?: string } | null;
-        notify(failure?.message || "Automatic ZIP processing could not be started. Restart the API and try again.");
-      }
-      await loadBatches();
-      const response = await apiFetch("/api/v1/admin/kids-champ/batches/progress");
-      if (response.ok) setZipProgress(await response.json());
+      // Approval triggers automatic batching in the API. Opening this page is
+      // read-only so navigation cannot repeat a write or generate duplicate ZIPs.
+      await Promise.all([loadZipProgress(), loadBatches(), loadZipSubmissions()]);
     };
     void refreshZipQueue();
-    apiFetch("/api/v1/admin/kids-champ/submissions").then(async(response)=>{if(response.ok){const submissions=((await response.json()) as AdminSubmissionResponse[]).map(toMockSubmission);setBatchSubmissions(submissions);const pending=submissions.filter((item)=>item.reviewStatus==="Approved"&&item.fileStatus==="Ready");setPendingZipSubmissions(pending);setPendingZipSelected(new Set());}}).catch(()=>undefined);
   // load once when this workspace mounts
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
+    if (!refreshVersion) return;
+    const refresh = window.setTimeout(() => void Promise.all([loadZipProgress(true), loadBatches(true), loadZipSubmissions(true)]), 0);
+    return () => window.clearTimeout(refresh);
+  // refresh only when a committed live update is announced
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshVersion]);
+  useEffect(() => {
     if (!createRequest.length) return;
-    const requestedCount = createRequest.length;
     const requestedIds = [...createRequest];
     onCreateRequestHandled();
-    apiFetch("/api/v1/admin/kids-champ/batches/selected", {
+    apiFetch("/api/v1/admin/kids-champ/batches/selected/split", {
       method: "POST",
-      body: JSON.stringify({ submissionIds: requestedIds }),
+      body: JSON.stringify({ submissionIds: requestedIds, reason: "Created from the administrator ZIP selection." }),
     }).then(async (response) => {
-      const body = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(body?.message || "The selected ZIP could not be created.");
-      setZipRecords((current) => [{ ...toZipBatch(body as AdminBatchResponse), recipientIds: requestedIds }, ...current]);
-      notify(`ZIP batch created with ${requestedCount} selected submission${requestedCount === 1 ? "" : "s"}.`);
-    }).catch((reason) => notify(reason instanceof Error ? reason.message : "The selected ZIP could not be created."));
-  }, [
-    createRequest,
-    commonSettings.expiryDays,
-    notify,
-    onCreateRequestHandled,
-  ]);
+      const body: unknown = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(getAdminFriendlyErrorMessage(responseErrorMessage(body), "manual ZIP"));
+      const createdBatches = toCreatedZipBatches(body);
+      const createdPhotoCount = createdBatches.reduce((total, item) => total + item.recipientIds.length, 0);
+      await Promise.all([loadBatches(true, false), loadZipProgress(true), loadZipSubmissions(true)]);
+      notify(`${createdBatches.length} ZIP batch${createdBatches.length === 1 ? "" : "es"} created with ${createdPhotoCount} selected photo${createdPhotoCount === 1 ? "" : "s"}.`);
+    }).catch((reason) => notify(getAdminFriendlyErrorMessage(reason instanceof Error ? reason.message : undefined, "manual ZIP")));
+  // createRequest is the one-shot trigger; loader identities must not replay a ZIP write.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [createRequest, notify, onCreateRequestHandled]);
   const visibleZips = zipRecords.filter(
     (item) =>
       (binOpen ? item.deleted : !item.deleted) &&
@@ -3243,8 +3319,13 @@ function TvZipWorkspace({
         item.code.toLowerCase().includes(zipSearch.toLowerCase())) &&
       (initialOverviewView !== "telecasted" || item.telecastCompleted) &&
       (zipStatus === "All" ||
-        (zipStatus === "All" || item.status === zipStatus)),
+        (zipStatus === "Downloaded" && item.downloaded) ||
+        (zipStatus === "Not downloaded" && !item.downloaded) ||
+        (zipStatus === "Edited" && item.edited) ||
+        (zipStatus === "Not edited" && !item.edited)),
   );
+  const expiringSoonZipCount = zipRecords.filter((item) => !item.deleted && item.expiringSoon).length;
+  const purgeableBinSelectionCount = [...binSelected].filter((id) => zipRecords.some((item) => item.id === id && item.deleted && !item.cleanupPending)).length;
   const visibleManualZipSubmissions = useMemo(() => pendingZipSubmissions.filter((item) => {
     const query = manualZipSearch.trim().toLowerCase();
     if (query && !`${item.childName} ${item.trackingCode} ${item.location}`.toLowerCase().includes(query)) return false;
@@ -3263,16 +3344,15 @@ function TvZipWorkspace({
       return;
     }
     const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${item.id}`, { method: "DELETE" });
-    const body = await response.json().catch(() => null);
-    if (!response.ok) { notify(body?.message || "The ZIP archive could not be deleted."); return; }
+    if (!response.ok) { notify(getAdminFriendlyErrorMessage(undefined, "ZIP archive deletion")); return; }
     await loadBatches();
     notify(`${code} moved to the ZIP Bin. Its details remain available until the Bin is cleared.`);
   }
   async function clearZipBin() {
-    const batchIds=[...binSelected]; if(!batchIds.length)return;
+    const batchIds=[...binSelected].filter((id)=>zipRecords.some((item)=>item.id===id&&item.deleted&&!item.cleanupPending));
+    if(!batchIds.length){if(binSelected.size)notify("This ZIP file is still being cleaned up. The system will retry automatically, and its record can be cleared afterward.");return;}
     const response=await apiFetch("/api/v1/admin/kids-champ/batches/bin",{method:"DELETE",body:JSON.stringify({batchIds})});
-    const body=await response.json().catch(()=>null);
-    if(!response.ok){notify(body?.message||"The selected ZIP Bin records could not be cleared.");return;}
+    if(!response.ok){notify(getAdminFriendlyErrorMessage(undefined,"ZIP Bin deletion"));return;}
     setBinSelected(new Set());await loadBatches();notify(`${batchIds.length} ZIP record${batchIds.length===1?"":"s"} permanently cleared from the Bin.`);
   }
 
@@ -3282,40 +3362,19 @@ function TvZipWorkspace({
     if(!zipRecoveryReason.trim()){notify("Add a recovery reason before creating a manual ZIP.");return;}
     setCreatingPendingZip(true);
     try {
-      const response=await apiFetch("/api/v1/admin/kids-champ/batches/selected",{method:"POST",body:JSON.stringify({submissionIds,reason:zipRecoveryReason.trim()})});
-      const body=await response.json().catch(()=>null);
-      if(!response.ok){notify(body?.message||"The selected ZIP could not be created.");return;}
-      setZipRecords((current)=>[{...toZipBatch(body as AdminBatchResponse),recipientIds:submissionIds},...current]);
-      setPendingZipSubmissions((current)=>current.filter((item)=>!pendingZipSelected.has(item.id)));
+      const response=await apiFetch("/api/v1/admin/kids-champ/batches/selected/split",{method:"POST",body:JSON.stringify({submissionIds,reason:zipRecoveryReason.trim()})});
+      const body: unknown=await response.json().catch(()=>null);
+      if(!response.ok){notify(getAdminFriendlyErrorMessage(responseErrorMessage(body),"manual ZIP"));return;}
+      const createdBatches=toCreatedZipBatches(body);
+      const createdPhotoCount=createdBatches.reduce((total,item)=>total+item.recipientIds.length,0);
       setPendingZipSelected(new Set());
       setZipRecoveryReason("");
-      setZipProgress((current)=>({...current,readyPhotos:Math.max(0,current.readyPhotos-submissionIds.length)}));
-      notify(`ZIP batch created with ${submissionIds.length} approved submission${submissionIds.length===1?"":"s"}.`);
+      await Promise.all([loadBatches(true,false),loadZipProgress(true),loadZipSubmissions(true)]);
+      notify(`${createdBatches.length} ZIP batch${createdBatches.length===1?"":"es"} created with ${createdPhotoCount} selected photo${createdPhotoCount===1?"":"s"}.`);
     } catch {
       notify("The selected ZIP could not be created.");
     } finally {
       setCreatingPendingZip(false);
-    }
-  }
-  async function retryAutomaticQueue() {
-    if (retryingAutomaticZip) return;
-    if (zipProgress.readyPhotos < zipProgress.activeTargetSize) {
-      notify(`The automatic queue needs ${zipProgress.activeTargetSize - zipProgress.readyPhotos} more approved photo${zipProgress.activeTargetSize - zipProgress.readyPhotos === 1 ? "" : "s"} before a ZIP can be created.`);
-      return;
-    }
-    setRetryingAutomaticZip(true);
-    try {
-      const response = await apiFetch("/api/v1/admin/kids-champ/batches/process-automatic", { method: "POST", notifyDataUpdated: false });
-      if (!response.ok) {
-        notify("The automatic ZIP queue could not be restarted. Existing ZIP records were not changed.");
-        return;
-      }
-      await Promise.all([loadBatches(true), loadZipProgress(true)]);
-      notify("Automatic ZIP recovery completed and the queue was refreshed.");
-    } catch {
-      notify("The automatic ZIP queue could not be restarted. Existing ZIP records were not changed.");
-    } finally {
-      setRetryingAutomaticZip(false);
     }
   }
   async function updateZip(updated: ZipBatch) {
@@ -3326,7 +3385,7 @@ function TvZipWorkspace({
         body: JSON.stringify({ telecastDate: updated.telecastDate, alternateTelecastDate: null }),
       });
       const body = await response.json().catch(() => null);
-      if (!response.ok) { notify(body?.message || "The telecast schedule could not be saved."); return null; }
+      if (!response.ok) { notify(getAdminFriendlyErrorMessage((body as {message?:string}|null)?.message, "telecast schedule")); return null; }
       const saved = toZipBatch(body as AdminBatchResponse);
       setZipRecords((current) => current.map((item) => item.id === updated.id ? saved : item));
       notify(`${updated.code} updated.`);
@@ -3341,7 +3400,7 @@ function TvZipWorkspace({
     try {
       const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${item.id}/telecast-complete`, { method: "POST" });
       const body = await response.json().catch(() => null);
-      if (!response.ok) { notify(body?.message || "The telecast could not be marked complete."); return; }
+      if (!response.ok) { notify(getAdminFriendlyErrorMessage((body as {message?:string}|null)?.message, "telecast completion")); return; }
       setZipRecords((current) => current.map((record) => record.id === item.id ? toZipBatch(body as AdminBatchResponse) : record));
       notify(`${item.code} marked as telecast completed.`);
     } catch {
@@ -3350,18 +3409,27 @@ function TvZipWorkspace({
   }
   async function toggleEdited(item: ZipBatch) {
     if (!item.id || !item.downloaded || editingZipId) return;
+    const nextEdited = !item.edited;
+    const previousEditedAt = item.editedAt;
+    const rollback = () => setZipRecords((current) => current.map((record) => record.id === item.id
+      ? { ...record, edited: item.edited, editedAt: previousEditedAt }
+      : record));
     setEditingZipId(item.id);
+    setZipRecords((current) => current.map((record) => record.id === item.id
+      ? { ...record, edited: nextEdited, editedAt: nextEdited ? new Date().toISOString().slice(0, 10) : "" }
+      : record));
     try {
       const response = await apiFetch(`/api/v1/admin/kids-champ/batches/${item.id}/edited`, {
         method: "PATCH",
-        body: JSON.stringify({ edited: !item.edited }),
+        body: JSON.stringify({ edited: nextEdited }),
       });
       const body = await response.json().catch(() => null);
-      if (!response.ok) { notify(body?.message || "The edited status could not be saved."); return; }
+      if (!response.ok) { rollback(); notify("The edited status could not be saved. The checkbox was returned to its previous value."); return; }
       setZipRecords((current) => current.map((record) => record.id === item.id ? toZipBatch(body as AdminBatchResponse) : record));
       notify(`${item.code} edited status saved to the database.`);
     } catch {
-      notify("The edited status could not be saved.");
+      rollback();
+      notify("The edited status could not be saved. The checkbox was returned to its previous value.");
     } finally {
       setEditingZipId(null);
     }
@@ -3422,7 +3490,7 @@ function TvZipWorkspace({
             {commonSettings.batchSize} photos / batch
           </span>
           <span className="rounded-[8px] border border-violet-200 bg-violet-50 px-3 py-2 text-[10px] font-semibold text-violet-700">
-            {commonSettings.expiryDays}-day expiry
+            {commonSettings.expiryDays}-day default expiry
           </span>
           <span className="rounded-[8px] border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] font-semibold text-amber-700">
             Warn {commonSettings.warningDays} days before
@@ -3456,7 +3524,7 @@ function TvZipWorkspace({
             <input value={zipRecoveryReason} onChange={(event) => setZipRecoveryReason(event.target.value)} className={`${fieldClass} mt-1`} placeholder="Why must this ZIP be created manually?" />
           </label>
           <div className="grid gap-2 tablet:grid-cols-4"><input value={manualZipSearch} onChange={(event)=>setManualZipSearch(event.target.value)} className={fieldClass} placeholder="Search name, code or hometown" /><select value={manualZipStatus} onChange={(event)=>setManualZipStatus(event.target.value as typeof manualZipStatus)} className={fieldClass}><option>Ready to ZIP</option><option>Already ZIPped</option><option>All</option></select><select value={manualZipDateMode} onChange={(event)=>setManualZipDateMode(event.target.value as typeof manualZipDateMode)} className={fieldClass}><option>Any time</option><option>Specific date</option><option>Date range</option></select>{manualZipDateMode === "Specific date" ? <input type="date" value={manualZipDate} onChange={(event)=>setManualZipDate(event.target.value)} className={fieldClass} /> : manualZipDateMode === "Date range" ? <div className="flex gap-2"><input type="date" value={manualZipFrom} onChange={(event)=>setManualZipFrom(event.target.value)} className={`${fieldClass} min-w-0`} /><input type="date" value={manualZipTo} onChange={(event)=>setManualZipTo(event.target.value)} className={`${fieldClass} min-w-0`} /></div> : <span className="flex items-center text-[11px] font-semibold text-amber-800">{visibleManualZipSubmissions.length} matching photos</span>}</div>
-          <p className="text-[10px] text-amber-800">New archive names use: <strong>ZipPhotoId001_name_age_Hometown</strong>. Already ZIPped photos are view-only.</p>
+          <p className="text-[10px] text-amber-800">Archive photo names use: <strong>001_Name_City.png</strong>. Already ZIPped photos are view-only.</p>
         </div> : null}
         <p className="mx-5 mb-5 rounded-[10px] border border-emerald-100 bg-white px-4 py-3 text-[12px] text-emerald-800">
           {zipProgress.readyPhotos >= zipProgress.activeTargetSize ? `${Math.floor(zipProgress.readyPhotos / zipProgress.activeTargetSize)} ZIP batch${Math.floor(zipProgress.readyPhotos / zipProgress.activeTargetSize) === 1 ? " is" : "es are"} ready to create automatically.` : `${zipProgress.readyPhotos} approved photo${zipProgress.readyPhotos === 1 ? " is" : "s are"} waiting. ${Math.max(0, zipProgress.activeTargetSize - zipProgress.readyPhotos)} more needed before the next ZIP begins.`}
@@ -3481,11 +3549,14 @@ function TvZipWorkspace({
               {binOpen ? "Deleted ZIP details stay here until you permanently clear them." : "Deleted ZIP archives are moved to the Bin."}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex w-full flex-wrap gap-2 tablet:w-auto tablet:justify-end">
+            {!binOpen ? <span className="flex min-h-10 items-center rounded-[9px] border border-amber-200 bg-amber-50 px-3 text-[10px] font-semibold text-amber-800" title="Each ZIP uses the warning period saved when it was generated.">
+              {expiringSoonZipCount} ZIP{expiringSoonZipCount === 1 ? "" : "s"} in warning window
+            </span> : null}
             <button type="button" onClick={() => { setBinOpen((value)=>!value); setBinSelected(new Set()); }} className={`${secondaryButton} min-w-[108px] whitespace-nowrap ${binOpen ? "border-red-300 bg-red-50 text-red-700" : ""}`}>
               {binOpen ? "Back to ZIPs" : `ZIP Bin (${zipRecords.filter((item)=>item.deleted).length})`}
             </button>
-            {binOpen ? <><button type="button" onClick={()=>setBinSelected(new Set(visibleZips.map((item)=>item.id).filter(Boolean) as string[]))} className={secondaryButton}>Select all</button><button type="button" onClick={()=>void clearZipBin()} disabled={!binSelected.size} className="rounded-[9px] bg-red-600 px-3 text-[11px] font-semibold text-white disabled:opacity-40">Clear selected</button></> : null}
+            {binOpen ? <><button type="button" onClick={()=>setBinSelected(new Set(visibleZips.filter((item)=>!item.cleanupPending).map((item)=>item.id).filter(Boolean) as string[]))} disabled={!visibleZips.some((item)=>!item.cleanupPending)} className={secondaryButton}>Select all</button><button type="button" onClick={()=>void clearZipBin()} disabled={!purgeableBinSelectionCount} className="rounded-[9px] bg-red-600 px-3 text-[11px] font-semibold text-white disabled:opacity-40">Clear selected</button></> : null}
             <input
               value={zipSearch}
               onChange={(event) => setZipSearch(event.target.value)}
@@ -3499,9 +3570,10 @@ function TvZipWorkspace({
               aria-label="Filter ZIP records"
             >
               <option>All</option>
-              <option>Ready</option>
-              <option>Creating ZIP</option>
-              <option>Queued</option>
+              <option>Downloaded</option>
+              <option>Not downloaded</option>
+              <option>Edited</option>
+              <option>Not edited</option>
             </select>
           </div>
         </div>
@@ -3509,20 +3581,22 @@ function TvZipWorkspace({
           {visibleZips.map((item) => (
             <article
               key={item.code}
-              className={`grid items-center gap-3 px-5 py-4 transition hover:bg-[#F8FAFC] ${binOpen ? "tablet:grid-cols-[32px_1fr_110px_170px_100px_90px_270px]" : "tablet:grid-cols-[1fr_110px_170px_100px_90px_270px]"} ${item.deleted ? "bg-red-50/35" : ""}`}
+              className={`grid items-center gap-3 px-5 py-4 transition hover:bg-[#F8FAFC] ${binOpen ? "desktop:grid-cols-[32px_1fr_110px_170px_100px_90px_270px]" : "desktop:grid-cols-[1fr_110px_170px_100px_90px_270px]"} ${item.deleted ? "bg-red-50/35" : ""}`}
             >
-              {binOpen ? <input type="checkbox" checked={Boolean(item.id&&binSelected.has(item.id))} onChange={()=>item.id&&setBinSelected((current)=>{const next=new Set(current);if(next.has(item.id!))next.delete(item.id!);else next.add(item.id!);return next;})} className="size-4 accent-red-600" aria-label={`Select ${item.code} for permanent deletion`} /> : null}
+              {binOpen ? <input type="checkbox" checked={Boolean(item.id&&binSelected.has(item.id))} disabled={item.cleanupPending} onChange={()=>item.id&&setBinSelected((current)=>{const next=new Set(current);if(next.has(item.id!))next.delete(item.id!);else next.add(item.id!);return next;})} className="size-4 accent-red-600 disabled:cursor-not-allowed disabled:opacity-40" aria-label={item.cleanupPending ? `${item.code} cannot be cleared while file cleanup is pending` : `Select ${item.code} for permanent deletion`} title={item.cleanupPending ? "File cleanup is pending; the system will retry automatically." : "Select this ZIP record for permanent deletion"} /> : null}
               <button
                 onClick={() => openZip(item, deleteZip, updateZip, downloadZip)}
                 className="text-left"
               >
-                <span className="flex items-center gap-2">
+                <span className="flex flex-wrap items-center gap-2">
                   <strong className="text-[13px]">{item.code}</strong>
+                  {binOpen && item.cleanupPending ? <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-[9px] font-semibold text-amber-800">File cleanup pending — automatic retry</span> : null}
                 </span>
                 <span className="mt-1 block text-[11px] text-[#8490A2]">
                   {item.photos} photos · {item.size} · created {item.createdAt}
                   {item.downloadedAt ? ` · downloaded ${item.downloadedAt}` : ""}
                   {item.deleted ? ` · file deleted ${item.deletedAt}` : ""}
+                  {item.cleanupPending && item.lastCleanupAttemptAt ? ` · last cleanup attempt ${item.lastCleanupAttemptAt}` : ""}
                 </span>
               </button>
               <button
@@ -3553,10 +3627,11 @@ function TvZipWorkspace({
               </label>
               <button
                 onClick={() => openZip(item, deleteZip, updateZip, downloadZip)}
-                className="text-left text-[12px] text-[#66758B]"
-                title="Open ZIP retention details"
+                className={`text-left text-[12px] ${item.expiringSoon ? "font-semibold text-amber-700" : "text-[#66758B]"}`}
+                title={item.expiringSoon ? `This ZIP is inside its ${item.warningDays}-day expiry warning window.` : "Open ZIP retention details"}
               >
-                Expires: {item.expires}
+                Remaining: {item.expires}
+                {item.expiringSoon ? <span className="mt-1 block text-[9px] font-semibold uppercase tracking-wide">{item.warningDays ? `${item.warningDays}-day warning active` : "Expiry reached"}</span> : null}
               </button>
               <label
                 className={`flex items-center justify-center gap-2 rounded-[8px] px-2 py-2 text-[10px] font-semibold ${!item.downloaded ? "cursor-not-allowed bg-[#F3F5F8] text-[#B1B8C3] opacity-60" : item.edited ? "cursor-pointer bg-violet-50 text-violet-700" : "cursor-pointer bg-[#F3F5F8] text-[#7A879A]"}`}
@@ -3750,7 +3825,7 @@ function ParticipantMessageCampaign({
     const response=await apiFetch("/api/v1/admin/kids-champ/campaigns",{method:"POST",body:JSON.stringify({channel:"WHATSAPP",messageTemplate:template,participantIds:deliveries.map((item)=>item.reference),templateName:selectedTemplate.name,languageCode:selectedTemplate.languageCode,templateParameters,name:"Participant message",source:"PARTICIPANTS"})});
     const body=await response.json().catch(()=>null);
     if(response.ok)setDeliveries((items)=>items.map((item)=>({...item,delivery:"Queued"})));
-    else {setDeliveries((items)=>items.map((item)=>({...item,delivery:"Error"})));notify(body?.message||"Campaign could not be queued.");}
+    else {setDeliveries((items)=>items.map((item)=>({...item,delivery:"Error"})));notify(getAdminFriendlyErrorMessage(body?.message,"message campaign"));}
     setCurrentId("");
     setRunning(false);
     if(response.ok)notify("Participant campaign queued. Delivery will begin when a messaging provider is configured.");
@@ -4026,7 +4101,7 @@ function ParticipantsWorkspace({
           lastSubmissionDate: item.lastSubmissionAt.slice(0, 10),
         })));
       })
-      .catch((reason) => notify(reason instanceof Error ? reason.message : "Participants could not be loaded."));
+      .catch((reason) => notify(getAdminFriendlyErrorMessage(reason instanceof Error ? reason.message : undefined, "participant records")));
   // The parent callback is intentionally excluded: this request runs once per mount.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -4052,7 +4127,7 @@ function ParticipantsWorkspace({
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) {
-      notify(body?.message || "Guest records could not be merged.");
+      notify(getAdminFriendlyErrorMessage(body?.message, "participant merge"));
       return;
     }
     setRecords((current) => current
@@ -4076,7 +4151,7 @@ function ParticipantsWorkspace({
         : { firstId: candidate.firstId, secondId: candidate.secondId }),
     });
     const body = await response.json().catch(() => null);
-    if (!response.ok) { notify(body?.message || "The duplicate decision could not be saved."); return; }
+    if (!response.ok) { notify(getAdminFriendlyErrorMessage(body?.message, "participant duplicate")); return; }
     if (action === "delete") {
       setRecords((current) => current.filter((item) => item.reference !== candidate.secondId).map((item) => item.reference === candidate.firstId ? { ...item, submissions: candidate.firstSubmissions + candidate.secondSubmissions } : item));
     }
@@ -5218,12 +5293,16 @@ function ZipBatchDetailsEditor({
           </div>
           <StatusBadge label={draft.deleted ? "Deleted" : draft.status} />
         </div>
+        {draft.cleanupPending ? <div className="mt-4 rounded-[11px] border border-amber-200 bg-amber-50 p-3 text-[11px] leading-5 text-amber-900">
+          <strong className="block">File cleanup pending — automatic retry</strong>
+          The archive could not be removed yet, so this Bin record cannot be permanently cleared. The system will retry automatically{draft.cleanupFailureCount ? `; unsuccessful attempts: ${draft.cleanupFailureCount}` : ""}{draft.lastCleanupAttemptAt ? `; last attempt: ${draft.lastCleanupAttemptAt}` : ""}.
+        </div> : null}
         {editing ? (
           <div className="mt-5 grid grid-cols-2 gap-3">
             <div className="rounded-[11px] bg-[#F5F8FB] p-3">
               <p className="text-[10px] font-semibold uppercase text-[#8793A5]">Retention</p>
               <p className="mt-1 text-[14px] font-semibold text-[#344660]">{draft.expires}</p>
-              <p className="mt-1 text-[10px] font-normal normal-case text-[#7A879A]">Set when this ZIP was generated</p>
+              <p className="mt-1 text-[10px] font-normal normal-case text-[#7A879A]">{draft.warningDays}-day warning · set when this ZIP was generated</p>
             </div>
             <label className="text-[10px] font-semibold uppercase text-[#8793A5]">
               Telecast date
@@ -5247,6 +5326,8 @@ function ZipBatchDetailsEditor({
               ["Photos", draft.photos],
               ["File size", draft.size],
               ["Expires in", draft.expires],
+              ["Warning window", `${draft.warningDays} days`],
+              ["Expiry warning", draft.expiringSoon ? "Active" : "Not active"],
               ["Progress", `${draft.progress}%`],
               ["Telecast", draft.telecastStatus],
               ["Telecast date", draft.telecastDate || "Not scheduled"],
@@ -5488,10 +5569,10 @@ function KidsChampSettingsPanel({
               Allowed file types
               <input
                 value={draft.allowedFileTypes}
-                onChange={(event) =>
-                  setDraft({ ...draft, allowedFileTypes: event.target.value })
-                }
-                className={`${fieldClass} mt-1.5`}
+                readOnly
+                aria-readonly="true"
+                title="Kids Champ accepts JPG, JPEG, and PNG photos."
+                className={`${fieldClass} mt-1.5 cursor-not-allowed bg-[#F7F9FB]`}
               />
             </label>
             <label className="flex items-center justify-between rounded-[11px] bg-[#F7F9FB] p-3 text-[12px] font-semibold">
@@ -5668,7 +5749,7 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
       if (!response.ok) throw new Error("Calendar tasks could not be loaded.");
       const body = await response.json() as Array<{id:string;date:string;title:string;details?:string;completedAt?:string}>;
       if (!cancelled) setTasks(body.filter((item) => item.date === taskDate).map((item) => ({id:item.id,title:item.title,detail:item.details||"No additional details",complete:Boolean(item.completedAt)})));
-    }).catch((reason) => { if (!cancelled) notify(reason instanceof Error ? reason.message : "Calendar tasks could not be loaded."); })
+    }).catch((reason) => { if (!cancelled) notify(getAdminFriendlyErrorMessage(reason instanceof Error ? reason.message : undefined, "calendar tasks")); })
       .finally(() => { if (!cancelled) setTasksLoading(false); });
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -5685,7 +5766,7 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
       const batchItems = await batchResponse.json() as AdminBatchResponse[];
       if (!cancelled) {
         setDaySubmissions(submissionItems.filter((item) => item.submittedAt.slice(0, 10) === taskDate));
-        setDayBatches(batchItems.filter((item) => item.createdAt.slice(0, 10) === taskDate || item.telecastDate === taskDate));
+        setDayBatches(batchItems.filter((item) => adminDateOnly(item.createdAt) === taskDate || item.telecastDate === taskDate || adminDateOnly(item.deleteAfter) === taskDate));
       }
     }).catch(() => { if (!cancelled) notify("Daily operations could not be loaded."); })
       .finally(() => { if (!cancelled) setOperationsLoading(false); });
@@ -5700,7 +5781,7 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
         body: JSON.stringify({ submissionIds: [item.id] }),
       });
       const body = await response.json().catch(() => null);
-      if (!response.ok) { notify(body?.message || "Approval could not be saved."); return; }
+      if (!response.ok) { notify(getAdminFriendlyErrorMessage(body?.message, "submission approval")); return; }
       setDaySubmissions((current) => current.map((entry) => entry.id === item.id ? { ...entry, reviewStatus: "APPROVED" } : entry));
       notify("Submission approved and ZIP processing started.");
     } catch { notify("Approval could not be saved."); }
@@ -5721,7 +5802,7 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
     try {
       const response = await apiFetch("/api/v1/admin/kids-champ/calendar/tasks", { method: "POST", body: JSON.stringify({ date: taskDate, title: taskTitle.trim(), details: taskDetails.trim() || null }) });
       const body = await response.json().catch(() => null) as {id?:string;title?:string;details?:string;completedAt?:string;message?:string}|null;
-      if (!response.ok || !body?.id) { notify(body?.message || "Task could not be created."); return; }
+      if (!response.ok || !body?.id) { notify(getAdminFriendlyErrorMessage(body?.message, "calendar task")); return; }
       setTasks((current) => current.some((item) => item.id === body.id) ? current : [...current, { id: body.id!, title: body.title || taskTitle.trim(), detail: body.details || "No additional details", complete: Boolean(body.completedAt) }]);
       setTaskTitle(""); setTaskDetails(""); setNewTaskOpen(false); setActiveSection("tasks");
       notify("Calendar task added.");
@@ -5753,10 +5834,10 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
       <div className="grid grid-cols-2 gap-3 tablet:grid-cols-3">
         {[
           ["Submissions", String(daySubmissions.length), "submissions"],
-          ["ZIPs created", String(dayBatches.filter((item) => item.createdAt.slice(0, 10) === taskDate).length), "zips"],
+          ["ZIPs created", String(dayBatches.filter((item) => adminDateOnly(item.createdAt) === taskDate).length), "zips"],
           ["Telecasts", String(dayBatches.filter((item) => item.telecastDate === taskDate).length), "telecasts"],
           ["Open tasks", String(tasks.filter((item) => !item.complete).length), "tasks"],
-          ["Warnings", String(dayBatches.filter((item) => item.status !== "DELETED" && item.daysRemaining <= 0).length), "warnings"],
+          ["Warnings", String(dayBatches.filter(isAdminBatchExpiringSoon).length), "warnings"],
         ].map(([label, value, action]) => (
           <button
             type="button"
@@ -5792,13 +5873,13 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
         <div className="mt-5 rounded-[16px] border border-[#E0E7EF] bg-white p-4">
           <div className="flex items-center justify-between gap-3"><h3 className="text-[15px] font-semibold">{activeSection === "zips" ? "ZIPs created" : activeSection === "telecasts" ? "Telecasts scheduled" : "Warnings and deadlines"}</h3>{onNavigate && activeSection !== "warnings" ? <button type="button" onClick={() => onNavigate(activeSection, dateLabel)} className="text-[11px] font-bold text-blue-700 hover:underline">Open ZIP workspace →</button> : null}</div>
           <div className="mt-3 space-y-2">
-            {dayBatches.filter((item) => activeSection === "zips" ? item.createdAt.slice(0, 10) === taskDate : activeSection === "telecasts" ? item.telecastDate === taskDate : item.status !== "DELETED" && item.daysRemaining <= 0).map((item) => (
+            {dayBatches.filter((item) => activeSection === "zips" ? adminDateOnly(item.createdAt) === taskDate : activeSection === "telecasts" ? item.telecastDate === taskDate : isAdminBatchExpiringSoon(item)).map((item) => (
               <article key={item.id} className="rounded-[12px] border border-[#E5EBF2] p-3 text-[12px]">
                 <strong className="text-[#263650]">{item.batchCode}</strong>
                 <p className="mt-1 text-[#7A879A]">{item.photoCount} photos · {item.status} · {item.telecastDate ? `telecast ${item.telecastDate}` : `${item.daysRemaining} days remaining`}</p>
               </article>
             ))}
-            {!dayBatches.filter((item) => activeSection === "zips" ? item.createdAt.slice(0, 10) === taskDate : activeSection === "telecasts" ? item.telecastDate === taskDate : item.status !== "DELETED" && item.daysRemaining <= 0).length ? <p className="py-5 text-center text-[12px] text-[#7A879A]">No records for this section.</p> : null}
+            {!dayBatches.filter((item) => activeSection === "zips" ? adminDateOnly(item.createdAt) === taskDate : activeSection === "telecasts" ? item.telecastDate === taskDate : isAdminBatchExpiringSoon(item)).length ? <p className="py-5 text-center text-[12px] text-[#7A879A]">No records for this section.</p> : null}
           </div>
         </div>
       ) : null}
@@ -5808,7 +5889,7 @@ function CalendarDayPanel({ notify, dateLabel, onNavigate }: { notify: (message:
         <div className="mt-3 grid gap-2 tablet:grid-cols-3">
           {[
             { label: "Approve new submissions", count: daySubmissions.filter((item) => item.reviewStatus === "SUBMITTED" || item.reviewStatus === "UNDER_REVIEW").length, section: "submissions" },
-            { label: "Download ready ZIPs", count: dayBatches.filter((item) => item.createdAt.slice(0, 10) === taskDate && !item.firstDownloadedAt && item.status !== "DELETED").length, section: "zips" },
+            { label: "Download ready ZIPs", count: dayBatches.filter((item) => adminDateOnly(item.createdAt) === taskDate && !item.firstDownloadedAt && item.status !== "DELETED").length, section: "zips" },
             { label: "Prepare telecasts", count: dayBatches.filter((item) => item.telecastDate === taskDate && item.status !== "DELETED").length, section: "telecasts" },
           ].map((operation) => (
             <button key={operation.label} type="button" onClick={() => setActiveSection(operation.section as typeof activeSection)} className="flex items-center justify-between rounded-[12px] border border-[#E0E7EF] bg-white p-3 text-left hover:border-blue-300">
@@ -6032,14 +6113,14 @@ export function AccountManagementWorkspace({notify}:{notify:(message:string)=>vo
   useEffect(()=>{apiFetch("/api/v1/admin/account-management/overview").then(async response=>{if(response.ok)setOverview(await response.json() as AccountManagementOverview);}).catch(()=>undefined);},[]);
   useEffect(()=>{const params=new URLSearchParams();if(accountSearch.trim())params.set("search",accountSearch.trim());if(accountStatus!=="All")params.set("status",accountStatus);apiFetch(`/api/v1/admin/account-management/accounts?${params}`).then(async response=>{if(response.ok){setAccounts(await response.json() as ManagedKidsAccount[]);setSelectedAccounts(new Set());}}).catch(()=>undefined);},[accountSearch,accountStatus]);
   useEffect(()=>{if(!isSuperAdmin)return;apiFetch("/api/v1/admin/account-management/administrators").then(async response=>{if(response.ok)setAdministrators(await response.json() as ManagedAdministrator[]);}).catch(()=>undefined);apiFetch("/api/v1/admin/kids-champ/admin-history").then(async response=>{if(response.ok)setHistory(await response.json() as AdminHistoryItem[]);}).catch(()=>undefined);apiFetch("/api/v1/admin/kids-champ/whatsapp/config").then(async response=>{if(!response.ok)return;const body=await response.json() as WhatsAppAdminConfig;setConfig(body);setDraft({graphApiVersion:body.graphApiVersion,phoneNumberId:body.phoneNumberId,businessAccountId:body.businessAccountId,accessToken:""});}).catch(()=>undefined);},[isSuperAdmin]);
-  async function save(){setSaving(true);const response=await apiFetch("/api/v1/admin/kids-champ/whatsapp/config",{method:"PUT",body:JSON.stringify(draft)});const body=await response.json().catch(()=>null);setSaving(false);if(!response.ok){notify(body?.message||"WhatsApp configuration could not be saved.");return;}setConfig(body);setDraft(current=>({...current,accessToken:""}));notify("WhatsApp configuration saved securely.");}
-  async function test(){setTesting(true);const response=await apiFetch("/api/v1/admin/kids-champ/whatsapp/test",{method:"POST",body:JSON.stringify({phone:testPhone})});const body=await response.json().catch(()=>null);setTesting(false);if(!response.ok){notify(body?.message||"Test message failed.");return;}setConfig(current=>current?{...current,lastTestStatus:body.success?"SUCCESS":"FAILED",lastTestMessage:body.message,lastTestedAt:body.testedAt}:current);notify(body.message);}
-  async function testConnection(){setTestingConnection(true);const response=await apiFetch("/api/v1/admin/kids-champ/whatsapp/connection-test",{method:"POST"});const body=await response.json().catch(()=>null) as WhatsAppConnectionResult|null;setTestingConnection(false);if(!response.ok){notify((body as unknown as {message?:string})?.message||"Connection test could not be completed.");return;}setConnection(body);notify(body?.message||"Connection test completed.");}
-  async function changeRole(administrator:ManagedAdministrator){const next=administrator.role==="SUPER_ADMIN"?"ROLE_ADMIN":"ROLE_SUPER_ADMIN";const response=await apiFetch(`/api/v1/admin/account-management/administrators/${administrator.id}/role`,{method:"PATCH",body:JSON.stringify({role:next})});const body=await response.json().catch(()=>null) as ManagedAdministrator|null;if(!response.ok||!body){notify((body as unknown as {message?:string})?.message||"Role could not be updated.");return;}setAdministrators(current=>current.map(item=>item.id===administrator.id?body:item));notify(`${administrator.name} is now ${body.role==="SUPER_ADMIN"?"a Super Admin":"an Admin"}.`);}
+  async function save(){setSaving(true);const response=await apiFetch("/api/v1/admin/kids-champ/whatsapp/config",{method:"PUT",body:JSON.stringify(draft)});const body=await response.json().catch(()=>null);setSaving(false);if(!response.ok){notify(getAdminFriendlyErrorMessage(body?.message,"WhatsApp configuration"));return;}setConfig(body);setDraft(current=>({...current,accessToken:""}));notify("WhatsApp configuration saved securely.");}
+  async function test(){setTesting(true);const response=await apiFetch("/api/v1/admin/kids-champ/whatsapp/test",{method:"POST",body:JSON.stringify({phone:testPhone})});const body=await response.json().catch(()=>null);setTesting(false);if(!response.ok){notify(getAdminFriendlyErrorMessage(body?.message,"WhatsApp delivery"));return;}setConfig(current=>current?{...current,lastTestStatus:body.success?"SUCCESS":"FAILED",lastTestMessage:body.message,lastTestedAt:body.testedAt}:current);notify(body.success?"Test WhatsApp message sent.":getAdminFriendlyErrorMessage(body.message,"WhatsApp delivery"));}
+  async function testConnection(){setTestingConnection(true);const response=await apiFetch("/api/v1/admin/kids-champ/whatsapp/connection-test",{method:"POST"});const body=await response.json().catch(()=>null) as WhatsAppConnectionResult|null;setTestingConnection(false);if(!response.ok){notify(getAdminFriendlyErrorMessage((body as unknown as {message?:string})?.message,"WhatsApp connection"));return;}setConnection(body);notify(body?.success?"WhatsApp connection confirmed.":getAdminFriendlyErrorMessage(body?.message,"WhatsApp connection"));}
+  async function changeRole(administrator:ManagedAdministrator){const next=administrator.role==="SUPER_ADMIN"?"ROLE_ADMIN":"ROLE_SUPER_ADMIN";const response=await apiFetch(`/api/v1/admin/account-management/administrators/${administrator.id}/role`,{method:"PATCH",body:JSON.stringify({role:next})});const body=await response.json().catch(()=>null) as ManagedAdministrator|null;if(!response.ok||!body){notify(getAdminFriendlyErrorMessage((body as unknown as {message?:string})?.message,"administrator role"));return;}setAdministrators(current=>current.map(item=>item.id===administrator.id?body:item));notify(`${administrator.name} is now ${body.role==="SUPER_ADMIN"?"a Super Admin":"an Admin"}.`);}
   function openAccountEditor(account:ManagedKidsAccount){setEditingAccount(account);setAccountDraft({accountHolderName:account.name,email:account.email,phoneE164:account.phone,status:account.status});}
-  async function saveAccount(){if(!editingAccount)return;setSavingAccount(true);const guest=editingAccount.accountType==="GUEST";const response=await apiFetch(`/api/v1/admin/account-management/accounts/${guest?"guests/":""}${editingAccount.id}`,{method:"PATCH",body:JSON.stringify(guest?{parentName:accountDraft.accountHolderName,email:accountDraft.email,phoneE164:accountDraft.phoneE164}:accountDraft)});const body=await response.json().catch(()=>null) as ManagedKidsAccount|null;setSavingAccount(false);if(!response.ok||!body){notify((body as unknown as {message?:string})?.message||"Account could not be updated.");return;}setAccounts(current=>current.map(account=>account.id===body.id?body:account));setEditingAccount(null);notify("Account updated and recorded in Admin history.");}
-  async function restoreAccount(account:ManagedKidsAccount){const guest=account.accountType==="GUEST";const response=await apiFetch(`/api/v1/admin/account-management/accounts/${guest?"guests/":""}${account.id}/restore`,{method:"POST"});const body=await response.json().catch(()=>null) as ManagedKidsAccount|null;if(!response.ok||!body){notify((body as unknown as {message?:string})?.message||"Account could not be restored.");return;}setAccounts(current=>current.map(item=>item.id===body.id?body:item));notify("Account restored to active access.");}
-  async function deleteAccount(){if(!deleteDialog)return;const guest=deleteDialog.accountType==="GUEST";const response=await apiFetch(`/api/v1/admin/account-management/accounts/${guest?"guests/":""}${deleteDialog.id}`,{method:"DELETE",body:JSON.stringify({reason:deleteReason})});const body=await response.json().catch(()=>null) as ManagedKidsAccount|null;if(!response.ok||!body){notify((body as unknown as {message?:string})?.message||"Account could not be deleted.");return;}setAccounts(current=>current.map(item=>item.id===body.id?body:item));setDeleteDialog(null);setDeleteReason("");notify("Account was safely deleted and can be restored by an administrator.");}
+  async function saveAccount(){if(!editingAccount)return;setSavingAccount(true);const guest=editingAccount.accountType==="GUEST";const response=await apiFetch(`/api/v1/admin/account-management/accounts/${guest?"guests/":""}${editingAccount.id}`,{method:"PATCH",body:JSON.stringify(guest?{parentName:accountDraft.accountHolderName,email:accountDraft.email,phoneE164:accountDraft.phoneE164}:accountDraft)});const body=await response.json().catch(()=>null) as ManagedKidsAccount|null;setSavingAccount(false);if(!response.ok||!body){notify(getAdminFriendlyErrorMessage((body as unknown as {message?:string})?.message,"account update"));return;}setAccounts(current=>current.map(account=>account.id===body.id?body:account));setEditingAccount(null);notify("Account updated and recorded in Admin history.");}
+  async function restoreAccount(account:ManagedKidsAccount){const guest=account.accountType==="GUEST";const response=await apiFetch(`/api/v1/admin/account-management/accounts/${guest?"guests/":""}${account.id}/restore`,{method:"POST"});const body=await response.json().catch(()=>null) as ManagedKidsAccount|null;if(!response.ok||!body){notify(getAdminFriendlyErrorMessage((body as unknown as {message?:string})?.message,"account restore"));return;}setAccounts(current=>current.map(item=>item.id===body.id?body:item));notify("Account restored to active access.");}
+  async function deleteAccount(){if(!deleteDialog)return;const guest=deleteDialog.accountType==="GUEST";const response=await apiFetch(`/api/v1/admin/account-management/accounts/${guest?"guests/":""}${deleteDialog.id}`,{method:"DELETE",body:JSON.stringify({reason:deleteReason})});const body=await response.json().catch(()=>null) as ManagedKidsAccount|null;if(!response.ok||!body){notify(getAdminFriendlyErrorMessage((body as unknown as {message?:string})?.message,"account deletion"));return;}setAccounts(current=>current.map(item=>item.id===body.id?body:item));setDeleteDialog(null);setDeleteReason("");notify("Account was safely deleted and can be restored by an administrator.");}
   const visibleAccounts=accounts.filter(item=>accountType==="All"||item.accountType===accountType);
   const exportSelected=async(pdf=false)=>{const values=visibleAccounts.filter(item=>selectedAccounts.has(item.id));if(!values.length){notify("Select one or more accounts first.");return;}const rows=[["Account type","Name","Email","Phone","Status","Children"],...values.map(item=>[item.accountType||"REGISTERED",item.name,item.email||"",item.phone,item.status,String(item.children)])];if(pdf){const {jsPDF}=await import("jspdf");const doc=new jsPDF();doc.setFontSize(16);doc.text("A+ Kids selected accounts",14,16);doc.setFontSize(9);rows.forEach((row,index)=>doc.text(row.join(" | ").slice(0,180),14,28+(index*7)));doc.save("selected-kids-accounts.pdf");}else{const blob=new Blob([rows.map(row=>row.map(v=>`"${v.replaceAll('"','""')}"`).join(",")).join("\n")],{type:"text/csv"});const link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download="selected-kids-accounts.csv";link.click();URL.revokeObjectURL(link.href);}notify(`${values.length} selected account${values.length===1?"":"s"} exported.`);};
   const tabs=[{id:"overview",label:"Overview"},{id:"accounts",label:"Kids accounts"},...(isSuperAdmin?[{id:"admins",label:"Admin users"},{id:"whatsapp",label:"WhatsApp API"},{id:"templates",label:"Templates"},{id:"history",label:"Admin history"}]:[])] as Array<{id:typeof tab;label:string}>;
@@ -6063,7 +6144,7 @@ export function AccountManagementWorkspace({notify}:{notify:(message:string)=>vo
       <div className="rounded-[18px] border border-[#E0E7EF] bg-white p-5">
         <h3 className="text-[17px] font-semibold">Test message delivery</h3><p className="mt-1 text-[11px] text-[#7A879A]">Sends one connection-test message through the saved Meta sender.</p>
         <button onClick={()=>void testConnection()} disabled={testingConnection||!config?.tokenConfigured} className={`${secondaryButton} mt-4 w-full disabled:opacity-40`}>{testingConnection?"Checking Meta connection…":"Test Meta connection"}</button>
-        {connection?<div className={`mt-3 rounded-[12px] border p-3 text-[11px] ${connection.success?"border-emerald-200 bg-emerald-50":"border-red-200 bg-red-50"}`}><p className="font-semibold">{connection.message}</p>{connection.solutions.map(solution=><p key={solution} className="mt-1 text-[#65748A]">• {solution}</p>)}</div>:null}
+        {connection?<div className={`mt-3 rounded-[12px] border p-3 text-[11px] ${connection.success?"border-emerald-200 bg-emerald-50":"border-red-200 bg-red-50"}`}><p className="font-semibold">{connection.success?"WhatsApp connection is ready.":getAdminFriendlyErrorMessage(connection.message,"WhatsApp connection")}</p>{connection.success ? connection.solutions.map(solution=><p key={solution} className="mt-1 text-[#65748A]">• {solution}</p>) : <p className="mt-1 text-[#65748A]">Check the saved WhatsApp account details, then run the test again.</p>}</div>:null}
         <label className="mt-5 block text-[11px] font-semibold text-[#526178]">Recipient number<input value={testPhone} onChange={e=>setTestPhone(e.target.value)} className={`${fieldClass} mt-1`} placeholder="07XXXXXXXX"/></label>
         <button onClick={()=>void test()} disabled={testing||!config?.tokenConfigured||!testPhone} className="mt-3 h-10 w-full rounded-[10px] bg-[#20B15A] text-[12px] font-semibold text-white disabled:opacity-40">{testing?"Sending…":"Send test WhatsApp message"}</button>
         <div className={`mt-5 rounded-[13px] border p-4 ${config?.lastTestStatus==="SUCCESS"?"border-emerald-200 bg-emerald-50":config?.lastTestStatus==="FAILED"?"border-red-200 bg-red-50":"border-[#E0E7EF] bg-[#F8FAFC]"}`}><p className="text-[11px] font-semibold uppercase text-[#7A879A]">Latest delivery status</p><p className="mt-2 text-[13px] font-semibold">{config?.lastTestStatus||"Not tested"}</p><p className="mt-1 text-[11px] text-[#66758B]">{config?.lastTestStatus === "FAILED" ? getAdminFriendlyErrorMessage(config.lastTestMessage, "WhatsApp delivery") : config?.lastTestMessage||"Save the account, then send a test."}</p>{config?.lastTestedAt?<p className="mt-2 text-[10px] text-[#8490A2]">{new Date(config.lastTestedAt).toLocaleString()}</p>:null}</div>
@@ -6077,9 +6158,8 @@ export function AccountManagementWorkspace({notify}:{notify:(message:string)=>vo
 }
 
 export function AccountManagementAdminPage() {
-  const [notice,setNotice]=useState("");
+  const { notice, notify, dismissNotice } = useAdminNotice();
   const [liveVersion,setLiveVersion]=useState(0);
-  function notify(message:string){setNotice(message);window.setTimeout(()=>setNotice(""),4000);}
   useEffect(()=>{
     const refresh=()=>setLiveVersion((current)=>current+1);
     window.addEventListener("aplus-data-updated",refresh);
@@ -6088,7 +6168,7 @@ export function AccountManagementAdminPage() {
   return <>
     <header className="relative overflow-hidden rounded-[28px] bg-[radial-gradient(circle_at_92%_75%,rgba(220,239,255,.78)_0_2px,transparent_3px),linear-gradient(135deg,#fff_0%,#f5faff_100%)] px-6 py-8 shadow-[0_10px_28px_rgba(43,86,138,.05)] tablet:px-8 tablet:py-10"><i className="pointer-events-none absolute left-[2%] top-[44%] text-2xl text-violet-100">✦</i><i className="pointer-events-none absolute left-[57%] top-10 text-3xl text-[#C7D2FE]">◆</i><i className="pointer-events-none absolute left-[67%] top-[58%] text-3xl text-[#F7DFA4]">✦</i><i className="pointer-events-none absolute right-[34%] top-9 size-3 rounded-full bg-[#FFC2C7]"/><div className="relative z-10 flex flex-col gap-5 tablet:flex-row tablet:items-end tablet:justify-between"><div><p className="text-[13px] font-medium text-[#2488F4]">Page manager</p><h1 className="mt-1 text-[32px] font-semibold tracking-[-.04em] text-[#132447] tablet:text-[44px]">Account Management <span className="text-[#FFB300]">✦</span></h1><p className="mt-2 max-w-2xl text-[14px] leading-6 text-[#6E7C91]">Manage family accounts, administrator access, WhatsApp services and a complete record of changes.</p></div><div className="flex gap-3"><div className="rounded-[12px] border border-[#DDE8F5] bg-white/90 px-4 py-3 text-[12px] font-semibold text-[#40516B] shadow-sm">🔒 Protected controls</div></div></div></header>
     <div className="mt-6"><AccountManagementWorkspace key={`account-management-${liveVersion}`} notify={notify}/></div>
-    {notice?<div className="fixed bottom-5 right-5 z-[130] max-w-md rounded-[12px] bg-[#17243D] px-4 py-3 text-[12px] font-semibold text-white shadow-xl">{notice}</div>:null}
+    <AdminNotice notice={notice} onDismiss={dismissNotice} />
     <KidsChampLoadingScreen />
   </>;
 }
@@ -6111,25 +6191,47 @@ export default function KidsChampAdmin() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void apiFetch("/api/v1/admin/kids-champ/events", { signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok || !response.body) return;
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-        while (!controller.signal.aborted) {
-          const { value, done } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
-          const events = buffer.split("\n\n");
-          buffer = events.pop() ?? "";
-          if (events.some((event) => event.includes("event:update"))) {
-            setLiveVersion((current) => current + 1);
+    let retryTimer: number | undefined;
+    let retryDelay = 1_000;
+
+    const connect = async () => {
+      if (controller.signal.aborted) return;
+      try {
+        const response = await apiFetch("/api/v1/admin/kids-champ/events", { signal: controller.signal });
+        if (response.ok && response.body) {
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let buffer = "";
+          try {
+            while (!controller.signal.aborted) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              retryDelay = 1_000;
+              buffer = `${buffer}${decoder.decode(value, { stream: true })}`.replaceAll("\r\n", "\n");
+              const events = buffer.split("\n\n");
+              buffer = events.pop() ?? "";
+              if (events.some((event) => /(^|\n)event:\s*update(?:\n|$)/.test(event))) {
+                setLiveVersion((current) => current + 1);
+              }
+            }
+          } finally {
+            reader.releaseLock();
           }
         }
-      })
-      .catch(() => undefined);
-    return () => controller.abort();
+      } catch {
+        // Stream failures are retried quietly; page actions keep their own notices.
+      }
+      if (controller.signal.aborted) return;
+      const delay = retryDelay;
+      retryDelay = Math.min(retryDelay * 2, 15_000);
+      retryTimer = window.setTimeout(() => void connect(), delay);
+    };
+
+    void connect();
+    return () => {
+      controller.abort();
+      if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+    };
   }, []);
 
   useEffect(() => {
@@ -6174,7 +6276,7 @@ export default function KidsChampAdmin() {
         notifyDataUpdated: false,
       });
       const body = await response.json().catch(() => null);
-      if (!response.ok) { notify(body?.message || "ZIP retention settings could not be saved."); return false; }
+      if (!response.ok) { notify(getAdminFriendlyErrorMessage((body as {message?:string}|null)?.message, "ZIP retention settings")); return false; }
       setSettings({ ...defaultKidsChampSettings, ...body });
       notify("ZIP retention settings saved.");
       return true;
@@ -6362,6 +6464,7 @@ export default function KidsChampAdmin() {
             }
             notify={notify}
             initialOverviewView={overviewZipView}
+            refreshVersion={liveVersion}
           />
         ) : null}
         {workspace === "Participants" ? (

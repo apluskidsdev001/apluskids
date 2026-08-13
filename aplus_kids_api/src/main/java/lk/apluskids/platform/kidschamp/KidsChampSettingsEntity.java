@@ -34,6 +34,7 @@ class KidsChampSettingsEntity {
     public int getZipExpiryDays(){return zipExpiryDays;} public int getZipWarningDays(){return zipWarningDays;}
     public Integer getActiveZipTargetSize(){return activeZipTargetSize;} public Instant getActiveZipStartedAt(){return activeZipStartedAt;}
     public void startActiveZip(int target){if(activeZipTargetSize==null){activeZipTargetSize=target;activeZipStartedAt=Instant.now();}}
+    public void replaceActiveZipTarget(int target){activeZipTargetSize=target;if(activeZipStartedAt==null)activeZipStartedAt=Instant.now();}
     public void completeActiveZip(){activeZipTargetSize=null;activeZipStartedAt=null;}
     public int getFrequentParticipantThreshold(){return frequentParticipantThreshold;}
     public boolean isRequireWhatsAppConsent(){return requireWhatsAppConsent;} public int getCampaignLimit(){return campaignLimit;}

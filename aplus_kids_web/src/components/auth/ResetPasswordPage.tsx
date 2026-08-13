@@ -3,6 +3,7 @@
 import { type FormEvent, useState } from "react";
 import { sitePath } from "@/utils/sitePath";
 import { backendFetch } from "@/utils/backendActivity";
+import { resolveApiBaseUrl } from "@/utils/auth";
 
 export default function ResetPasswordPage() {
   const [status, setStatus] = useState<{ ok: boolean; message: string } | null>(null);
@@ -22,7 +23,7 @@ export default function ResetPasswordPage() {
       return;
     }
     setSubmitting(true);
-    const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081").replace(/\/$/, "");
+    const apiBaseUrl = resolveApiBaseUrl();
     try {
       const response = await backendFetch(`${apiBaseUrl}/api/v1/auth/reset-password`, {
         method: "POST",

@@ -4,6 +4,7 @@ import Image from "next/image";
 import { type FormEvent, useEffect, useState } from "react";
 import { sitePath } from "@/utils/sitePath";
 import { backendFetch } from "@/utils/backendActivity";
+import { resolveApiBaseUrl } from "@/utils/auth";
 
 type ChildDetails = {
   formId: string;
@@ -298,7 +299,7 @@ export default function RegisterPage({ embedded = false, onLogin }: { embedded?:
     setStatus(null);
     setIsSubmitting(true);
 
-    const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081").replace(/\/$/, "");
+    const apiBaseUrl = resolveApiBaseUrl();
 
     try {
       const response = await backendFetch(`${apiBaseUrl}/api/v1/auth/register`, {
@@ -361,7 +362,7 @@ export default function RegisterPage({ embedded = false, onLogin }: { embedded?:
     event.preventDefault();
     setIsSubmitting(true);
     setStatus(null);
-    const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081").replace(/\/$/, "");
+    const apiBaseUrl = resolveApiBaseUrl();
     try {
       const response = await backendFetch(`${apiBaseUrl}/api/v1/auth/verify-email`, {
         method: "POST",
@@ -383,7 +384,7 @@ export default function RegisterPage({ embedded = false, onLogin }: { embedded?:
   async function resendCode() {
     setIsSubmitting(true);
     setStatus(null);
-    const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8081").replace(/\/$/, "");
+    const apiBaseUrl = resolveApiBaseUrl();
     try {
       const response = await backendFetch(`${apiBaseUrl}/api/v1/auth/resend-verification`, {
         method: "POST",

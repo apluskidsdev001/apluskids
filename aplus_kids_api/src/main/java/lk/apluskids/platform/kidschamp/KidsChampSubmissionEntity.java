@@ -57,6 +57,7 @@ public class KidsChampSubmissionEntity {
         if (fileStatus == null) fileStatus = "READY";
     }
     public UUID getPublicId() { return publicId; }
+    public Long getId() { return id; }
     public String getTrackingCode() { return trackingCode; }
     public UserEntity getUser() { return user; }
     public ChildProfileEntity getChildProfile() { return childProfile; }
@@ -88,6 +89,7 @@ public class KidsChampSubmissionEntity {
     public UserEntity getAssignedReviewer() { return assignedReviewer; }
     public String getInternalNote() { return internalNote; }
     public Instant getDeletedAt() { return deletedAt; }
+    public Instant getPhotoDeletedAt() { return photoDeletedAt; }
     public Instant getPreviewedAt() { return previewedAt; }
     public void setTrackingCode(String v) { trackingCode=v; }
     public void setUser(UserEntity v) { user=v; }
@@ -110,6 +112,7 @@ public class KidsChampSubmissionEntity {
     public void setOriginalFilename(String v) { originalFilename=v; }
     public void setStoredFilename(String v) { storedFilename=v; }
     public String getStoredFilename() { return storedFilename; }
+    public boolean isPhotoAvailable() { return storedFilename != null && photoDeletedAt == null; }
     public void setMediaType(String v) { mediaType=v; }
     public void setFileSize(long v) { fileSize=v; }
     public void setBatch(KidsChampBatchEntity v) { batch=v; telecastStatus = TelecastStatus.SELECTED; }
@@ -122,6 +125,7 @@ public class KidsChampSubmissionEntity {
         reviewStatus=status; rejectionReason=reason; reviewedBy=admin; reviewedAt=Instant.now();
     }
     public void markPhotoDeleted() { storedFilename=null; photoDeletedAt=Instant.now(); fileStatus="MISSING"; }
+    public void markPhotoDeletionPending() { photoDeletedAt=Instant.now(); fileStatus="MISSING"; }
     public void setPreviewed(boolean previewed) { previewedAt=previewed ? Instant.now() : null; }
     public void softDelete(UserEntity actor) { deletedAt=Instant.now(); deletedBy=actor; }
     public void claim(UserEntity account, ChildProfileEntity child) { user=account; childProfile=child; guestContact=null; }

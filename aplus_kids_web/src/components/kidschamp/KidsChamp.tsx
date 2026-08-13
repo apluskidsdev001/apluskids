@@ -15,6 +15,7 @@ type Submission = {
 };
 type Language = "en" | "si" | "ta";
 type ClaimableHistory = { id: string; parentName: string; maskedPhone: string; submissionCount: number };
+type UploadPolicy = { maxFileSizeMb: number; allowedFileTypes: string };
 
 const words = {
   en: { title: "Kids Champ", intro: "Share one creation made by your child. Our team will review it for A+ Kids TV.", submit: "Send creation", track: "Track a submission", code: "Tracking code", lookup: "Check status", consent: "I am the parent or legal guardian and allow A+ Kids to review and broadcast this creation." },
@@ -57,7 +58,21 @@ export default function KidsChamp() {
   const [busy, setBusy] = useState(false);
   const [claimable, setClaimable] = useState<ClaimableHistory[]>([]);
   const [liveVersion, setLiveVersion] = useState(0);
+  const [uploadPolicy, setUploadPolicy] = useState<UploadPolicy>({ maxFileSizeMb: 8, allowedFileTypes: "JPG, JPEG, PNG" });
   const copy = words[language];
+
+  useEffect(() => {
+    let active = true;
+    apiFetch("/api/v1/kids-champ/upload-policy").then(async response => {
+      if (!response.ok) return;
+      const policy = await response.json() as Partial<UploadPolicy>;
+      const maximum = Number(policy.maxFileSizeMb);
+      if (active && Number.isInteger(maximum) && maximum >= 1 && maximum <= 50) {
+        setUploadPolicy({ maxFileSizeMb: maximum, allowedFileTypes: policy.allowedFileTypes || "JPG, JPEG, PNG" });
+      }
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     apiFetch("/api/v1/profile").then(async response => {
@@ -74,12 +89,25 @@ export default function KidsChamp() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void apiFetch("/api/v1/kids-champ/events", { signal: controller.signal }).then(async (response) => {
-      if (!response.ok || !response.body) return;
-      const reader=response.body.getReader();const decoder=new TextDecoder();let buffer="";
-      while(!controller.signal.aborted){const {value,done}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const events=buffer.split("\n\n");buffer=events.pop()??"";if(events.some(event=>event.includes("event:update")))setLiveVersion(value=>value+1);}
-    }).catch(()=>undefined);
-    return ()=>controller.abort();
+    let retryTimer: number | undefined;
+    let retryDelay = 1_000;
+    const connect = async () => {
+      if (controller.signal.aborted) return;
+      try {
+        const response = await apiFetch("/api/v1/kids-champ/events", { signal: controller.signal });
+        if (response.ok && response.body) {
+          const reader=response.body.getReader();const decoder=new TextDecoder();let buffer="";
+          try {
+            while(!controller.signal.aborted){const {value,done}=await reader.read();if(done)break;retryDelay=1_000;buffer=`${buffer}${decoder.decode(value,{stream:true})}`.replaceAll("\r\n","\n");const events=buffer.split("\n\n");buffer=events.pop()??"";if(events.some(event=>/(^|\n)event:\s*update(?:\n|$)/.test(event)))setLiveVersion(value=>value+1);}
+          } finally { reader.releaseLock(); }
+        }
+      } catch { /* Live refresh reconnects quietly; form actions show their own errors. */ }
+      if(controller.signal.aborted)return;
+      const delay=retryDelay;retryDelay=Math.min(retryDelay*2,15_000);
+      retryTimer=window.setTimeout(()=>void connect(),delay);
+    };
+    void connect();
+    return ()=>{controller.abort();if(retryTimer!==undefined)window.clearTimeout(retryTimer);};
   }, []);
 
   useEffect(() => {
@@ -102,8 +130,8 @@ export default function KidsChamp() {
     if (!photo || photo.size === 0) {
       setError("Please choose one photo."); setBusy(false); return;
     }
-    if (photo.size > 8 * 1024 * 1024) {
-      setError("The photo must be 8 MB or smaller."); setBusy(false); return;
+    if (photo.size > uploadPolicy.maxFileSizeMb * 1024 * 1024) {
+      setError(`The photo must be ${uploadPolicy.maxFileSizeMb} MB or smaller.`); setBusy(false); return;
     }
     if (!(["image/jpeg", "image/png"] as string[]).includes(photo.type)) {
       setError("Please use a JPEG or PNG photo."); setBusy(false); return;
@@ -188,7 +216,7 @@ export default function KidsChamp() {
           <div className="mt-4 grid gap-4 tablet:grid-cols-2">
             <label className="text-sm font-medium">Artwork category<select name="category" className={`${field} mt-2`} required><option>Drawing</option><option>Painting</option><option>Handcraft</option></select></label>
             <label className="text-sm font-medium">Creation title (optional)<input name="workTitle" className={`${field} mt-2`} maxLength={160}/></label>
-            <label className="text-sm font-medium">One photo<input name="photo" type="file" accept="image/jpeg,image/png" className={`${field} mt-2 file:mr-3 file:border-0 file:bg-transparent file:text-sm file:font-semibold file:text-[#1976d2]`} required/></label>
+            <label className="text-sm font-medium">One photo<input name="photo" type="file" accept="image/jpeg,image/png" className={`${field} mt-2 file:mr-3 file:border-0 file:bg-transparent file:text-sm file:font-semibold file:text-[#1976d2]`} required/><span className="mt-1 block text-xs font-normal text-slate-500">{uploadPolicy.allowedFileTypes} · maximum {uploadPolicy.maxFileSizeMb} MB</span></label>
           </div>
           <label className="mt-4 block text-sm font-medium">About this creation (optional)<textarea name="workDescription" maxLength={1000} className="mt-2 min-h-24 w-full rounded-xl border border-slate-200 p-4 text-sm outline-none focus:border-[#3182f6] focus:ring-4 focus:ring-[#3182f6]/10"/></label>
           <label className="mt-5 flex gap-3 rounded-xl bg-[#f3f9ff] p-4 text-sm leading-6"><input name="consent" value="true" type="checkbox" required className="mt-1 size-4 accent-[#238df4]"/><span>{copy.consent}</span></label>

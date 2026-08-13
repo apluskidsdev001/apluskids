@@ -2,8 +2,11 @@ package lk.apluskids.platform.security;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
+import org.springframework.http.HttpHeaders;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.*;
 import org.springframework.http.HttpMethod;
@@ -46,16 +49,74 @@ public class SecurityConfiguration {
 
     @Bean
     CorsConfigurationSource corsConfigurationSource(@Value("${aplus.frontend-origin}") String frontendOrigin) {
-        CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(frontendOrigin));
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-CSRF-TOKEN", "X-Request-ID"));
-        config.setExposedHeaders(List.of("X-Request-ID"));
-        config.setAllowCredentials(true);
-        config.setMaxAge(3600L);
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**", config);
-        return source;
+        String configuredOrigin = frontendOrigin == null ? "" : frontendOrigin.trim().replaceAll("/+$", "");
+        return request -> {
+            if (!request.getRequestURI().startsWith("/api/")) return null;
+            CorsConfiguration config = new CorsConfiguration();
+            List<String> allowedOrigins = new ArrayList<>();
+            if (!configuredOrigin.isBlank()) allowedOrigins.add(configuredOrigin);
+            String requestOrigin = request.getHeader(HttpHeaders.ORIGIN);
+            if (isSamePrivateHostOrigin(requestOrigin, request.getServerName()) && !allowedOrigins.contains(requestOrigin)) {
+                allowedOrigins.add(requestOrigin);
+            }
+            config.setAllowedOrigins(allowedOrigins);
+            config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+            config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-CSRF-TOKEN", "X-Request-ID"));
+            config.setExposedHeaders(List.of("X-Request-ID"));
+            config.setAllowCredentials(true);
+            config.setMaxAge(3600L);
+            return config;
+        };
+    }
+
+    private static boolean isSamePrivateHostOrigin(String origin, String requestHost) {
+        if (origin == null || origin.isBlank() || requestHost == null || requestHost.isBlank()) return false;
+        try {
+            URI value = URI.create(origin);
+            if (!"http".equalsIgnoreCase(value.getScheme()) || value.getPort() < 1 || value.getPort() > 65535
+                || value.getRawUserInfo() != null || value.getRawQuery() != null || value.getRawFragment() != null
+                || !(value.getRawPath() == null || value.getRawPath().isEmpty())) return false;
+            String originHost = value.getHost();
+            return isPrivateHost(originHost) && sameHost(originHost, requestHost);
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
+    private static boolean sameHost(String first, String second) {
+        first = stripIpv6Brackets(first);
+        second = stripIpv6Brackets(second);
+        if (first.equalsIgnoreCase(second)) return true;
+        return isLoopbackHost(first) && isLoopbackHost(second);
+    }
+
+    private static String stripIpv6Brackets(String host) {
+        return host.length() > 1 && host.startsWith("[") && host.endsWith("]") ? host.substring(1, host.length() - 1) : host;
+    }
+
+    private static boolean isLoopbackHost(String host) {
+        return "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host) || "::1".equals(host);
+    }
+
+    private static boolean isPrivateHost(String host) {
+        if (host == null) return false;
+        host = stripIpv6Brackets(host);
+        if (isLoopbackHost(host)) return true;
+        try {
+            String[] parts = host.split("\\.", -1);
+            if (parts.length != 4) return false;
+            int[] octets = new int[4];
+            for (int index = 0; index < parts.length; index++) {
+                if (!parts[index].matches("(?:0|[1-9]\\d{0,2})")) return false;
+                octets[index] = Integer.parseInt(parts[index]);
+                if (octets[index] > 255) return false;
+            }
+            return octets[0] == 10
+                || (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31)
+                || (octets[0] == 192 && octets[1] == 168);
+        } catch (NumberFormatException exception) {
+            return false;
+        }
     }
 
     @Bean
@@ -79,8 +140,10 @@ public class SecurityConfiguration {
                     "/api/v1/auth/reset-password"
                 ).permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/kids-champ/submissions").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/kids-champ/upload-policy").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/kids-champ/track/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/kids-champ/events").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/health").permitAll()
                 .requestMatchers("/api/v1/webhooks/whatsapp").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .anyRequest().authenticated()

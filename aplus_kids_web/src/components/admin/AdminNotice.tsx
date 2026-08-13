@@ -15,10 +15,11 @@ export type AdminNoticeModel = {
 type OperationFinishedDetail = {
   success?: boolean;
   path?: string;
+  status?: number;
   message?: string;
 };
 
-const strongFailurePattern = /\b(could not|cannot|can't|unable|unavailable|failed|failure|error|exception|unexpected|denied|forbidden|unauthori[sz]ed|expired|not found|not registered|missing|timed out|timeout|offline|disconnected|conflict|invalid|duplicate|constraint|bad request|http\s*\d{3}|sql|database|backend|api|network|fetch)\b|already\s+(?:exists|in|assigned|used|linked)|no changes were applied/i;
+const strongFailurePattern = /\b(could not|cannot|can't|unable|unavailable|failed|failure|error|exception|unexpected|denied|forbidden|unauthori[sz]ed|expired|not found|not registered|missing|timed out|timeout|offline|disconnected|conflict|invalid|duplicate|constraint|bad request|http\s*\d{3}|sql|network|fetch)\b|already\s+(?:exists|in|assigned|used|linked)|no changes were applied/i;
 const successPattern = /\b(saved|updated|added|published|queued|scheduled|restored|synchronized|completed|opened|copied|removed|deleted|finished|refreshed|created|downloaded|sent|changed|verified|connected|recorded|accepted|ignored)\b/i;
 const warningPattern = /^(add|choose|select|enter|provide|confirm|review|use|open|complete|check)\b|\b(required|must be|before saving|before downloading|first)\b|^only\b/i;
 
@@ -26,12 +27,23 @@ export function getAdminFriendlyErrorMessage(message?: unknown, context = "") {
   const original = typeof message === "string" ? message.trim() : "";
   const value = `${context} ${original}`.toLowerCase();
 
-  const containsTechnicalDetails = /\b(exception|stack|trace|sql|jdbc|constraint|database|backend|api|http\s*\d{3}|fetch failed|failed to fetch|networkerror)\b|[a-z_$][\w$]*\.[a-z_$][\w$]*\(/i.test(original);
-  const genericRequestMessage = /^(the request|request|action) could not be completed\.?$/i.test(original);
-  if (original && original.length <= 300 && !containsTechnicalDetails && !genericRequestMessage) return original;
-
   if (/session|sign.?in|login|unauthori[sz]ed|forbidden|permission|access denied/.test(value)) {
     return "Your admin session or permissions could not be confirmed. Sign in again, then retry the action.";
+  }
+  if (/\/batches\/[^/]+\/edited|edited status|marking it edited/.test(value)) {
+    return "The edited status could not be saved. The checkbox was returned to its previous value. Please try again.";
+  }
+  if (/\/batches\/[^/]+\/download|download.*zip|zip.*download/.test(value)) {
+    return "The ZIP could not be downloaded. Confirm that the archive is still available, then try again.";
+  }
+  if (/\/batches\/selected|manual zip|selected zip/.test(value)) {
+    return "The selected photos could not be added to a ZIP. No submission records were changed. Review the selection and try again.";
+  }
+  if (/\/batches\/[^/]+\/schedule|telecast date|telecast schedule/.test(value)) {
+    return "The telecast date could not be saved. The previous schedule is still active.";
+  }
+  if (/\/settings|zip retention|batch size|configuration|preference/.test(value)) {
+    return "The settings could not be saved. Your previous settings are still active.";
   }
   if (/network|fetch|api|database|backend|server|service|timeout|timed out|http\s*\d{3}/.test(value)) {
     return "The service is temporarily unavailable. Check your connection and try again shortly.";
@@ -54,9 +66,6 @@ export function getAdminFriendlyErrorMessage(message?: unknown, context = "") {
   if (/calendar|telecast|schedule|task/.test(value)) {
     return "The schedule action could not be completed. Review the selected date and try again.";
   }
-  if (/settings|configuration|preference|retention/.test(value)) {
-    return "The settings could not be saved. Your previous settings are still active.";
-  }
   if (/photo|file|preview|download|upload|media/.test(value)) {
     return "The file action could not be completed. Check that the file is available, then try again.";
   }
@@ -69,6 +78,15 @@ export function getAdminFriendlyErrorMessage(message?: unknown, context = "") {
 function buildAdminNotice(rawMessage: unknown, context = ""): AdminNoticeModel {
   const message = typeof rawMessage === "string" ? rawMessage.trim() : "";
   const createdAt = Date.now();
+  if (context) {
+    return {
+      tone: "error",
+      title: "Action could not be completed",
+      message: getAdminFriendlyErrorMessage(message, context),
+      priority: 2,
+      createdAt,
+    };
+  }
   const hasFailure = strongFailurePattern.test(message);
 
   if (!hasFailure && successPattern.test(message)) {

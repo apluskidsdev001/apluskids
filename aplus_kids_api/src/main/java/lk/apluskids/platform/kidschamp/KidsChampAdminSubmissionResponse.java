@@ -49,7 +49,7 @@ public record KidsChampAdminSubmissionResponse(
             item.getUser() == null ? "Guest" : "Registered",
             item.getAssignedReviewer() == null ? "Unassigned" : item.getAssignedReviewer().getAccountHolderName(),
             item.getInternalNote(),
-            item.getReviewedAt(), item.getSubmittedAt(), item.getPreviewedAt() != null, item.getStoredFilename() != null,
+            item.getReviewedAt(), item.getSubmittedAt(), item.getPreviewedAt() != null, item.isPhotoAvailable(),
             batch == null ? null : batch.getPublicId(),
             item.getOriginalFilename(), item.getMediaType(), item.getFileSize()
         );
