@@ -109,14 +109,16 @@ export default function TrailersSection() {
             type="button"
             aria-label="Previous trailers"
             onClick={() => scrollByCards("left")}
-            className="absolute -left-5 top-[48px] z-10 hidden h-11 w-11 place-items-center rounded-full border border-white/80 bg-white/65 text-[#071B63] shadow-[0_10px_24px_rgba(7,27,99,0.1)] backdrop-blur-md md:grid"
+            className="absolute left-1 top-[48px] z-10 hidden h-11 w-11 place-items-center rounded-full border border-white/80 bg-white/75 text-[#071B63] shadow-[0_10px_24px_rgba(7,27,99,0.1)] backdrop-blur-md md:grid"
           >
             ‹
           </button>
           <div
             ref={scrollerRef}
             data-focus-strip
-            className="flex snap-x gap-3 overflow-x-auto overflow-y-hidden scroll-smooth pb-4 [scrollbar-width:none] md:gap-12 [&::-webkit-scrollbar]:hidden"
+            data-focus-mode="layout"
+            data-focus-kind="media"
+            className="-mx-5 flex snap-x items-end gap-3 overflow-x-auto overflow-y-hidden px-5 scroll-px-5 scroll-smooth pb-5 [scrollbar-width:none] tablet:-mx-8 tablet:gap-5 tablet:px-8 tablet:scroll-px-8 laptop:gap-6 desktop:gap-7 monitor:gap-8 [&::-webkit-scrollbar]:hidden"
           >
             {trailers.map((trailer, index) => (
               <div
@@ -140,7 +142,7 @@ export default function TrailersSection() {
             type="button"
             aria-label="Next trailers"
             onClick={() => scrollByCards("right")}
-            className="absolute -right-5 top-[48px] z-10 hidden h-11 w-11 place-items-center rounded-full border border-white/80 bg-white/65 text-[#071B63] shadow-[0_10px_24px_rgba(7,27,99,0.1)] backdrop-blur-md md:grid"
+            className="absolute right-1 top-[48px] z-10 hidden h-11 w-11 place-items-center rounded-full border border-white/80 bg-white/75 text-[#071B63] shadow-[0_10px_24px_rgba(7,27,99,0.1)] backdrop-blur-md md:grid"
           >
             ›
           </button>
