@@ -1,0 +1,55 @@
+
+> aplus_kids_web@0.1.0 dev
+> next dev --webpack --webpack
+
+▲ Next.js 16.2.6 (webpack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.8.122:3000
+✓ Ready in 3.0s
+
+○ Compiling /admin/advertisements ...
+ GET / 200 in 22.8s (next.js: 19.9s, application-code: 2.9s)
+ GET /admin/advertisements/ 200 in 22.9s (next.js: 19.9s, application-code: 3.0s)
+ GET /admin/advertisements/ 200 in 257ms (next.js: 21ms, application-code: 236ms)
+ GET /admin/advertisements/ 200 in 203ms (next.js: 16ms, application-code: 188ms)
+ GET / 200 in 544ms (next.js: 9ms, application-code: 535ms)
+ GET /admin/advertisements/ 200 in 780ms (next.js: 15ms, application-code: 765ms)
+ GET / 200 in 585ms (next.js: 13ms, application-code: 573ms)
+ GET /admin/advertisements/ 200 in 894ms (next.js: 8ms, application-code: 885ms)
+[browser] Image with src "http://localhost:8081/api/v1/advertisements/3df4ef88-f7dd-42dc-8bac-7cdf826afce2/assets/desktop" was detected as the Largest Contentful Paint (LCP). Please add the `loading="eager"` property if this image is above the fold.
+Read more: https://nextjs.org/docs/app/api-reference/components/image#loading
+[browser] Image with src "/images/market/advertisements/Advertisement1.png" was detected as the Largest Contentful Paint (LCP). Please add the `loading="eager"` property if this image is above the fold.
+Read more: https://nextjs.org/docs/app/api-reference/components/image#loading
+ GET / 200 in 611ms (next.js: 12ms, application-code: 599ms)
+ GET /admin/advertisements/ 200 in 783ms (next.js: 15ms, application-code: 768ms)
+ GET / 200 in 508ms (next.js: 7ms, application-code: 501ms)
+ GET /admin/advertisements/ 200 in 470ms (next.js: 11ms, application-code: 459ms)
+[browser] Image with src "/images/market/advertisements/Advertisement1.png" was detected as the Largest Contentful Paint (LCP). Please add the `loading="eager"` property if this image is above the fold.
+Read more: https://nextjs.org/docs/app/api-reference/components/image#loading
+ GET / 200 in 600ms (next.js: 9ms, application-code: 591ms)
+ GET /admin/advertisements/ 200 in 947ms (next.js: 11ms, application-code: 936ms)
+[browser] Image with src "http://localhost:8081/api/v1/advertisements/3df4ef88-f7dd-42dc-8bac-7cdf826afce2/assets/desktop" was detected as the Largest Contentful Paint (LCP). Please add the `loading="eager"` property if this image is above the fold.
+Read more: https://nextjs.org/docs/app/api-reference/components/image#loading
+[browser] Image with src "/images/market/advertisements/Advertisement1.png" was detected as the Largest Contentful Paint (LCP). Please add the `loading="eager"` property if this image is above the fold.
+Read more: https://nextjs.org/docs/app/api-reference/components/image#loading
+○ Compiling /admin/messaging ...
+ GET /admin/messaging/ 200 in 8.4s (next.js: 8.0s, application-code: 470ms)
+ GET / 200 in 202ms (next.js: 75ms, application-code: 126ms)
+ GET /admin/messaging/ 200 in 455ms (next.js: 8ms, application-code: 447ms)
+ GET / 200 in 98ms (next.js: 26ms, application-code: 71ms)
+ GET /admin/messaging/ 200 in 498ms (next.js: 139ms, application-code: 359ms)
+ GET / 200 in 88ms (next.js: 5ms, application-code: 83ms)
+ GET /admin/messaging/ 200 in 50ms (next.js: 6ms, application-code: 43ms)
+ GET / 200 in 97ms (next.js: 3ms, application-code: 94ms)
+ GET /admin/messaging/ 200 in 131ms (next.js: 6ms, application-code: 125ms)
+ GET / 200 in 54ms (next.js: 21ms, application-code: 32ms)
+ GET /admin/messaging/ 200 in 247ms (next.js: 124ms, application-code: 122ms)
+ GET / 200 in 200ms (next.js: 94ms, application-code: 106ms)
+ GET /admin/messaging/ 200 in 65ms (next.js: 27ms, application-code: 38ms)
+ GET / 200 in 179ms (next.js: 64ms, application-code: 115ms)
+ GET /admin/messaging/ 200 in 83ms (next.js: 28ms, application-code: 54ms)
+ GET / 200 in 258ms (next.js: 132ms, application-code: 125ms)
+ GET /admin/messaging/ 200 in 71ms (next.js: 23ms, application-code: 48ms)
+ GET / 200 in 246ms (next.js: 110ms, application-code: 136ms)
+ GET /admin/messaging/ 200 in 84ms (next.js: 31ms, application-code: 53ms)
+[?25h

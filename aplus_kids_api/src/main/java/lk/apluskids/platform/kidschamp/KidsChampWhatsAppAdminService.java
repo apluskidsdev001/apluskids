@@ -16,16 +16,17 @@ import org.springframework.web.client.RestClient;
 @Service
 class KidsChampWhatsAppAdminService {
     private final KidsChampWhatsAppConfigRepository repository;
+    private final KidsChampWhatsAppTemplateRepository templates;
     private final byte[] encryptionKey;
     private final String fallbackVersion, fallbackPhoneId, fallbackAccountId, fallbackToken;
 
-    KidsChampWhatsAppAdminService(KidsChampWhatsAppConfigRepository repository,
+    KidsChampWhatsAppAdminService(KidsChampWhatsAppConfigRepository repository, KidsChampWhatsAppTemplateRepository templates,
         @Value("${aplus.auth.jwt-secret}") String encryptionSecret,
         @Value("${aplus.whatsapp.graph-api-version:v23.0}") String version,
         @Value("${aplus.whatsapp.phone-number-id:}") String phoneId,
         @Value("${aplus.whatsapp.business-account-id:}") String accountId,
         @Value("${aplus.whatsapp.access-token:}") String token) {
-        this.repository=repository;fallbackVersion=version;fallbackPhoneId=phoneId;fallbackAccountId=accountId;fallbackToken=token;
+        this.repository=repository;this.templates=templates;fallbackVersion=version;fallbackPhoneId=phoneId;fallbackAccountId=accountId;fallbackToken=token;
         try { encryptionKey=MessageDigest.getInstance("SHA-256").digest(encryptionSecret.getBytes(StandardCharsets.UTF_8)); }
         catch(NoSuchAlgorithmException error){throw new IllegalStateException(error);}
     }
@@ -45,8 +46,8 @@ class KidsChampWhatsAppAdminService {
 
     @Transactional TestResponse test(String rawPhone){
         KidsChampWhatsAppConfigEntity entity=repository.findById((short)1).orElseGet(()->{KidsChampWhatsAppConfigEntity created=new KidsChampWhatsAppConfigEntity();created.save(fallbackVersion,fallbackPhoneId,fallbackAccountId,encrypt(fallbackToken));return repository.save(created);});
-        ActiveConfig active=new ActiveConfig(entity.getGraphApiVersion(),entity.getPhoneNumberId(),decrypt(entity.getAccessTokenEncrypted()));String phone=normalizeSriLanka(rawPhone);
-        try {String id=send(active,phone,"A+ Kids WhatsApp system test message.");entity.testResult(true,"Accepted by Meta. Message ID: "+id);return new TestResponse(true,"Meta accepted the test message.",id,Instant.now());}
+        ActiveConfig active=new ActiveConfig(entity.getGraphApiVersion(),entity.getPhoneNumberId(),entity.getBusinessAccountId(),decrypt(entity.getAccessTokenEncrypted()));String phone=normalizeSriLanka(rawPhone);
+        try {String id=sendTestTemplate(active,phone);entity.testResult(true,"Accepted by Meta. Message ID: "+id);return new TestResponse(true,"Meta accepted the test template message.",id,Instant.now());}
         catch(RuntimeException error){entity.testResult(false,safe(error.getMessage()));return new TestResponse(false,safe(error.getMessage()),null,Instant.now());}
     }
 
@@ -65,9 +66,34 @@ class KidsChampWhatsAppAdminService {
     }
 
     @Transactional(readOnly=true) ActiveConfig active(){
-        return repository.findById((short)1).map(item->new ActiveConfig(item.getGraphApiVersion(),item.getPhoneNumberId(),decrypt(item.getAccessTokenEncrypted())))
-            .orElse(new ActiveConfig(fallbackVersion,fallbackPhoneId,fallbackToken));
+        return repository.findById((short)1).map(item->new ActiveConfig(item.getGraphApiVersion(),item.getPhoneNumberId(),item.getBusinessAccountId(),decrypt(item.getAccessTokenEncrypted())))
+            .orElse(new ActiveConfig(fallbackVersion,fallbackPhoneId,fallbackAccountId,fallbackToken));
     }
+
+    @Transactional(readOnly=true) List<TemplateResponse> templates(){return templates.findAllByOrderByNameAscLanguageCodeAsc().stream().map(TemplateResponse::from).toList();}
+
+    @Transactional List<TemplateResponse> syncTemplates(){
+        ActiveConfig active=active();
+        if(active.businessAccountId().isBlank()||active.token().isBlank())throw new IllegalStateException("WhatsApp Business Account ID and access token are required before templates can be synchronized.");
+        @SuppressWarnings("unchecked") Map<String,Object> response=RestClient.builder().baseUrl("https://graph.facebook.com/"+active.version()).build().get()
+            .uri(uriBuilder->uriBuilder.path("/{id}/message_templates").queryParam("fields","id,name,language,status,category,components").queryParam("limit",100).build(active.businessAccountId()))
+            .header("Authorization","Bearer "+active.token()).retrieve().body(Map.class);
+        Object data=response==null?null:response.get("data");
+        if(!(data instanceof List<?> values))throw new IllegalStateException("Meta did not return WhatsApp templates.");
+        for(Object raw:values){
+            if(!(raw instanceof Map<?,?> item))continue;
+            String name=Objects.toString(item.get("name"),"");String language=Objects.toString(item.get("language"),"");
+            if(name.isBlank()||language.isBlank())continue;
+            String body="";Object components=item.get("components");
+            if(components instanceof List<?> parts)for(Object part:parts)if(part instanceof Map<?,?> component&&"BODY".equals(Objects.toString(component.get("type"),"")))body=Objects.toString(component.get("text"),"");
+            List<String> variables=new ArrayList<>();java.util.regex.Matcher matcher=java.util.regex.Pattern.compile("\\{\\{(\\d+)}}") .matcher(body);while(matcher.find())if(!variables.contains(matcher.group(1)))variables.add(matcher.group(1));
+            KidsChampWhatsAppTemplateEntity entity=templates.findByNameAndLanguageCode(name,language).orElseGet(KidsChampWhatsAppTemplateEntity::new);
+            entity.sync(Objects.toString(item.get("id"),null),name,language,Objects.toString(item.get("category"),"UTILITY"),Objects.toString(item.get("status"),"UNKNOWN"),body,variables);templates.save(entity);
+        }
+        return templates();
+    }
+
+    @Transactional TemplateResponse disableTemplate(UUID id,boolean disabled){KidsChampWhatsAppTemplateEntity entity=templates.findByPublicId(id).orElseThrow(()->new IllegalArgumentException("WhatsApp template was not found."));entity.setDisabled(disabled);return TemplateResponse.from(entity);}
 
     String send(ActiveConfig active,String destination,String message){
         if(active.phoneNumberId().isBlank()||active.token().isBlank())throw new IllegalStateException("WhatsApp configuration is incomplete.");
@@ -106,9 +132,10 @@ class KidsChampWhatsAppAdminService {
     private static String normalizeSriLanka(String value){String phone=digits(value);return phone.startsWith("0")?"94"+phone.substring(1):phone;}
     private static String mask(String value){return value==null||value.isBlank()?"":value.substring(0,Math.min(6,value.length()))+"••••••••";}
     private static String safe(String value){if(value==null||value.isBlank())return "WhatsApp request failed.";return value.substring(0,Math.min(value.length(),600));}
-    record ActiveConfig(String version,String phoneNumberId,String token){}
+    record ActiveConfig(String version,String phoneNumberId,String businessAccountId,String token){}
     record ConfigRequest(String graphApiVersion,String phoneNumberId,String businessAccountId,String accessToken){}
     record ConfigResponse(String graphApiVersion,String phoneNumberId,String businessAccountId,boolean tokenConfigured,String maskedToken,String lastTestStatus,String lastTestMessage,Instant lastTestedAt){}
     record TestResponse(boolean success,String message,String providerMessageId,Instant testedAt){}
     record ConnectionTestResponse(boolean success,String message,List<String> solutions,Instant testedAt){}
+    record TemplateResponse(UUID id,String metaTemplateId,String name,String languageCode,String category,String status,String body,List<String> variables,boolean disabled,Instant syncedAt){static TemplateResponse from(KidsChampWhatsAppTemplateEntity e){return new TemplateResponse(e.getPublicId(),e.getMetaTemplateId(),e.getName(),e.getLanguageCode(),e.getCategory(),e.getStatus(),e.getBody(),e.getVariables(),e.isDisabled(),e.getSyncedAt());}}
 }

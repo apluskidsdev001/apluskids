@@ -1,0 +1,164 @@
+package lk.apluskids.platform.security;
+
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import org.springframework.http.HttpHeaders;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.*;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.*;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
+import org.springframework.web.cors.*;
+
+@Configuration
+@EnableMethodSecurity
+public class SecurityConfiguration {
+    @Bean
+    SecretKey jwtSecretKey(@Value("${aplus.auth.jwt-secret}") String secret) {
+        if (secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalStateException("JWT_SECRET must contain at least 32 bytes");
+        }
+        return new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+    }
+
+    @Bean
+    JwtEncoder jwtEncoder(SecretKey secretKey) {
+        return NimbusJwtEncoder.withSecretKey(secretKey).algorithm(MacAlgorithm.HS256).build();
+    }
+
+    @Bean
+    JwtDecoder jwtDecoder(SecretKey secretKey) {
+        return NimbusJwtDecoder.withSecretKey(secretKey).macAlgorithm(MacAlgorithm.HS256).build();
+    }
+
+    @Bean
+    PasswordEncoder passwordEncoder() {
+        return Argon2PasswordEncoder.defaultsForSpringSecurity_v5_8();
+    }
+
+    @Bean
+    CorsConfigurationSource corsConfigurationSource(@Value("${aplus.frontend-origin}") String frontendOrigin) {
+        String configuredOrigin = frontendOrigin == null ? "" : frontendOrigin.trim().replaceAll("/+$", "");
+        return request -> {
+            if (!request.getRequestURI().startsWith("/api/")) return null;
+            CorsConfiguration config = new CorsConfiguration();
+            List<String> allowedOrigins = new ArrayList<>();
+            if (!configuredOrigin.isBlank()) allowedOrigins.add(configuredOrigin);
+            String requestOrigin = request.getHeader(HttpHeaders.ORIGIN);
+            if (isSamePrivateHostOrigin(requestOrigin, request.getServerName()) && !allowedOrigins.contains(requestOrigin)) {
+                allowedOrigins.add(requestOrigin);
+            }
+            config.setAllowedOrigins(allowedOrigins);
+            config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+            config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-CSRF-TOKEN", "X-Request-ID"));
+            config.setExposedHeaders(List.of("X-Request-ID"));
+            config.setAllowCredentials(true);
+            config.setMaxAge(3600L);
+            return config;
+        };
+    }
+
+    private static boolean isSamePrivateHostOrigin(String origin, String requestHost) {
+        if (origin == null || origin.isBlank() || requestHost == null || requestHost.isBlank()) return false;
+        try {
+            URI value = URI.create(origin);
+            if (!"http".equalsIgnoreCase(value.getScheme()) || value.getPort() < 1 || value.getPort() > 65535
+                || value.getRawUserInfo() != null || value.getRawQuery() != null || value.getRawFragment() != null
+                || !(value.getRawPath() == null || value.getRawPath().isEmpty())) return false;
+            String originHost = value.getHost();
+            return isPrivateHost(originHost) && sameHost(originHost, requestHost);
+        } catch (IllegalArgumentException exception) {
+            return false;
+        }
+    }
+
+    private static boolean sameHost(String first, String second) {
+        first = stripIpv6Brackets(first);
+        second = stripIpv6Brackets(second);
+        if (first.equalsIgnoreCase(second)) return true;
+        return isLoopbackHost(first) && isLoopbackHost(second);
+    }
+
+    private static String stripIpv6Brackets(String host) {
+        return host.length() > 1 && host.startsWith("[") && host.endsWith("]") ? host.substring(1, host.length() - 1) : host;
+    }
+
+    private static boolean isLoopbackHost(String host) {
+        return "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host) || "::1".equals(host);
+    }
+
+    private static boolean isPrivateHost(String host) {
+        if (host == null) return false;
+        host = stripIpv6Brackets(host);
+        if (isLoopbackHost(host)) return true;
+        try {
+            String[] parts = host.split("\\.", -1);
+            if (parts.length != 4) return false;
+            int[] octets = new int[4];
+            for (int index = 0; index < parts.length; index++) {
+                if (!parts[index].matches("(?:0|[1-9]\\d{0,2})")) return false;
+                octets[index] = Integer.parseInt(parts[index]);
+                if (octets[index] > 255) return false;
+            }
+            return octets[0] == 10
+                || (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31)
+                || (octets[0] == 192 && octets[1] == 168);
+        } catch (NumberFormatException exception) {
+            return false;
+        }
+    }
+
+    @Bean
+    SecurityFilterChain securityFilterChain(HttpSecurity http, ActiveAdministratorFilter activeAdministratorFilter) throws Exception {
+        return http
+            .cors(Customizer.withDefaults())
+            .csrf(csrf -> csrf.disable())
+            .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .formLogin(form -> form.disable())
+            .httpBasic(basic -> basic.disable())
+            .oauth2ResourceServer(resourceServer -> resourceServer.jwt(Customizer.withDefaults()))
+            .addFilterAfter(activeAdministratorFilter, BearerTokenAuthenticationFilter.class)
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.POST,
+                    "/api/v1/auth/register",
+                    "/api/v1/auth/verify-email",
+                    "/api/v1/auth/resend-verification",
+                    "/api/v1/auth/login",
+                    "/api/v1/auth/refresh",
+                    "/api/v1/auth/logout",
+                    "/api/v1/auth/forgot-password",
+                    "/api/v1/auth/reset-password"
+                ).permitAll()
+                .requestMatchers(HttpMethod.POST,
+                    "/api/v1/admin-invitations/accept",
+                    "/api/v1/admin-invitations/validate",
+                    "/api/v1/admin-invitations/resend"
+                ).permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/kids-champ/submissions").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/kids-champ/upload-policy").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/kids-champ/track/*").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/kids-champ/events").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/health").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/advertisements/slots/*").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/advertisements/*/redirect").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/advertisements/*/assets/*").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/advertisements/*/impression").permitAll()
+                .requestMatchers("/api/v1/webhooks/whatsapp").permitAll()
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                .anyRequest().authenticated()
+            )
+            .build();
+    }
+}

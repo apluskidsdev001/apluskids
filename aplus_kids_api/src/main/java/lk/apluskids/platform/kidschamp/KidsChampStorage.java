@@ -77,6 +77,19 @@ class KidsChampStorage {
         }
     }
 
+    /** Clears only this dedicated Kids Champ storage directory, while retaining it for future uploads. */
+    void clearAll() {
+        if (!Files.exists(root)) return;
+        try (var paths = Files.walk(root)) {
+            paths.sorted(java.util.Comparator.reverseOrder()).filter(path -> !path.equals(root)).forEach(path -> {
+                try { Files.deleteIfExists(path); }
+                catch (IOException exception) { throw new UncheckedIOException(exception); }
+            });
+        } catch (UncheckedIOException | IOException exception) {
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR, "KIDS_CHAMP_STORAGE_CLEAR_FAILED", "Kids Champ files could not be permanently removed.");
+        }
+    }
+
     private String safeOriginalName(String value) {
         if (value == null || value.isBlank()) return "photo";
         String name = Paths.get(value).getFileName().toString().replaceAll("[\\p{Cntrl}]", "");

@@ -284,4 +284,3 @@ TEST/DEMO DATA
   profiles, guest contacts, submissions with multiple review states and calendar tasks.
 - WhatsApp delivery is intentionally excluded from dummy-data testing unless credentials and consent
   are explicitly configured.
-

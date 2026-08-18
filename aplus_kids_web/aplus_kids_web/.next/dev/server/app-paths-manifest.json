@@ -1,0 +1,11 @@
+{
+  "/page": "app/page.js",
+  "/watch/page": "app/watch/page.js",
+  "/kids-zone/page": "app/kids-zone/page.js",
+  "/market/page": "app/market/page.js",
+  "/info/page": "app/info/page.js",
+  "/kids-champ/page": "app/kids-champ/page.js",
+  "/admin/advertisements/page": "app/admin/advertisements/page.js",
+  "/admin/kids-champ/page": "app/admin/kids-champ/page.js",
+  "/admin/home/page": "app/admin/home/page.js"
+}

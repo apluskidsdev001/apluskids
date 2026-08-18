@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.time.Instant;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
@@ -17,12 +18,13 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/webhooks/whatsapp")
 class KidsChampWhatsAppWebhookController {
     private final KidsChampMessageRecipientRepository recipients;
+    private final KidsChampWhatsAppCampaignStatus campaignStatus;
     private final ObjectMapper mapper=new ObjectMapper();
     private final String verifyToken, appSecret;
 
-    KidsChampWhatsAppWebhookController(KidsChampMessageRecipientRepository recipients,
+    KidsChampWhatsAppWebhookController(KidsChampMessageRecipientRepository recipients, KidsChampWhatsAppCampaignStatus campaignStatus,
         @Value("${aplus.whatsapp.webhook-verify-token:}") String verifyToken,
-        @Value("${aplus.whatsapp.app-secret:}") String appSecret){this.recipients=recipients;this.verifyToken=verifyToken;this.appSecret=appSecret;}
+        @Value("${aplus.whatsapp.app-secret:}") String appSecret){this.recipients=recipients;this.campaignStatus=campaignStatus;this.verifyToken=verifyToken;this.appSecret=appSecret;}
 
     @GetMapping
     ResponseEntity<String> verify(@RequestParam(name="hub.mode",required=false) String mode,@RequestParam(name="hub.verify_token",required=false) String token,@RequestParam(name="hub.challenge",required=false) String challenge){
@@ -40,10 +42,13 @@ class KidsChampWhatsAppWebhookController {
 
     private void update(JsonNode status){
         String id=status.path("id").asText();String value=status.path("status").asText();if(id.isBlank()||value.isBlank())return;
+        Instant providerTime=status.path("timestamp").canConvertToLong()?Instant.ofEpochSecond(status.path("timestamp").asLong()):null;
         recipients.findByProviderMessageId(id).ifPresent(recipient->{
-            if("delivered".equals(value))recipient.delivered();
-            else if("read".equals(value))recipient.read();
-            else if("failed".equals(value)){String reason=status.path("errors").path(0).path("title").asText("WhatsApp delivery failed.");recipient.failed(reason);recipient.getCampaign().fail();}
+            boolean changed=false;String reason=null;
+            if("delivered".equals(value))changed=recipient.delivered(providerTime);
+            else if("read".equals(value))changed=recipient.read(providerTime);
+            else if("failed".equals(value)){reason=status.path("errors").path(0).path("title").asText("WhatsApp delivery failed.");changed=recipient.failed(reason);}
+            if(changed){campaignStatus.event(recipient,recipient.getStatus(),value,reason,providerTime);campaignStatus.recalculate(recipient.getCampaign());}
         });
     }
 

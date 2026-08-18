@@ -1,12 +1,15 @@
 package lk.apluskids.platform.kidschamp;
 
 import java.io.*;
+import java.awt.image.BufferedImage;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.*;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.zip.*;
+import javax.imageio.ImageIO;
+import jakarta.persistence.EntityManager;
 import lk.apluskids.platform.common.error.ApiException;
 import lk.apluskids.platform.notification.AccountNotificationService;
 import lk.apluskids.platform.user.*;
@@ -20,21 +23,31 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class KidsChampAdminService {
     private final KidsChampSubmissionRepository submissions; private final KidsChampBatchRepository batches;
-    private final KidsChampGuestContactRepository guests;
+    private final KidsChampGuestContactRepository guests; private final KidsChampGuestParticipantRepository guestParticipants;
     private final KidsChampAuditRepository audits; private final UserRepository users; private final KidsChampStorage storage;
     private final KidsChampSettingsRepository settings; private final KidsChampCalendarTaskRepository tasks;
     private final KidsChampMessageCampaignRepository campaigns;private final KidsChampMessageRecipientRepository messageRecipients;
     private final AccountNotificationService notifications; private final ApplicationEventPublisher events;
     private final KidsChampIgnoredGuestMatchRepository ignoredGuestMatches;
     private final KidsChampLiveUpdates liveUpdates;
-    KidsChampAdminService(KidsChampSubmissionRepository submissions,KidsChampBatchRepository batches,KidsChampGuestContactRepository guests,
+    private final KidsChampWhatsAppPreferenceRepository whatsappPreferences;
+    private final KidsChampWhatsAppTemplateRepository whatsappTemplates;
+    private final KidsChampMessageDeliveryEventRepository deliveryEvents;
+    private final KidsChampWhatsAppCampaignStatus whatsappCampaignStatus;
+    private final EntityManager entityManager;
+    KidsChampAdminService(KidsChampSubmissionRepository submissions,KidsChampBatchRepository batches,KidsChampGuestContactRepository guests,KidsChampGuestParticipantRepository guestParticipants,
         KidsChampAuditRepository audits,UserRepository users,KidsChampStorage storage,KidsChampSettingsRepository settings,
         KidsChampCalendarTaskRepository tasks,KidsChampMessageCampaignRepository campaigns,KidsChampMessageRecipientRepository messageRecipients,
-        AccountNotificationService notifications,ApplicationEventPublisher events,KidsChampIgnoredGuestMatchRepository ignoredGuestMatches,KidsChampLiveUpdates liveUpdates){
-        this.submissions=submissions;this.batches=batches;this.guests=guests;this.audits=audits;this.users=users;this.storage=storage;
+        AccountNotificationService notifications,ApplicationEventPublisher events,KidsChampIgnoredGuestMatchRepository ignoredGuestMatches,KidsChampLiveUpdates liveUpdates,
+        KidsChampWhatsAppPreferenceRepository whatsappPreferences,KidsChampWhatsAppTemplateRepository whatsappTemplates,
+        KidsChampMessageDeliveryEventRepository deliveryEvents,KidsChampWhatsAppCampaignStatus whatsappCampaignStatus,
+        EntityManager entityManager){
+        this.submissions=submissions;this.batches=batches;this.guests=guests;this.guestParticipants=guestParticipants;this.audits=audits;this.users=users;this.storage=storage;
         this.settings=settings;this.tasks=tasks;this.campaigns=campaigns;this.messageRecipients=messageRecipients;this.notifications=notifications;this.events=events;
         this.ignoredGuestMatches=ignoredGuestMatches;
         this.liveUpdates=liveUpdates;
+        this.whatsappPreferences=whatsappPreferences;this.whatsappTemplates=whatsappTemplates;this.deliveryEvents=deliveryEvents;this.whatsappCampaignStatus=whatsappCampaignStatus;
+        this.entityManager=entityManager;
     }
 
     @Transactional(readOnly=true)
@@ -174,18 +187,56 @@ public class KidsChampAdminService {
         Map<String,List<KidsChampSubmissionEntity>> grouped=submissions.findAllByDeletedAtIsNullOrderBySubmittedAtDesc().stream()
             .collect(java.util.stream.Collectors.groupingBy(item->item.getUser()!=null
                 ? "registered:"+item.getChildProfile().getPublicId()
-                : "guest:"+item.getGuestContact().getPublicId(),LinkedHashMap::new,java.util.stream.Collectors.toList()));
-        return grouped.values().stream().map(items->{
-            KidsChampSubmissionEntity latest=items.getFirst();
-            long approved=items.stream().filter(i->i.getReviewStatus()==ReviewStatus.APPROVED).count();
-            long telecasted=items.stream().filter(i->i.getTelecastStatus()==TelecastStatus.TELECASTED).count();
-            Instant first=items.stream().map(KidsChampSubmissionEntity::getSubmittedAt).min(Comparator.naturalOrder()).orElse(latest.getSubmittedAt());
-            UUID id=latest.getUser()!=null?latest.getChildProfile().getPublicId():latest.getGuestContact().getPublicId();
-            boolean whatsapp=items.stream().anyMatch(i->i.getWhatsappConsentAt()!=null);
-            return new ParticipantResponse(id,latest.getChildName(),latest.getAgeAtSubmission(),latest.getUser()!=null?"Registered":"Guest",
-                latest.getHometown(),latest.getPhoneE164(),items.size(),approved,telecasted,first,latest.getSubmittedAt(),whatsapp);
-        }).toList();
+                : "guest:"+guestParticipantId(item),LinkedHashMap::new,java.util.stream.Collectors.toList()));
+        return grouped.values().stream().map(this::participantResponse).toList();
     }
+
+    @Transactional
+    public ParticipantResponse updateParticipant(UUID actorId,UUID participantId,String name,LocalDate dateOfBirth,String hometown,String phone){
+        String updatedName=requiredParticipantText(name,"PARTICIPANT_NAME_REQUIRED","Enter the child's name.");
+        String updatedHometown=requiredParticipantText(hometown,"PARTICIPANT_HOMETOWN_REQUIRED","Enter the hometown.");
+        if(dateOfBirth==null||dateOfBirth.isAfter(LocalDate.now(ZoneId.of("Asia/Colombo")))) throw bad("PARTICIPANT_DATE_OF_BIRTH_INVALID","Enter a valid date of birth.");
+        List<KidsChampSubmissionEntity> items=submissions.findAllByDeletedAtIsNullOrderBySubmittedAtDesc().stream()
+            .filter(item->participantId.equals(participantId(item))).toList();
+        if(items.isEmpty()) throw new ApiException(HttpStatus.NOT_FOUND,"PARTICIPANT_NOT_FOUND","Participant was not found.");
+        KidsChampSubmissionEntity latest=items.getFirst();
+        UserEntity actor=user(actorId);
+        if(latest.getChildProfile()!=null){
+            var child=latest.getChildProfile();
+            child.setFullName(updatedName);child.setDateOfBirth(dateOfBirth);child.setHometown(updatedHometown);
+            audit(actor,"PARTICIPANT_UPDATED","CHILD_PROFILE",participantId,"Updated child profile details from the Kids Champ participant workspace.");
+        }else{
+            KidsChampGuestParticipantEntity participant=guestParticipants.findByPublicId(participantId)
+                .orElseThrow(()->new ApiException(HttpStatus.NOT_FOUND,"PARTICIPANT_NOT_FOUND","Guest participant was not found."));
+            String updatedPhone=validGuestPhone(phone);
+            KidsChampGuestContactEntity contact=participant.getGuestContact();
+            guests.findByPhoneE164(updatedPhone).filter(existing->!existing.getId().equals(contact.getId()))
+                .ifPresent(existing->{throw new ApiException(HttpStatus.CONFLICT,"PHONE_EXISTS","That phone number is already used by another guest contact.");});
+            participant.setChildName(updatedName);participant.setDateOfBirth(dateOfBirth);participant.setHometown(updatedHometown);contact.setPhoneE164(updatedPhone);
+            audit(actor,"PARTICIPANT_UPDATED","GUEST_PARTICIPANT",participantId,"Updated guest child details from the Kids Champ participant workspace.");
+        }
+        return participantResponse(items);
+    }
+
+    private ParticipantResponse participantResponse(List<KidsChampSubmissionEntity> items){
+        KidsChampSubmissionEntity latest=items.getFirst();
+        long approved=items.stream().filter(i->i.getReviewStatus()==ReviewStatus.APPROVED).count();
+        long telecasted=items.stream().filter(i->i.getTelecastStatus()==TelecastStatus.TELECASTED).count();
+        Instant first=items.stream().map(KidsChampSubmissionEntity::getSubmittedAt).min(Comparator.naturalOrder()).orElse(latest.getSubmittedAt());
+        UUID id=participantId(latest); boolean registered=latest.getChildProfile()!=null;
+        String name; LocalDate dateOfBirth; String location; String phone;
+        if(registered){var child=latest.getChildProfile();name=child.getFullName();dateOfBirth=child.getDateOfBirth();location=child.getHometown();phone=latest.getUser().getPhoneE164();}
+        else {var guest=latest.getGuestParticipant();if(guest==null)throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR,"PARTICIPANT_DATA_INVALID","Guest participant data is incomplete.");name=guest.getChildName();dateOfBirth=guest.getDateOfBirth();location=guest.getHometown();phone=guest.getGuestContact().getPhoneE164();}
+        boolean historicalConsent=items.stream().anyMatch(i->i.getWhatsappConsentAt()!=null);
+        String consentStatus=whatsappPreferences.findById(id).map(KidsChampWhatsAppPreferenceEntity::getStatus).orElse(historicalConsent?"OPTED_IN":"UNKNOWN");
+        return new ParticipantResponse(id,name,(int)ChronoUnit.YEARS.between(dateOfBirth,LocalDate.now(ZoneId.of("Asia/Colombo"))),dateOfBirth,registered?"Registered":"Guest",
+            location,phone,!registered,items.size(),approved,telecasted,first,latest.getSubmittedAt(),"OPTED_IN".equals(consentStatus),consentStatus);
+    }
+
+    private UUID participantId(KidsChampSubmissionEntity item){return item.getChildProfile()!=null?item.getChildProfile().getPublicId():guestParticipantId(item);}
+    private UUID guestParticipantId(KidsChampSubmissionEntity item){if(item.getGuestParticipant()==null)throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR,"PARTICIPANT_DATA_INVALID","Guest participant data is incomplete.");return item.getGuestParticipant().getPublicId();}
+    private String requiredParticipantText(String value,String code,String message){if(value==null||value.trim().isBlank())throw bad(code,message);String cleaned=value.trim().replaceAll("\\s+"," ");if(cleaned.length()>120)throw bad("PARTICIPANT_VALUE_TOO_LONG","Names and hometowns must be 120 characters or fewer.");return cleaned;}
+    private String validGuestPhone(String value){String input=value==null?"":value.trim();if(!input.matches("^[0-9+()\\-\\s]+$")||input.indexOf('+')>0)throw bad("PHONE_INVALID","Enter a phone number using 7 to 19 digits. Local or international format is accepted.");String digits=input.replaceAll("\\D","");if(digits.length()<7||digits.length()>19)throw bad("PHONE_INVALID","Enter a phone number using 7 to 19 digits. Local or international format is accepted.");return input.startsWith("+")?"+"+digits:digits;}
 
     @Transactional(readOnly=true)
     public OverviewResponse overview(){
@@ -197,7 +248,7 @@ public class KidsChampAdminService {
         long selected=items.stream().filter(i->i.getTelecastStatus()==TelecastStatus.SELECTED||i.getTelecastStatus()==TelecastStatus.SCHEDULED).count();
         long telecasted=items.stream().filter(i->i.getTelecastStatus()==TelecastStatus.TELECASTED).count();
         return new OverviewResponse(items.size(),newToday,pending,approved,selected,telecasted,participants().size(),
-            batches.findAllByOrderByCreatedAtDesc().stream().filter(b->b.getDeletedAt()==null).count());
+            batches.findAllByOrderByCreatedAtDescIdDesc().stream().filter(b->b.getDeletedAt()==null).count());
     }
 
     @Transactional(readOnly=true)
@@ -208,13 +259,25 @@ public class KidsChampAdminService {
     public SettingsResponse updateSettings(UUID actorId,SettingsRequest value){
         if(value.categories()==null||value.categories().isEmpty()) throw bad("CATEGORIES_REQUIRED","Add at least one category.");
         if(value.minimumAge()<0||value.maximumAge()>17||value.minimumAge()>value.maximumAge()) throw bad("AGE_RANGE_INVALID","Use a valid age range from 0 to 17.");
-        if(value.maxFileSizeMb()<1||value.maxFileSizeMb()>50||value.zipBatchSize()<1||value.zipBatchSize()>500) throw bad("SETTINGS_INVALID","File and ZIP limits are outside the allowed range.");
-        UserEntity actor=user(actorId);KidsChampSettingsEntity entity=settings.findById((short)1).orElseThrow();
+        if(value.maxFileSizeMb()<1||value.maxFileSizeMb()>50||value.zipBatchSize()<1) throw bad("SETTINGS_INVALID","File size must be between 1 and 50 MB, and ZIP photo count must be at least 1.");
+        if(value.zipExpiryDays()<1||value.zipWarningDays()<0||value.zipWarningDays()>=value.zipExpiryDays()) throw bad("ZIP_RETENTION_INVALID","Use an expiry of at least 1 day and a warning period shorter than the expiry.");
+        UserEntity actor=user(actorId);KidsChampSettingsEntity entity=settings.findLockedById((short)1).orElseThrow();
+        boolean batchSizeChanged=entity.getZipBatchSize()!=value.zipBatchSize();
+        long queuedPhotos=eligibleZipPhotoCount();
+        if(batchSizeChanged&&queuedPhotos>0&&value.zipQueueCountPolicy()==null)
+            throw new ApiException(HttpStatus.CONFLICT,"ZIP_QUEUE_COUNT_DECISION_REQUIRED",
+                queuedPhotos+" approved photo"+(queuedPhotos==1?" is":"s are")+" already waiting. Choose whether the current queue keeps "+entity.getZipBatchSize()+" photos or uses "+value.zipBatchSize()+" photos.");
         ensureActiveZipTarget(entity);
+        if(batchSizeChanged&&queuedPhotos>0&&value.zipQueueCountPolicy()==ZipQueueCountPolicy.APPLY_NEW)
+            entity.replaceActiveZipTarget(value.zipBatchSize());
+        if(queuedPhotos==0)entity.completeActiveZip();
         entity.update(String.join(",",value.categories()),value.maxFileSizeMb(),value.allowedFileTypes(),value.minimumAge(),value.maximumAge(),
             value.dailyTelecastLimit(),value.defaultTelecastTime(),value.zipBatchSize(),value.zipExpiryDays(),value.zipWarningDays(),
             value.frequentParticipantThreshold(),value.requireWhatsAppConsent(),value.campaignLimit(),value.defaultMessage(),actor);
-        audit(actor,"SETTINGS_UPDATED","SETTINGS",new UUID(0,1),"Kids Champ settings updated");return SettingsResponse.from(entity);
+        audit(actor,"SETTINGS_UPDATED","SETTINGS",new UUID(0,1),batchSizeChanged&&queuedPhotos>0
+            ? "ZIP photo count updated using "+value.zipQueueCountPolicy():"Kids Champ settings updated");
+        if(queuedPhotos>0)createAutomaticZips(actor);
+        return SettingsResponse.from(entity);
     }
 
     @Transactional(readOnly=true)
@@ -261,36 +324,83 @@ public class KidsChampAdminService {
 
     @Transactional
     public CampaignResponse createCampaign(UUID actorId,String channel,String template,List<UUID> participantIds){
-        return createCampaign(actorId,channel,template,participantIds,null,null,null);
+        return createCampaign(actorId,channel,template,participantIds,null,null,null,null,"MANUAL");
     }
 
     @Transactional
     public CampaignResponse createCampaign(UUID actorId,String channel,String template,List<UUID> participantIds,String templateName,String languageCode,List<String> templateParameters){
+        return createCampaign(actorId,channel,template,participantIds,templateName,languageCode,templateParameters,null,"MANUAL");
+    }
+
+    @Transactional
+    public CampaignResponse createCampaign(UUID actorId,String channel,String template,List<UUID> participantIds,String templateName,String languageCode,List<String> templateParameters,String campaignName,String source){
         if(!Set.of("WHATSAPP","EMAIL").contains(channel)) throw bad("CHANNEL_INVALID","Choose WhatsApp or email.");
         if(template==null||template.isBlank()) throw bad("MESSAGE_REQUIRED","Enter a message.");
         int limit=settings().campaignLimit();if(participantIds==null||participantIds.isEmpty()||participantIds.size()>limit) throw bad("RECIPIENT_LIMIT","Select between 1 and "+limit+" participants.");
         Map<UUID,ParticipantResponse> available=participants().stream().collect(java.util.stream.Collectors.toMap(ParticipantResponse::id,p->p));
         List<ParticipantResponse> selected=new LinkedHashSet<>(participantIds).stream().map(available::get).filter(Objects::nonNull).toList();
         if(selected.size()!=new HashSet<>(participantIds).size()) throw bad("PARTICIPANT_NOT_FOUND","One or more participants were not found.");
-        UserEntity actor=user(actorId);KidsChampMessageCampaignEntity campaign=new KidsChampMessageCampaignEntity();campaign.create(channel,template.trim(),selected.size(),actor);campaigns.save(campaign);
         for(ParticipantResponse participant:selected){
-            if(channel.equals("WHATSAPP")&&settings().requireWhatsAppConsent()&&!participant.whatsappConsented()) throw bad("WHATSAPP_CONSENT_REQUIRED",participant.name()+" has not consented to WhatsApp updates.");
+            if(channel.equals("WHATSAPP")&&settings().requireWhatsAppConsent()&&!"OPTED_IN".equals(participant.whatsappConsentStatus())) throw bad("WHATSAPP_CONSENT_REQUIRED",participant.name()+" is not opted in to WhatsApp updates.");
             String destination=channel.equals("WHATSAPP")?participant.phone():submissionContactEmail(participant.id());
             if(destination==null||destination.isBlank()) throw bad("DESTINATION_MISSING",participant.name()+" has no eligible "+channel.toLowerCase(Locale.ROOT)+" destination.");
-            String rendered=template.replace("{name}",participant.name()).replace("{reference}",participant.id().toString());
-            KidsChampMessageRecipientEntity recipient=new KidsChampMessageRecipientEntity();recipient.create(campaign,participant.id(),participant.name(),destination,rendered,templateName,languageCode,templateParameters);messageRecipients.save(recipient);
         }
-        audit(actor,"MESSAGE_CAMPAIGN_QUEUED","CAMPAIGN",campaign.getPublicId(),channel+" recipients: "+selected.size());return CampaignResponse.from(campaign);
+        if("WHATSAPP".equals(channel)&&templateName!=null&&!templateName.isBlank()){
+            KidsChampWhatsAppTemplateEntity approved=whatsappTemplates.findByNameAndLanguageCode(templateName,languageCode).orElseThrow(()->bad("WHATSAPP_TEMPLATE_NOT_FOUND","Synchronize this WhatsApp template from Meta before using it."));
+            if(approved.isDisabled()||!"APPROVED".equalsIgnoreCase(approved.getStatus()))throw bad("WHATSAPP_TEMPLATE_NOT_APPROVED","Choose an enabled WhatsApp template approved by Meta.");
+            int expected=approved.getVariables().size(),actual=templateParameters==null?0:templateParameters.size();
+            if(expected!=actual)throw bad("WHATSAPP_TEMPLATE_PARAMETERS","The selected template expects "+expected+" parameters but received "+actual+".");
+        }
+        UserEntity actor=user(actorId);KidsChampMessageCampaignEntity campaign=new KidsChampMessageCampaignEntity();
+        campaign.create(channel,template.trim(),selected.size(),actor,campaignName,source,templateName,languageCode);campaigns.save(campaign);
+        for(ParticipantResponse participant:selected){
+            String destination=channel.equals("WHATSAPP")?participant.phone():submissionContactEmail(participant.id());
+            String trackingCode=participantTrackingCode(participant.id());
+            String rendered=personalizeCampaignValue(template,participant,trackingCode);
+            List<String> personalizedParameters=templateParameters==null?null:templateParameters.stream().map(value->personalizeCampaignValue(value,participant,trackingCode)).toList();
+            KidsChampMessageRecipientEntity recipient=new KidsChampMessageRecipientEntity();recipient.create(campaign,participant.id(),participant.name(),destination,rendered,templateName,languageCode,personalizedParameters);messageRecipients.save(recipient);
+            whatsappCampaignStatus.event(recipient,"QUEUED","queued","Queued by "+actor.getAccountHolderName());
+        }
+        audit(actor,"MESSAGE_CAMPAIGN_QUEUED","CAMPAIGN",campaign.getPublicId(),channel+" recipients: "+selected.size());return campaignResponse(campaign);
     }
-    @Transactional(readOnly=true) public List<CampaignResponse> campaigns(){return campaigns.findAllByOrderByCreatedAtDesc().stream().map(CampaignResponse::from).toList();}
+    private String personalizeCampaignValue(String value,ParticipantResponse participant,String trackingCode){
+        return value.replace("{name}",participant.name()).replace("{reference}",participant.id().toString()).replace("{trackingCode}",trackingCode).replace("{homeTown}",participant.location());
+    }
+    @Transactional(readOnly=true) public List<CampaignResponse> campaigns(){return campaigns.findAllByOrderByCreatedAtDesc().stream().map(this::campaignResponse).toList();}
     @Transactional(readOnly=true) public List<MessageRecipientResponse> campaignRecipients(UUID campaignId){return messageRecipients.findAllByCampaignPublicIdOrderByIdAsc(campaignId).stream().map(MessageRecipientResponse::from).toList();}
-    @Transactional public void retryRecipients(UUID actorId,List<Long> ids){messageRecipientAction(actorId,ids,true);}
-    @Transactional public void ignoreRecipients(UUID actorId,List<Long> ids){messageRecipientAction(actorId,ids,false);}
-    @Transactional public void deleteRecipients(UUID actorId,List<Long> ids){if(ids==null||ids.isEmpty()||ids.size()>500)throw bad("RECIPIENT_SELECTION_INVALID","Select between 1 and 500 failed messages.");UserEntity actor=user(actorId);for(Long id:ids){KidsChampMessageRecipientEntity recipient=messageRecipients.findById(id).orElseThrow(()->bad("RECIPIENT_NOT_FOUND","Message recipient not found."));recipient.delete();audit(actor,"WHATSAPP_RECIPIENT_DELETED","MESSAGE_RECIPIENT",recipient.getCampaign().getPublicId(),recipient.getParticipantName());}}
-    private void messageRecipientAction(UUID actorId,List<Long> ids,boolean retry){if(ids==null||ids.isEmpty()||ids.size()>500)throw bad("RECIPIENT_SELECTION_INVALID","Select between 1 and 500 failed messages.");UserEntity actor=user(actorId);for(Long id:ids){KidsChampMessageRecipientEntity recipient=messageRecipients.findById(id).orElseThrow(()->bad("RECIPIENT_NOT_FOUND","Message recipient not found."));if(retry)recipient.retry();else recipient.skip();audit(actor,retry?"WHATSAPP_RETRY_QUEUED":"WHATSAPP_RETRY_IGNORED","MESSAGE_RECIPIENT",recipient.getCampaign().getPublicId(),recipient.getParticipantName());}}
+    @Transactional(readOnly=true) public List<DeliveryEventResponse> recipientEvents(Long recipientId){if(!messageRecipients.existsById(recipientId))throw bad("RECIPIENT_NOT_FOUND","Message recipient not found.");return deliveryEvents.findAllByRecipientIdOrderByOccurredAtAscIdAsc(recipientId).stream().map(DeliveryEventResponse::from).toList();}
+    @Transactional public void retryRecipients(UUID actorId,List<Long> ids){messageRecipientAction(actorId,ids,"retry");}
+    @Transactional public void ignoreRecipients(UUID actorId,List<Long> ids){messageRecipientAction(actorId,ids,"ignore");}
+    @Transactional public void deleteRecipients(UUID actorId,List<Long> ids){messageRecipientAction(actorId,ids,"delete");}
+    private void messageRecipientAction(UUID actorId,List<Long> ids,String action){
+        if(ids==null||ids.isEmpty()||ids.size()>500)throw bad("RECIPIENT_SELECTION_INVALID","Select between 1 and 500 failed messages.");
+        UserEntity actor=user(actorId);Set<KidsChampMessageCampaignEntity> changed=new HashSet<>();
+        for(Long id:new LinkedHashSet<>(ids)){
+            KidsChampMessageRecipientEntity recipient=messageRecipients.findById(id).orElseThrow(()->bad("RECIPIENT_NOT_FOUND","Message recipient not found."));
+            try {if("retry".equals(action))recipient.retry();else if("ignore".equals(action))recipient.skip();else recipient.delete();}
+            catch(IllegalStateException error){throw bad("WHATSAPP_RECIPIENT_ACTION_INVALID",error.getMessage());}
+            changed.add(recipient.getCampaign());whatsappCampaignStatus.event(recipient,recipient.getStatus(),action,actor.getAccountHolderName());
+            audit(actor,"retry".equals(action)?"WHATSAPP_RETRY_QUEUED":"ignore".equals(action)?"WHATSAPP_RETRY_IGNORED":"WHATSAPP_RECIPIENT_DELETED","MESSAGE_RECIPIENT",recipient.getCampaign().getPublicId(),recipient.getParticipantName());
+        }
+        changed.forEach(whatsappCampaignStatus::recalculate);
+    }
+
+    @Transactional public WhatsAppPreferenceResponse updateWhatsAppPreference(UUID actorId,UUID participantId,String status,String reason){
+        if(!Set.of("UNKNOWN","OPTED_IN","OPTED_OUT").contains(status))throw bad("WHATSAPP_PREFERENCE_INVALID","Choose unknown, opted in, or opted out.");
+        if("OPTED_OUT".equals(status)&&(reason==null||reason.isBlank()))throw bad("WHATSAPP_OPT_OUT_REASON_REQUIRED","Record why this contact opted out.");
+        if(participants().stream().noneMatch(value->value.id().equals(participantId)))throw bad("PARTICIPANT_NOT_FOUND","Participant was not found.");
+        UserEntity actor=user(actorId);KidsChampWhatsAppPreferenceEntity value=whatsappPreferences.findById(participantId).orElseGet(()->new KidsChampWhatsAppPreferenceEntity(participantId));
+        value.update(status,"ADMIN",reason==null?null:reason.trim(),actor);whatsappPreferences.save(value);
+        audit(actor,"WHATSAPP_PREFERENCE_UPDATED","PARTICIPANT",participantId,status+(reason==null?"":" - "+reason.trim()));return WhatsAppPreferenceResponse.from(value);
+    }
+
+    @Transactional(readOnly=true) public WhatsAppPreferenceResponse whatsappPreference(UUID participantId){return whatsappPreferences.findById(participantId).map(WhatsAppPreferenceResponse::from).orElse(new WhatsAppPreferenceResponse(participantId,"UNKNOWN","SYSTEM",null,null,null,null));}
     private String submissionContactEmail(UUID participantId){return submissions.findAllByDeletedAtIsNullOrderBySubmittedAtDesc().stream().filter(i->
-        (i.getChildProfile()!=null&&i.getChildProfile().getPublicId().equals(participantId))||(i.getGuestContact()!=null&&i.getGuestContact().getPublicId().equals(participantId)))
+        (i.getChildProfile()!=null&&i.getChildProfile().getPublicId().equals(participantId))||(i.getGuestParticipant()!=null&&i.getGuestParticipant().getPublicId().equals(participantId)))
         .map(KidsChampSubmissionEntity::getEmail).filter(Objects::nonNull).findFirst().orElse(null);}
+    private String participantTrackingCode(UUID participantId){return submissions.findAllByDeletedAtIsNullOrderBySubmittedAtDesc().stream().filter(i->
+        (i.getChildProfile()!=null&&i.getChildProfile().getPublicId().equals(participantId))||(i.getGuestParticipant()!=null&&i.getGuestParticipant().getPublicId().equals(participantId)))
+        .map(KidsChampSubmissionEntity::getTrackingCode).filter(Objects::nonNull).findFirst().orElse("");}
 
     @Transactional
     public KidsChampAdminSubmissionResponse review(UUID actorId,UUID id,ReviewStatus status,String reason){
@@ -303,7 +413,7 @@ public class KidsChampAdminService {
         String message=status==ReviewStatus.REJECTED?"The submission was not approved. Reason: "+reason:
             status==ReviewStatus.APPROVED?"The submission was approved.":"The submission is now under review.";
         notify(item,"Kids Champ update",message);
-        if(status==ReviewStatus.APPROVED) createAutomaticZips(actor);
+        if(status==ReviewStatus.APPROVED) queueAutomaticZipProcessing(actor.getPublicId());
         return KidsChampAdminSubmissionResponse.from(item);
     }
 
@@ -329,27 +439,50 @@ public class KidsChampAdminService {
         if(approved>0){
             UUID firstApproved=items.stream().filter(item->item.getReviewStatus()==ReviewStatus.APPROVED).findFirst().orElseThrow().getPublicId();
             audit(actor,"SUBMISSIONS_APPROVED","SUBMISSION",firstApproved,approved+" approved");
-            createAutomaticZips(actor);
+            queueAutomaticZipProcessing(actor.getPublicId());
         }
-        return new ApprovalResponse(approved,alreadyApproved);
+        return new ApprovalResponse(approved,alreadyApproved,null);
+    }
+
+    private void queueAutomaticZipProcessing(UUID actorId){
+        events.publishEvent(new KidsChampZipProcessingRequested(actorId));
     }
 
     private void ensureActiveZipTarget(KidsChampSettingsEntity entity){
-        if(entity.getActiveZipTargetSize()==null&&!submissions.findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullOrderBySubmittedAtAsc(ReviewStatus.APPROVED,PageRequest.of(0,200)).stream().filter(item->item.getStoredFilename()!=null).toList().isEmpty())
+        if(entity.getActiveZipTargetSize()==null&&!submissions.findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullAndStoredFilenameIsNotNullOrderBySubmittedAtAscIdAsc(ReviewStatus.APPROVED,PageRequest.of(0,1)).isEmpty())
             entity.startActiveZip(entity.getZipBatchSize());
     }
 
-    private void createAutomaticZips(UserEntity actor){
+    private ZipProcessingResult createAutomaticZips(UserEntity actor){
+        List<String> unavailableTrackingCodes=new ArrayList<>();
         KidsChampSettingsEntity entity=settings.findLockedById((short)1).orElseThrow();
         ensureActiveZipTarget(entity);
         while(entity.getActiveZipTargetSize()!=null){
             int target=entity.getActiveZipTargetSize();
-            List<KidsChampSubmissionEntity> ready=submissions.findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullOrderBySubmittedAtAsc(ReviewStatus.APPROVED,PageRequest.of(0,Math.max(target*4,200))).stream().filter(item->item.getStoredFilename()!=null).limit(target).toList();
-            if(ready.size()<target) return;
-            buildBatch(actor,ready);entity.completeActiveZip();
-            List<KidsChampSubmissionEntity> remaining=submissions.findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullOrderBySubmittedAtAsc(ReviewStatus.APPROVED,PageRequest.of(0,200)).stream().filter(item->item.getStoredFilename()!=null).toList();
+            List<KidsChampSubmissionEntity> ready=submissions.findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullAndStoredFilenameIsNotNullOrderBySubmittedAtAscIdAsc(ReviewStatus.APPROVED,PageRequest.of(0,target));
+            if(ready.size()<target) return ZipProcessingResult.withUnavailable(unavailableTrackingCodes);
+            List<KidsChampSubmissionEntity> available=new ArrayList<>();
+            for(KidsChampSubmissionEntity item:ready){
+                if(zipSourceIsAvailable(item)) available.add(item);
+                else{
+                    unavailableTrackingCodes.add(item.getTrackingCode());
+                    item.markPhotoDeleted();
+                    audit(actor,"PHOTO_STORAGE_MISSING","SUBMISSION",item.getPublicId(),"Photo unavailable in storage; excluded from automatic ZIP processing.");
+                }
+            }
+            if(available.size()<target) continue;
+            buildBatch(actor,available);entity.completeActiveZip();
+            List<KidsChampSubmissionEntity> remaining=submissions.findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullAndStoredFilenameIsNotNullOrderBySubmittedAtAscIdAsc(ReviewStatus.APPROVED,PageRequest.of(0,1));
             if(!remaining.isEmpty()) entity.startActiveZip(entity.getZipBatchSize());
         }
+        return ZipProcessingResult.withUnavailable(unavailableTrackingCodes);
+    }
+
+    private boolean zipSourceIsAvailable(KidsChampSubmissionEntity item){
+        try{
+            Path source=storage.photo(item.getStoredFilename());
+            return ImageIO.read(source.toFile())!=null;
+        }catch(ApiException|IOException exception){return false;}
     }
 
     @Transactional
@@ -380,8 +513,78 @@ public class KidsChampAdminService {
     @Transactional
     public void deleteSubmission(UUID actorId,UUID id){
         UserEntity actor=user(actorId); KidsChampSubmissionEntity item=submission(id);
-        if(item.getBatch()!=null) throw bad("SUBMISSION_BATCHED","A submission included in a ZIP batch cannot be deleted.");
-        item.softDelete(actor); audit(actor,"SUBMISSION_DELETED","SUBMISSION",id,"Soft deleted by administrator");
+        boolean wasInBatch=item.getBatch()!=null;
+        item.softDelete(actor); audit(actor,"SUBMISSION_DELETED","SUBMISSION",id,wasInBatch?"Soft deleted by administrator; existing ZIP archive history retained":"Soft deleted by administrator");
+    }
+
+    /** Permanently removes every Kids Champ submission and its dedicated artwork/ZIP storage. */
+    @Transactional
+    public PurgeResponse permanentlyDeleteAllSubmissions(UUID actorId){
+        user(actorId);
+        int submissionCount=(int)submissions.count();
+        int batchCount=(int)batches.count();
+        int auditCount=(int)audits.count();
+        submissions.deleteAllInBatch();
+        batches.deleteAllInBatch();
+        audits.deleteAllInBatch();
+        settings.findLockedById((short)1).ifPresent(KidsChampSettingsEntity::completeActiveZip);
+        submissions.flush();
+        batches.flush();
+        storage.clearAll();
+        liveUpdates.publish("KIDS_CHAMP_SUBMISSIONS_PURGED","SUBMISSION",new UUID(0,1));
+        return new PurgeResponse(submissionCount,batchCount,auditCount);
+    }
+
+    /**
+     * Removes only the Kids Champ data owned by the supplied family/guest accounts.
+     * Any ZIP archive containing that data is invalidated so that a deleted child's
+     * photo or contact details cannot remain inside an archive.
+     */
+    @Transactional
+    public AccountDataPurgeResult permanentlyDeleteAccountData(
+        UUID actorId, Collection<UUID> registeredAccountIds, Collection<UUID> childProfileIds, Collection<UUID> guestAccountIds
+    ) {
+        UserEntity actor=user(actorId);
+        Set<UUID> registered=new LinkedHashSet<>(registeredAccountIds==null?List.of():registeredAccountIds);
+        Set<UUID> guestsToDelete=new LinkedHashSet<>(guestAccountIds==null?List.of():guestAccountIds);
+        Set<UUID> childProfiles=new LinkedHashSet<>(childProfileIds==null?List.of():childProfileIds);
+        List<KidsChampSubmissionEntity> owned=new ArrayList<>();
+        if(!registered.isEmpty()) owned.addAll(submissions.findAllByUserPublicIdIn(registered));
+        if(!guestsToDelete.isEmpty()) owned.addAll(submissions.findAllByGuestContactPublicIdIn(guestsToDelete));
+        owned=new ArrayList<>(new LinkedHashSet<>(owned));
+
+        List<KidsChampGuestContactEntity> guestAccounts=guestsToDelete.isEmpty()?List.of():guests.findAllByPublicIdIn(guestsToDelete);
+        if(guestAccounts.size()!=guestsToDelete.size()) throw bad("GUEST_NOT_FOUND","One or more selected guest accounts no longer exist.");
+        List<KidsChampGuestParticipantEntity> guestChildren=guestsToDelete.isEmpty()?List.of():guestParticipants.findAllByGuestContactPublicIdIn(guestsToDelete);
+        Set<UUID> participantReferences=new LinkedHashSet<>(childProfiles);
+        participantReferences.addAll(guestsToDelete);
+        guestChildren.forEach(value->participantReferences.add(value.getPublicId()));
+        if(!participantReferences.isEmpty()) {
+            messageRecipients.deleteAllByParticipantReferenceIn(participantReferences);
+            whatsappPreferences.deleteAllById(participantReferences);
+        }
+        if(!guestsToDelete.isEmpty()) ignoredGuestMatches.deleteAllByGuestIdIn(guestsToDelete);
+        if(!guestChildren.isEmpty()) {
+            entityManager.createNativeQuery("DELETE FROM kids_champ_participant_merges WHERE source_guest_participant_id IN (:ids)")
+                .setParameter("ids",guestChildren.stream().map(KidsChampGuestParticipantEntity::getId).toList()).executeUpdate();
+        }
+
+        Set<UUID> ownedReferences=new LinkedHashSet<>(participantReferences);
+        owned.forEach(value->ownedReferences.add(value.getPublicId()));
+        if(!ownedReferences.isEmpty()) audits.deleteAllByEntityPublicIdIn(ownedReferences);
+
+        Set<KidsChampBatchEntity> affectedBatches=new LinkedHashSet<>();
+        owned.forEach(value->{if(value.getBatch()!=null) affectedBatches.add(value.getBatch());});
+        for(KidsChampBatchEntity batch:affectedBatches){
+            storage.deletePath(batch.getArchivePath());
+            batch.markDeleted(actor);
+        }
+        for(KidsChampSubmissionEntity submission:owned) storage.delete(submission.getStoredFilename());
+        submissions.deleteAll(owned);
+        submissions.flush();
+        guestParticipants.deleteAll(guestChildren);
+        guests.deleteAll(guestAccounts);
+        return new AccountDataPurgeResult(owned.size(),childProfiles.size(),guestChildren.size(),affectedBatches.size());
     }
 
     @Transactional
@@ -400,10 +603,10 @@ public class KidsChampAdminService {
 
     @Transactional
     public BatchResponse createBatch(UUID actorId,int limit,boolean includeRemainder){
-        if(limit<1||limit>500) throw bad("BATCH_LIMIT_INVALID","Batch limit must be between 1 and 500.");
+        if(limit<1) throw bad("BATCH_LIMIT_INVALID","ZIP photo count must be at least 1.");
         List<KidsChampSubmissionEntity> items=submissions
-            .findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullOrderBySubmittedAtAsc(ReviewStatus.APPROVED,PageRequest.of(0,limit));
-        if(items.isEmpty()) throw bad("NO_PHOTOS","There are no approved photos waiting.");
+            .findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullAndStoredFilenameIsNotNullOrderBySubmittedAtAscIdAsc(ReviewStatus.APPROVED,PageRequest.of(0,limit));
+        if(items.isEmpty()) throw bad("NO_PHOTOS","There are no approved photos with available artwork waiting.");
         if(items.size()<limit&&!includeRemainder) throw bad("REMAINDER_CONFIRMATION_REQUIRED",
             items.size()+" photos remain. Choose “Include remaining photos” to create a smaller ZIP.");
         return buildBatch(user(actorId),items);
@@ -416,7 +619,7 @@ public class KidsChampAdminService {
 
     @Transactional
     public BatchResponse createSelectedBatch(UUID actorId,List<UUID> ids,String reason){
-        if(ids==null||ids.isEmpty()||ids.size()>500) throw bad("SUBMISSION_SELECTION_INVALID","Select between 1 and 500 submissions.");
+        if(ids==null||ids.isEmpty()) throw bad("SUBMISSION_SELECTION_INVALID","Select at least one submission.");
         if(reason!=null&&reason.isBlank())throw bad("RECOVERY_REASON_REQUIRED","Add a reason for manual ZIP recovery.");
         List<KidsChampSubmissionEntity> items=submissions.findAllByPublicIdInAndDeletedAtIsNull(new LinkedHashSet<>(ids));
         if(items.size()!=new HashSet<>(ids).size()) throw bad("SUBMISSION_NOT_FOUND","One or more selected submissions were not found.");
@@ -425,49 +628,98 @@ public class KidsChampAdminService {
             if(item.getBatch()!=null) throw bad("ALREADY_BATCHED",item.getTrackingCode()+" is already in a ZIP batch.");
             if(item.getStoredFilename()==null) throw bad("PHOTO_NOT_AVAILABLE",item.getTrackingCode()+" has no available photo.");
         }
-        items.sort(Comparator.comparing(KidsChampSubmissionEntity::getSubmittedAt));
+        items.sort(Comparator.comparing(KidsChampSubmissionEntity::getSubmittedAt).thenComparing(KidsChampSubmissionEntity::getPublicId));
         UserEntity actor=user(actorId);BatchResponse response=buildBatch(actor,items);
         if(reason!=null)audit(actor,"MANUAL_ZIP_RECOVERY","BATCH",response.id(),reason.trim());
         return response;
     }
 
     private BatchResponse buildBatch(UserEntity actor,List<KidsChampSubmissionEntity> items){
+        items=new ArrayList<>(items);
+        items.sort(Comparator.comparing(KidsChampSubmissionEntity::getSubmittedAt).thenComparing(KidsChampSubmissionEntity::getPublicId));
+        KidsChampSettingsEntity settingsSnapshot=settings.findById((short)1).orElseThrow();
+        int retentionDays=settingsSnapshot.getZipExpiryDays();
+        int warningDays=settingsSnapshot.getZipWarningDays();
         KidsChampBatchEntity batch=new KidsChampBatchEntity();
-        batch.setBatchCode(newBatchCode());batch.setPhotoCount(items.size());batch.setCreatedBy(actor);batches.save(batch);
-        Path archive=storage.archive(batch.getBatchCode());
+        batch.setBatchCode(newBatchCode());batch.setPhotoCount(items.size());batch.setCreatedBy(actor);
+        batch.setRetentionPolicy(retentionDays,warningDays);batches.save(batch);
+        Path archive=null;
+        try{
+            archive=storage.archive(batch.getBatchCode());
+            writeArchive(archive,items);
+        }catch(IOException exception){
+            if(archive!=null) storage.deletePath(archive.toString());
+            batches.delete(batch);
+            throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR,"ZIP_FAILED","The ZIP could not be created.");
+        }catch(ApiException exception){
+            if(archive!=null) storage.deletePath(archive.toString());
+            batches.delete(batch);
+            throw exception;
+        }
+        for(KidsChampSubmissionEntity item:items)item.setBatch(batch);
+        batch.setArchivePath(archive.toString());batch.startRetention(retentionDays);
+        audit(actor,"BATCH_CREATED","BATCH",batch.getPublicId(),"Photos: "+items.size()+"; expires after "+retentionDays+" days");
+        return response(batch);
+    }
+
+    private void writeArchive(Path archive,List<KidsChampSubmissionEntity> items) throws IOException{
         try(ZipOutputStream zip=new ZipOutputStream(Files.newOutputStream(archive))){
             StringBuilder csv=new StringBuilder("tracking_code,child_name,date_of_birth,age,parent_name,email,mobile,country,province,hometown,title\n");
             int index=1;
             for(KidsChampSubmissionEntity item:items){
-                String ext=item.getMediaType().equals("image/png")?".png":".jpg";
-                String photoName=String.format("%03d_%s_%d_%s%s",index++,safeZipPart(item.getChildName()),
-                    item.getAgeAtSubmission(),safeZipPart(item.getHometown()),ext);
-                zip.putNextEntry(new ZipEntry(photoName));
-                Files.copy(storage.photo(item.getStoredFilename()),zip);zip.closeEntry();
+                Path source=storage.photo(item.getStoredFilename());
+                zip.putNextEntry(new ZipEntry(zipPhotoName(index++,item.getChildName(),item.getHometown())));
+                writePng(source,zip,item.getTrackingCode());
+                zip.closeEntry();
                 csv.append(csv(item.getTrackingCode())).append(',').append(csv(item.getChildName())).append(',')
                     .append(item.getDateOfBirth()).append(',').append(item.getAgeAtSubmission()).append(',')
                     .append(csv(item.getParentName())).append(',').append(csv(item.getEmail())).append(',')
                     .append(csv(item.getPhoneE164())).append(',').append(csv(item.getCountryCode())).append(',')
                     .append(csv(item.getProvince())).append(',').append(csv(item.getHometown())).append(',')
                     .append(csv(item.getWorkTitle())).append('\n');
-                item.setBatch(batch);
             }
             zip.putNextEntry(new ZipEntry("submissions.csv"));
             zip.write(csv.toString().getBytes(StandardCharsets.UTF_8));zip.closeEntry();
-        }catch(IOException exception){storage.deletePath(archive.toString());throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR,"ZIP_FAILED","The ZIP could not be created.");}
-        batch.setArchivePath(archive.toString());audit(actor,"BATCH_CREATED","BATCH",batch.getPublicId(),"Photos: "+items.size());
-        return response(batch);
+        }
+    }
+
+    private boolean archiveUsesCurrentNames(Path archive,List<KidsChampSubmissionEntity> items){
+        try(ZipFile zip=new ZipFile(archive.toFile())){
+            if(zip.getEntry("submissions.csv")==null)return false;
+            for(int index=0;index<items.size();index++){
+                KidsChampSubmissionEntity item=items.get(index);
+                if(zip.getEntry(zipPhotoName(index+1,item.getChildName(),item.getHometown()))==null)return false;
+            }
+            return true;
+        }catch(IOException exception){return false;}
+    }
+
+    private void replaceArchive(Path archive,List<KidsChampSubmissionEntity> items) throws IOException{
+        Path parent=archive.toAbsolutePath().normalize().getParent();
+        Path temporary=Files.createTempFile(parent,"kids-champ-zip-",".tmp");
+        try{
+            writeArchive(temporary,items);
+            try{Files.move(temporary,archive,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);}
+            catch(AtomicMoveNotSupportedException exception){Files.move(temporary,archive,StandardCopyOption.REPLACE_EXISTING);}
+        }finally{Files.deleteIfExists(temporary);}
     }
 
     @Transactional(readOnly=true)
-    public List<BatchResponse> batches(){return batches.findAllByOrderByCreatedAtDesc().stream().map(this::response).toList();}
+    public List<BatchResponse> batches(){
+        int defaultExpiry=settings.findById((short)1).orElseThrow().getZipExpiryDays();
+        return batches.findAllByOrderByCreatedAtDescIdDesc().stream().filter(batch->batch.getPurgedAt()==null).map(batch->response(batch,defaultExpiry)).toList();
+    }
 
     @Transactional(readOnly=true)
     public ZipProgressResponse zipProgress(){
         KidsChampSettingsEntity entity=settings.findById((short)1).orElseThrow();
-        int ready=submissions.findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullOrderBySubmittedAtAsc(ReviewStatus.APPROVED,PageRequest.of(0,500)).size();
+        long ready=eligibleZipPhotoCount();
         int target=entity.getActiveZipTargetSize()==null?entity.getZipBatchSize():entity.getActiveZipTargetSize();
         return new ZipProgressResponse(ready,target,entity.getZipBatchSize(),entity.getActiveZipStartedAt());
+    }
+
+    private long eligibleZipPhotoCount(){
+        return submissions.countByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullAndStoredFilenameIsNotNull(ReviewStatus.APPROVED);
     }
 
     @Transactional
@@ -476,7 +728,14 @@ public class KidsChampAdminService {
         if(batch.getDeletedAt()!=null||batch.getArchivePath()==null) throw new ApiException(HttpStatus.GONE,"BATCH_DELETED","This ZIP has been deleted.");
         Path file=Paths.get(batch.getArchivePath());
         if(!Files.isRegularFile(file)) throw new ApiException(HttpStatus.GONE,"BATCH_FILE_MISSING","This ZIP is no longer available.");
-        boolean first=batch.getFirstDownloadedAt()==null;batch.markDownloaded();
+        List<KidsChampSubmissionEntity> items=submissions.findAllByBatchPublicIdOrderBySubmittedAtAscIdAsc(id);
+        if(!archiveUsesCurrentNames(file,items))try{
+            replaceArchive(file,items);
+            audit(actor,"BATCH_ARCHIVE_RENAMED","BATCH",id,"Photo names updated to id_name_hometown");
+        }catch(IOException exception){throw new ApiException(HttpStatus.INTERNAL_SERVER_ERROR,"ZIP_REBUILD_FAILED","The ZIP could not be prepared for download.");}
+        boolean first=batch.getFirstDownloadedAt()==null;
+        int retentionDays=settings.findById((short)1).orElseThrow().getZipExpiryDays();
+        batch.markDownloaded(retentionDays);
         if(first) audit(actor,"BATCH_FIRST_DOWNLOAD","BATCH",id,"Deletes at "+batch.getDeleteAfter());
         return new Download(file,batch.getBatchCode()+".zip");
     }
@@ -487,10 +746,10 @@ public class KidsChampAdminService {
         if(date.isBefore(LocalDate.now(ZoneId.of("Asia/Colombo"))))throw bad("TELECAST_DATE_PAST","Choose today or a future telecast date.");
         if(alternate!=null&&alternate.isBefore(date))throw bad("ALTERNATE_TELECAST_INVALID","The backup telecast date cannot be before the scheduled date.");
         UserEntity actor=user(actorId);KidsChampBatchEntity batch=batch(id);int limit=settings.findById((short)1).orElseThrow().getDailyTelecastLimit();
-        long scheduled=batches.findAllByOrderByCreatedAtDesc().stream().filter(value->value.getDeletedAt()==null&&!value.getPublicId().equals(id)&&date.equals(value.getTelecastDate())).count();
+        long scheduled=batches.findAllByOrderByCreatedAtDescIdDesc().stream().filter(value->value.getDeletedAt()==null&&!value.getPublicId().equals(id)&&date.equals(value.getTelecastDate())).count();
         if(scheduled>=limit)throw bad("TELECAST_DAILY_LIMIT","The daily telecast limit of "+limit+" scheduled ZIPs has been reached.");
         batch.schedule(date,alternate);
-        for(KidsChampSubmissionEntity item:submissions.findAllByBatchPublicIdOrderBySubmittedAtAsc(id)){
+        for(KidsChampSubmissionEntity item:submissions.findAllByBatchPublicIdOrderBySubmittedAtAscIdAsc(id)){
             item.scheduleTelecast();
             notify(item,"Kids Champ telecast scheduled","Telecast date: "+date+(alternate==null?"":" (alternative: "+alternate+")"));
         }
@@ -500,7 +759,7 @@ public class KidsChampAdminService {
     @Transactional
     public BatchResponse completeTelecast(UUID actorId,UUID id){
         UserEntity actor=user(actorId);KidsChampBatchEntity batch=batch(id);batch.completeTelecast();
-        for(KidsChampSubmissionEntity item:submissions.findAllByBatchPublicIdOrderBySubmittedAtAsc(id))item.markTelecasted();
+        for(KidsChampSubmissionEntity item:submissions.findAllByBatchPublicIdOrderBySubmittedAtAscIdAsc(id))item.markTelecasted();
         audit(actor,"TELECAST_COMPLETED","BATCH",id,batch.getTelecastDate().toString());return response(batch);
     }
 
@@ -520,12 +779,37 @@ public class KidsChampAdminService {
         deleteBatch(batch,user(actorId),"Manual administrator deletion");
     }
 
-    @Scheduled(cron="0 30 3 * * *",zone="Asia/Colombo") @Transactional
-    public void deleteExpired(){for(KidsChampBatchEntity batch:batches.findAllByDeleteAfterBeforeAndDeletedAtIsNull(Instant.now())) deleteBatch(batch,null,"Automatic 10-day retention deletion");}
+    @Transactional
+    public void clearBatchBin(UUID actorId,List<UUID> ids){
+        if(ids==null||ids.isEmpty()||ids.size()>500) throw bad("BATCH_SELECTION_INVALID","Select between 1 and 500 ZIP records to clear.");
+        UserEntity actor=user(actorId);
+        for(UUID id:new LinkedHashSet<>(ids)){
+            KidsChampBatchEntity batch=batch(id);
+            if(batch.getDeletedAt()==null) throw bad("BATCH_NOT_IN_BIN",batch.getBatchCode()+" must be moved to the ZIP Bin before it can be cleared.");
+            if(batch.getPurgedAt()!=null) continue;
+            batch.markPurged();audit(actor,"BATCH_BIN_CLEARED","BATCH",id,"Permanently cleared from the ZIP Bin");
+        }
+    }
+
+    /** Resumes any eligible queue left over after an application restart. */
+    @Transactional
+    public void processAutomaticZips(UUID actorId){createAutomaticZips(user(actorId));}
+
+    /** Processes a retained queue after startup even when no administrator action is occurring. */
+    @Transactional
+    public void processAutomaticZips(){
+        UserEntity actor=users.findAll().stream()
+            .filter(value->value.getRoles().stream().anyMatch(role->"ROLE_ADMIN".equals(role.getName())||"ROLE_SUPER_ADMIN".equals(role.getName())))
+            .findFirst().orElse(null);
+        if(actor!=null) createAutomaticZips(actor);
+    }
+
+    @Scheduled(cron="0 */15 * * * *",zone="Asia/Colombo") @Transactional
+    public void deleteExpired(){for(KidsChampBatchEntity batch:batches.findAllByDeleteAfterBeforeAndDeletedAtIsNull(Instant.now())) deleteBatch(batch,null,"Automatic ZIP retention deletion");}
 
     private void deleteBatch(KidsChampBatchEntity batch,UserEntity actor,String reason){
         storage.deletePath(batch.getArchivePath());
-        for(KidsChampSubmissionEntity item:submissions.findAllByBatchPublicIdOrderBySubmittedAtAsc(batch.getPublicId())){
+        for(KidsChampSubmissionEntity item:submissions.findAllByBatchPublicIdOrderBySubmittedAtAscIdAsc(batch.getPublicId())){
             storage.delete(item.getStoredFilename());item.markPhotoDeleted();
         }
         batch.markDeleted(actor);audit(actor,"BATCH_DELETED","BATCH",batch.getPublicId(),reason);
@@ -535,10 +819,14 @@ public class KidsChampAdminService {
         events.publishEvent(new KidsChampStatusEmailRequested(item.getEmail(),item.getChildName(),item.getTrackingCode(),title,message));
     }
     private BatchResponse response(KidsChampBatchEntity b){
-        long days=b.getDeleteAfter()==null?10:Math.max(0,(long)Math.ceil(Duration.between(Instant.now(),b.getDeleteAfter()).toHours()/24.0));
+        int defaultExpiry=settings.findById((short)1).orElseThrow().getZipExpiryDays();
+        return response(b,defaultExpiry);
+    }
+    private BatchResponse response(KidsChampBatchEntity b,int defaultExpiry){
+        long days=b.getDeleteAfter()==null?defaultExpiry:Math.max(0,(long)Math.ceil(Duration.between(Instant.now(),b.getDeleteAfter()).toHours()/24.0));
         return new BatchResponse(b.getPublicId(),b.getBatchCode(),b.getStatus(),b.getPhotoCount(),b.getFirstDownloadedAt(),b.getEditedAt(),
             b.getDeleteAfter(),days,b.getTelecastDate(),b.getAlternateTelecastDate(),b.getTelecastCompletedAt(),b.getCreatedAt(),b.getDeletedAt(),
-            submissions.findAllByBatchPublicIdOrderBySubmittedAtAsc(b.getPublicId()).stream().map(KidsChampSubmissionEntity::getPublicId).toList());
+            submissions.findAllByBatchPublicIdOrderBySubmittedAtAscIdAsc(b.getPublicId()).stream().map(KidsChampSubmissionEntity::getPublicId).toList());
     }
     private UserEntity user(UUID id){return users.findByPublicId(id).orElseThrow(()->bad("ACCOUNT_NOT_FOUND","Account not found."));}
     private KidsChampSubmissionEntity submission(UUID id){return submissions.findByPublicId(id).orElseThrow(()->new ApiException(HttpStatus.NOT_FOUND,"SUBMISSION_NOT_FOUND","Submission not found."));}
@@ -547,9 +835,17 @@ public class KidsChampAdminService {
     private void audit(UserEntity actor,String action,String type,UUID id,String details){KidsChampAuditEntity a=new KidsChampAuditEntity();a.setActor(actor);a.setAction(action);a.setEntityType(type);a.setEntityPublicId(id);a.setDetails(details);audits.save(a);liveUpdates.publish(action,type,id);}
     private String newBatchCode(){String code;do{code="KCZIP-"+LocalDate.now().toString().replace("-","")+"-"+UUID.randomUUID().toString().substring(0,6).toUpperCase();}while(batches.existsByBatchCode(code));return code;}
     private String csv(String value){if(value==null)return "";return "\""+value.replace("\"","\"\"")+"\"";}
-    private String safeZipPart(String value){
-        String cleaned=value==null?"Unknown":value.trim().replaceAll("[^\\p{L}\\p{N}._-]+","-").replaceAll("-+","-");
-        cleaned=cleaned.replaceAll("^[.-]+|[.-]+$","");
+    static String zipPhotoName(int index,String childName,String hometown){
+        return String.format("%03d_%s_%s.png",index,safeZipPart(childName),safeZipPart(hometown));
+    }
+    static void writePng(Path source,OutputStream target,String trackingCode) throws IOException{
+        BufferedImage image=ImageIO.read(source.toFile());
+        if(image==null)throw new IOException("Unsupported or unreadable image: "+trackingCode);
+        if(!ImageIO.write(image,"png",target))throw new IOException("PNG conversion is unavailable.");
+    }
+    private static String safeZipPart(String value){
+        String cleaned=value==null?"Unknown":value.trim().replaceAll("[^\\p{L}\\p{N} -]+"," ").replaceAll("\\s+"," ").replaceAll("-+","-");
+        cleaned=cleaned.replaceAll("^[ -]+|[ -]+$","");
         return cleaned.isBlank()?"Unknown":cleaned.substring(0,Math.min(cleaned.length(),60));
     }
     private boolean same(String a,String b){return a!=null&&b!=null&&!a.isBlank()&&a.trim().equalsIgnoreCase(b.trim());}
@@ -558,23 +854,41 @@ public class KidsChampAdminService {
     private UUID first(UUID a,UUID b){return a.toString().compareTo(b.toString())<0?a:b;}
     private UUID second(UUID a,UUID b){return a.toString().compareTo(b.toString())<0?b:a;}
     private ApiException bad(String c,String m){return new ApiException(HttpStatus.BAD_REQUEST,c,m);}
+    private CampaignResponse campaignResponse(KidsChampMessageCampaignEntity campaign){KidsChampWhatsAppCampaignStatus.Counts c=whatsappCampaignStatus.counts(campaign);return new CampaignResponse(campaign.getPublicId(),campaign.getChannel(),campaign.getStatus(),campaign.getRecipientCount(),campaign.getMessageTemplate(),campaign.getName(),campaign.getSource(),campaign.getTemplateName(),campaign.getLanguageCode(),c.queued(),c.sending(),c.accepted(),c.delivered(),c.read(),c.failed(),c.ignored(),campaign.getCreatedAt(),campaign.getCompletedAt());}
     public record BatchResponse(UUID id,String batchCode,String status,int photoCount,Instant firstDownloadedAt,Instant editedAt,Instant deleteAfter,long daysRemaining,LocalDate telecastDate,LocalDate alternateTelecastDate,Instant telecastCompletedAt,Instant createdAt,Instant deletedAt,List<UUID> submissionIds){}
-    public record ZipProgressResponse(int readyPhotos,int activeTargetSize,int nextTargetSize,Instant activeStartedAt){}
+    public record ZipProgressResponse(long readyPhotos,int activeTargetSize,int nextTargetSize,Instant activeStartedAt){}
     public record Download(Path path,String filename){}
     public record Photo(Path path,String filename,String mediaType){}
     public record GuestResponse(UUID id,String parentName,String mobile,String email,String countryCode,String province,
         String hometown,int submissionCount,Instant firstSubmittedAt,Instant lastSubmittedAt){}
     public record DuplicateGuestResponse(UUID firstId,UUID secondId,String firstName,String secondName,String firstPhone,String secondPhone,String firstHometown,String secondHometown,int firstSubmissions,int secondSubmissions,List<String> reasons,String matchType){}
-    public record ParticipantResponse(UUID id,String name,int age,String type,String location,String phone,long submissions,long approved,long telecasted,Instant joinedAt,Instant lastSubmissionAt,boolean whatsappConsented){}
-    public record ApprovalResponse(int approvedCount,int alreadyApprovedCount){}
+    public record ParticipantResponse(UUID id,String name,int age,LocalDate dateOfBirth,String type,String location,String phone,boolean phoneEditable,long submissions,long approved,long telecasted,Instant joinedAt,Instant lastSubmissionAt,boolean whatsappConsented,String whatsappConsentStatus){}
+    public record ApprovalResponse(int approvedCount,int alreadyApprovedCount,String zipWarning){}
+    public record PurgeResponse(int deletedSubmissions,int deletedBatches,int deletedAuditEntries){}
+    public record AccountDataPurgeResult(int deletedSubmissions,int deletedChildProfiles,int deletedGuestChildProfiles,int invalidatedZipArchives){}
+    private record ZipProcessingResult(String warning){
+        static ZipProcessingResult withUnavailable(List<String> trackingCodes){
+            if(trackingCodes.isEmpty()) return new ZipProcessingResult(null);
+            String codes=String.join(", ",trackingCodes.stream().limit(3).toList());
+            String more=trackingCodes.size()>3?" and "+(trackingCodes.size()-3)+" more":"";
+            return new ZipProcessingResult("ZIP processing needs attention for "+codes+more+". Those submissions remain approved; their artwork was removed from ZIP processing.");
+        }
+    }
     public record SubmissionPageResponse(List<KidsChampAdminSubmissionResponse> items,int page,int size,long totalItems,int totalPages){}
     public record OverviewResponse(long totalSubmissions,long newToday,long pendingReviews,long approved,long selectedForTv,long telecasted,long uniqueParticipants,long activeBatches){}
-    public record SettingsRequest(List<String> categories,int maxFileSizeMb,String allowedFileTypes,int minimumAge,int maximumAge,int dailyTelecastLimit,LocalTime defaultTelecastTime,int zipBatchSize,int zipExpiryDays,int zipWarningDays,int frequentParticipantThreshold,boolean requireWhatsAppConsent,int campaignLimit,String defaultMessage){}
+    public enum ZipQueueCountPolicy { KEEP_CURRENT, APPLY_NEW }
+    public record SettingsRequest(List<String> categories,int maxFileSizeMb,String allowedFileTypes,int minimumAge,int maximumAge,int dailyTelecastLimit,LocalTime defaultTelecastTime,int zipBatchSize,int zipExpiryDays,int zipWarningDays,int frequentParticipantThreshold,boolean requireWhatsAppConsent,int campaignLimit,String defaultMessage,ZipQueueCountPolicy zipQueueCountPolicy){
+        public SettingsRequest(List<String> categories,int maxFileSizeMb,String allowedFileTypes,int minimumAge,int maximumAge,int dailyTelecastLimit,LocalTime defaultTelecastTime,int zipBatchSize,int zipExpiryDays,int zipWarningDays,int frequentParticipantThreshold,boolean requireWhatsAppConsent,int campaignLimit,String defaultMessage){
+            this(categories,maxFileSizeMb,allowedFileTypes,minimumAge,maximumAge,dailyTelecastLimit,defaultTelecastTime,zipBatchSize,zipExpiryDays,zipWarningDays,frequentParticipantThreshold,requireWhatsAppConsent,campaignLimit,defaultMessage,null);
+        }
+    }
     public record SettingsResponse(List<String> categories,int maxFileSizeMb,String allowedFileTypes,int minimumAge,int maximumAge,int dailyTelecastLimit,LocalTime defaultTelecastTime,int zipBatchSize,int zipExpiryDays,int zipWarningDays,int frequentParticipantThreshold,boolean requireWhatsAppConsent,int campaignLimit,String defaultMessage,Instant updatedAt){
         static SettingsResponse from(KidsChampSettingsEntity e){return new SettingsResponse(Arrays.stream(e.getCategories().split(",")).map(String::trim).filter(v->!v.isEmpty()).toList(),e.getMaxFileSizeMb(),e.getAllowedFileTypes(),e.getMinimumAge(),e.getMaximumAge(),e.getDailyTelecastLimit(),e.getDefaultTelecastTime(),e.getZipBatchSize(),e.getZipExpiryDays(),e.getZipWarningDays(),e.getFrequentParticipantThreshold(),e.isRequireWhatsAppConsent(),e.getCampaignLimit(),e.getDefaultMessage(),e.getUpdatedAt());}}
     public record CalendarTaskResponse(UUID id,LocalDate date,String title,String details,Instant completedAt,Instant createdAt){static CalendarTaskResponse from(KidsChampCalendarTaskEntity e){return new CalendarTaskResponse(e.getPublicId(),e.getTaskDate(),e.getTitle(),e.getDetails(),e.getCompletedAt(),e.getCreatedAt());}}
     public record ActivityResponse(String action,String entityType,UUID entityId,String details,String actor,Instant createdAt){}
     public record GrowthResponse(LocalDate date,long submissions,long participants){}
-    public record CampaignResponse(UUID id,String channel,String status,int recipientCount,String messageTemplate,Instant createdAt){static CampaignResponse from(KidsChampMessageCampaignEntity e){return new CampaignResponse(e.getPublicId(),e.getChannel(),e.getStatus(),e.getRecipientCount(),e.getMessageTemplate(),e.getCreatedAt());}}
-    public record MessageRecipientResponse(Long id,String name,String destination,String status,int attempts,String failureReason,Instant sentAt){static MessageRecipientResponse from(KidsChampMessageRecipientEntity e){return new MessageRecipientResponse(e.getId(),e.getParticipantName(),e.getDestination(),e.getStatus(),e.getAttempts(),e.getFailureReason(),e.getSentAt());}}
+    public record CampaignResponse(UUID id,String channel,String status,int recipientCount,String messageTemplate,String name,String source,String templateName,String languageCode,long queuedCount,long sendingCount,long acceptedCount,long deliveredCount,long readCount,long failedCount,long ignoredCount,Instant createdAt,Instant completedAt){}
+    public record MessageRecipientResponse(Long id,UUID participantId,String name,String destination,String status,int attempts,String failureReason,Instant sentAt,Instant lastAttemptAt,Instant nextAttemptAt,Instant deliveredAt,Instant readAt){static MessageRecipientResponse from(KidsChampMessageRecipientEntity e){return new MessageRecipientResponse(e.getId(),e.getParticipantReference(),e.getParticipantName(),e.getDestination(),e.getStatus(),e.getAttempts(),e.getFailureReason(),e.getSentAt(),e.getLastAttemptAt(),e.getNextAttemptAt(),e.getDeliveredAt(),e.getReadAt());}}
+    public record DeliveryEventResponse(Long id,String status,String providerStatus,int attempt,String details,Instant providerTimestamp,Instant occurredAt){static DeliveryEventResponse from(KidsChampMessageDeliveryEventEntity e){return new DeliveryEventResponse(e.getId(),e.getStatus(),e.getProviderStatus(),e.getAttempt(),e.getDetails(),e.getProviderTimestamp(),e.getOccurredAt());}}
+    public record WhatsAppPreferenceResponse(UUID participantId,String status,String source,String reason,Instant optedInAt,Instant optedOutAt,Instant updatedAt){static WhatsAppPreferenceResponse from(KidsChampWhatsAppPreferenceEntity e){return new WhatsAppPreferenceResponse(e.getParticipantReference(),e.getStatus(),e.getSource(),e.getReason(),e.getOptedInAt(),e.getOptedOutAt(),e.getUpdatedAt());}}
 }

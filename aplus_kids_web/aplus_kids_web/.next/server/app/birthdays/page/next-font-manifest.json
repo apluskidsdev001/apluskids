@@ -1,0 +1,12 @@
+{
+  "pages": {},
+  "app": {
+    "[project]/src/app/birthdays/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf"
+    ]
+  },
+  "appUsingSizeAdjust": true,
+  "pagesUsingSizeAdjust": false
+}

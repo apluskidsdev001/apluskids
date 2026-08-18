@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/admin/layout,_N_T_/admin/account-management/layout,_N_T_/admin/account-management/page,_N_T_/admin/account-management"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/admin/account-management/__PAGE__",
+    "/admin/account-management",
+    "/admin",
+    "/_index",
+    "/_head"
+  ]
+}

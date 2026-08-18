@@ -9,4 +9,5 @@ public interface ProfileActionCodeRepository extends JpaRepository<ProfileAction
     Optional<ProfileActionCodeEntity> findByCodeHash(String codeHash);
     List<ProfileActionCodeEntity> findAllByUserIdAndPurposeAndConsumedAtIsNullAndRevokedAtIsNull(Long userId, ProfileActionPurpose purpose);
     boolean existsByCodeHash(String codeHash);
+    void deleteAllByUserIdIn(java.util.Collection<Long> userIds);
 }

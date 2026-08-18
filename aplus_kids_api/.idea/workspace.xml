@@ -1,0 +1,364 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="876e7350-aa46-4389-b346-4fdb97a148c5" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/adminmanagement/AccountManagementAdminController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/adminmanagement/AccountManagementAdminController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampAdminController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampAdminController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampAdminService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampAdminService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampBatchEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampBatchEntity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampDemoSeeder.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampMessageCampaignEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampMessageCampaignEntity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampMessageRecipientEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampMessageRecipientEntity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampRepositories.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampRepositories.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampSettingsEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampSettingsEntity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampStorage.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampStorage.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampSubmissionEntity.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampSubmissionEntity.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampWhatsAppAdminService.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampWhatsAppAdminService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampWhatsAppWebhookController.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/KidsChampWhatsAppWebhookController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/WhatsAppCloudDelivery.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/kidschamp/WhatsAppCloudDelivery.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/security/SecurityConfiguration.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/security/SecurityConfiguration.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/user/UserRepository.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/main/java/lk/apluskids/platform/user/UserRepository.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/test/java/lk/apluskids/platform/kidschamp/KidsChampBulkWorkflowTests.java" beforeDir="false" afterPath="$PROJECT_DIR$/src/test/java/lk/apluskids/platform/kidschamp/KidsChampBulkWorkflowTests.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/.github/workflows/deploy-pages.yml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/../aplus_kids_web/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/APP_FUNCTIONALITY.txt" beforeDir="false" afterPath="$PROJECT_DIR$/../aplus_kids_web/APP_FUNCTIONALITY.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/../aplus_kids_web/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/eslint.config.mjs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/next.config.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/package-lock.json" beforeDir="false" afterPath="$PROJECT_DIR$/../aplus_kids_web/package-lock.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/package.json" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/postcss.config.mjs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/.nojekyll" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/audios/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/file.svg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka-Bold.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka-Light.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka-Medium.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka-Regular.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka-SemiBold.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka-VariableFont_wdth,wght.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_Condensed-Bold.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_Condensed-Light.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_Condensed-Medium.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_Condensed-Regular.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_Condensed-SemiBold.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_Expanded-Bold.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_Expanded-Light.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_Expanded-Medium.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_Expanded-Regular.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_Expanded-SemiBold.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_SemiCondensed-Bold.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_SemiCondensed-Light.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_SemiCondensed-Medium.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_SemiCondensed-Regular.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_SemiCondensed-SemiBold.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_SemiExpanded-Bold.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_SemiExpanded-Light.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_SemiExpanded-Medium.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_SemiExpanded-Regular.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/fonts/Fredoka_SemiExpanded-SemiBold.ttf" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/globe.svg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/admin-sidebar/account.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/admin-sidebar/dashboard.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/admin-sidebar/footer.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/admin-sidebar/kids-champ.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/admin-sidebar/kids-zone.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/admin-sidebar/watch.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/kids-champ/activity.gif" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/kids-champ/approved.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/kids-champ/calendar.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/kids-champ/new-submission.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/kids-champ/participants.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/kids-champ/programme-summary.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/kids-champ/review.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/kids-champ/telecast.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/kids-champ/whatsapp.gif" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/kids-champ/zip.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/profile-menu/dashboard.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/profile-menu/edit-profile.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/profile-menu/logout.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/profile-menu/notifications.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/profile-menu/settings.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/shortcuts/Arrow 1.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/shortcuts/KidsChamp.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/shortcuts/cake.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/shortcuts/gallery.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/shortcuts/market.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/taskBar/home.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/taskBar/home.webp" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/taskBar/info.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/taskBar/kidsZone.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/taskBar/live.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/taskBar/logo.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/taskBar/market.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/taskBar/play.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/taskBar/profile.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/taskBar/search.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/taskBar/time.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/icons/taskBar/watch.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/KidsZone/kids_champ.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/birthday/chatbot.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/birthday/wback.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/brand/a-plus-logo.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/footer/call.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/footer/email.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/footer/footer-pic.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/footer/location.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/footer/logo3.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/home/birthday pic.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/home/kids_champ.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/kidschamp/kcback.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/login/Gemini_Generated_Image_p1rgy1p1rgy1p1rg 1.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/market/Products/Product1.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/market/Products/Product10.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/market/Products/Product11.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/market/Products/Product2.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/market/Products/Product3.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/market/Products/Product4.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/market/Products/Product5.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/market/Products/Product6.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/market/Products/Product7.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/market/Products/Product8.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/market/Products/Product9.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/market/advertisements/Advertisement1.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/market/hero/hero1.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/market/hero/hero2.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/market/hero/hero3.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/market/hero/hero4.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/profile/ChatGPT Image May 20, 2026, 05_49_37 PM 1.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/profile/ChatGPT Image May 21, 2026, 01_12_37 PM 1.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/profile/ChatGPT Image May 21, 2026, 09_58_18 AM 1.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/profile/ChatGPT Image May 21, 2026, 12_27_21 PM 1.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/profile/Hero.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/profile/Hero1.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/profile/Profile pic.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/thumbnails/special-events/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/thumbnails/trailers/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/thumbnails/tv-schedule/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/watch/categoris/education (1).png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/watch/categoris/education (2).png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/watch/categoris/education (3).png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/watch/categoris/education (4).png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/watch/categoris/education (5).png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/watch/categoris/education (6).png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/images/watch/categoris/wt.png" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/next.svg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/vercel.svg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/videos/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/videos/home/hero_video.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/videos/kidszone-hero/cake.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/videos/kidszone-hero/kidszone_hero.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/videos/kidszone-hero/kidzChamp.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/videos/watch/watchhero.mp4" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/public/window.svg" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/scripts/ngrok-dev-proxy.mjs" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/admin/ADMIN_PANEL_GUIDE.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/admin/account-management/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/admin/footer/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/admin/home/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/admin/kids-champ/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/admin/kids-zone/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/admin/layout.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/admin/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/admin/watch/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/birthdays/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/favicon.ico" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/fonts.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/globals.css" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/info/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/kids-champ/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/kids-zone/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/layout.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/login/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/market/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/profile/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/register/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/reset-password/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/search/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/verify-email/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/app/watch/page.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/assets/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/Advertisements/AdvertisementBox.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/admin/AdminShell.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/admin/ContentPageAdmin.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/admin/HomeAdmin.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/admin/KidsChampAdmin.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/admin/KidsChampConfirmationDialog.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/admin/KidsChampStatusBadge.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/admin/KidsChampWhatsAppIcon.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/admin/PublishAllButton.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/admin/WatchAdmin.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/admin/adminData.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/admin/useAdminStorage.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/animations/ScrollRevealObserver.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/auth/LoginPage.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/auth/RegisterPage.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/auth/ResetPasswordPage.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/auth/VerifyEmailPage.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/birthday/Birthday.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/home/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/home/Home.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/home/sections/HeroSection.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/home/sections/Shortcuts.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/info/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/kids-zone/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/kids-zone/KidsZonePage.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/kids-zone/sections/BirthdaySection.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/kids-zone/sections/EventsSection.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/kids-zone/sections/KidsChampSection.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/kids-zone/sections/KidsZoneHero.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/kidschamp/KidsChamp.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/layout/AppFooter.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/layout/BackendLoadingOverlay.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/layout/Footer.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/layout/Navbar.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/market/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/market/Market.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/market/MarketPage/BottomParts.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/market/MarketPage/Categories.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/market/MarketPage/HeroSection.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/market/MarketPage/Products.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/market/MarketPage/TopParts.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/market/ProductDetails/ProductDetails.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/profile/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/profile/ProfileDashboard.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/search/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/specialEvents/SpecialEventCard.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/specialEvents/SpecialEventPopup.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/specialEvents/SpecialEventsSection.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/taskBar/TaskBar.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/trailers/TrailerCard.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/trailers/TrailerPopup.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/trailers/TrailersSection.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/trailers/youtube.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/tvSchedule/TVScheduleCard.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/tvSchedule/TVSchedulePopup.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/tvSchedule/TVScheduleSection.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/watch/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/components/watch/Watch.tsx" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/constants/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/data/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/hooks/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/services/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/store/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/styles/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/types/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/utils/.gitkeep" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/utils/auth.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/utils/backendActivity.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/utils/countries.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/src/utils/sitePath.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/../aplus_kids_web/tsconfig.json" beforeDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/.." />
+  </component>
+  <component name="MavenImportPreferences">
+    <option name="generalSettings">
+      <MavenGeneralSettings>
+        <option name="mavenHomeTypeForPersistence" value="WRAPPER" />
+      </MavenGeneralSettings>
+    </option>
+  </component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 1,
+  &quot;fromUser&quot;: false
+}</component>
+  <component name="ProjectId" id="3GwVmn6QBi408OGAfKmC2cTS4Lo" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RequestMappingsPanelOrder0": "0",
+    "RequestMappingsPanelOrder1": "1",
+    "RequestMappingsPanelWidth0": "75",
+    "RequestMappingsPanelWidth1": "75",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "Spring Boot.AplusKidsApiApplication.executor": "Run",
+    "Spring Boot.Unnamed.executor": "Run",
+    "codeWithMe.voiceChat.enabledByDefault": "false",
+    "git-widget-placeholder": "kawshal/deployee",
+    "ignore.virus.scanning.warn.message": "true",
+    "kotlin-language-version-configured": "true",
+    "last_opened_file_path": "D:/2026/apluskids/aplus_kids_api",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "settings.editor.selected.configurable": "preferences.pluginManager",
+    "vue.rearranger.settings.migration": "true"
+  }
+}]]></component>
+  <component name="RunManager">
+    <configuration name="AplusKidsApiApplication" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot" nameIsGenerated="true">
+      <option name="ALTERNATIVE_JRE_PATH" value="21" />
+      <module name="aplus-kids-api" />
+      <option name="SPRING_BOOT_MAIN_CLASS" value="lk.apluskids.platform.AplusKidsApiApplication" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+  </component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-jdk-9823dce3aa75-fbdcb00ec9e3-intellij.indexing.shared.core-IU-251.23774.435" />
+        <option value="bundled-js-predefined-d6986cc7102b-f27c65a3e318-JavaScript-IU-251.23774.435" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="876e7350-aa46-4389-b346-4fdb97a148c5" name="Changes" comment="" />
+      <created>1784882781625</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1784882781625</updated>
+      <workItem from="1785687159263" duration="35000" />
+      <workItem from="1785687565777" duration="803000" />
+      <workItem from="1785688604522" duration="504000" />
+      <workItem from="1785689228559" duration="3148000" />
+      <workItem from="1785772661989" duration="6363000" />
+      <workItem from="1786182382077" duration="1242000" />
+      <workItem from="1786215856406" duration="827000" />
+      <workItem from="1786216875311" duration="3954000" />
+      <workItem from="1786304572982" duration="1254000" />
+      <workItem from="1786346036467" duration="6665000" />
+      <workItem from="1786430726500" duration="3623000" />
+      <workItem from="1786601564788" duration="3675000" />
+      <workItem from="1786678944227" duration="163000" />
+      <workItem from="1786679432618" duration="771000" />
+      <workItem from="1786680565923" duration="204000" />
+      <workItem from="1786680782985" duration="9000" />
+      <workItem from="1786680814107" duration="3243000" />
+      <workItem from="1786688721071" duration="1139000" />
+      <workItem from="1786690676418" duration="37000" />
+      <workItem from="1786690887805" duration="159000" />
+      <workItem from="1786691355199" duration="4000" />
+      <workItem from="1786691372840" duration="2401000" />
+      <workItem from="1786939846971" duration="375000" />
+      <workItem from="1786940262787" duration="9988000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+</project>

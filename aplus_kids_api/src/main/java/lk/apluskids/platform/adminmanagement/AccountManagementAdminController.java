@@ -5,8 +5,6 @@ import java.time.Instant;
 import lk.apluskids.platform.child.ChildProfileRepository;
 import lk.apluskids.platform.common.error.ApiException;
 import lk.apluskids.platform.kidschamp.KidsChampAdminService;
-import lk.apluskids.platform.role.RoleEntity;
-import lk.apluskids.platform.role.RoleRepository;
 import lk.apluskids.platform.user.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
@@ -18,24 +16,28 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/admin/account-management")
 public class AccountManagementAdminController {
     private final UserRepository users;
-    private final RoleRepository roles;
     private final ChildProfileRepository children;
     private final KidsChampAdminService audit;
+    private final AdministratorMembershipRepository administratorMemberships;
+    private final AccountPermanentDeletionService permanentDeletion;
 
-    AccountManagementAdminController(UserRepository users, RoleRepository roles, ChildProfileRepository children, KidsChampAdminService audit) {
-        this.users=users; this.roles=roles; this.children=children; this.audit=audit;
+    AccountManagementAdminController(UserRepository users, ChildProfileRepository children, KidsChampAdminService audit,
+                                     AdministratorMembershipRepository administratorMemberships, AccountPermanentDeletionService permanentDeletion) {
+        this.users=users; this.children=children; this.audit=audit; this.administratorMemberships=administratorMemberships; this.permanentDeletion=permanentDeletion;
     }
 
     @GetMapping("/overview") OverviewResponse overview(JwtAuthenticationToken auth) {
         admin(auth);
-        List<UserEntity> all=users.findAll();
-        return new OverviewResponse(all.size(), all.stream().filter(this::isAdmin).count(), all.stream().filter(u->u.getStatus()==AccountStatus.ACTIVE).count(), children.count());
+        List<UserEntity> familyUsers=users.findAll().stream().filter(user -> !isAdministratorRecord(user)).toList();
+        long guestAccounts=audit.guests().size();
+        return new OverviewResponse(familyUsers.size()+guestAccounts, administratorMemberships.count(),
+            familyUsers.stream().filter(u->u.getStatus()==AccountStatus.ACTIVE).count()+guestAccounts, children.count());
     }
 
     @GetMapping("/accounts") List<AccountResponse> accounts(JwtAuthenticationToken auth, @RequestParam(required=false) String search, @RequestParam(required=false) AccountStatus status) {
         admin(auth); String query=search==null?"":search.trim().toLowerCase(Locale.ROOT);
         Map<Long,Long> childCount=new HashMap<>(); children.findAll().forEach(child->childCount.merge(child.getUser().getId(),1L,Long::sum));
-        List<AccountResponse> registered=users.findAll().stream().filter(user->!isAdmin(user)).filter(user->status==null||user.getStatus()==status)
+        List<AccountResponse> registered=users.findAll().stream().filter(user->!isAdministratorRecord(user)).filter(user->status==null||user.getStatus()==status)
             .filter(user->query.isBlank()||user.getAccountHolderName().toLowerCase(Locale.ROOT).contains(query)||user.getEmail().toLowerCase(Locale.ROOT).contains(query)||user.getPhoneE164().contains(query))
             .map(user->account(user,childCount.getOrDefault(user.getId(),0L))).toList();
         if(status!=null&&status!=AccountStatus.ACTIVE) return registered;
@@ -74,32 +76,34 @@ public class AccountManagementAdminController {
     @DeleteMapping("/accounts/guests/{id}") AccountResponse deleteGuest(JwtAuthenticationToken auth,@PathVariable UUID id,@RequestBody(required=false) DeleteAccountRequest request){admin(auth);var guest=audit.deleteGuest(subject(auth),id,request==null?null:request.reason());return new AccountResponse(guest.id(),"GUEST",guest.parentName(),guest.email(),guest.mobile(),"DELETED_GUEST",guest.submissionCount(),guest.firstSubmittedAt(),guest.lastSubmittedAt());}
     @PostMapping("/accounts/guests/{id}/restore") AccountResponse restoreGuest(JwtAuthenticationToken auth,@PathVariable UUID id){admin(auth);var guest=audit.restoreGuest(subject(auth),id);return new AccountResponse(guest.id(),"GUEST",guest.parentName(),guest.email(),guest.mobile(),"GUEST",guest.submissionCount(),guest.firstSubmittedAt(),guest.lastSubmittedAt());}
 
-    @GetMapping("/administrators") List<AdministratorResponse> administrators(JwtAuthenticationToken auth) { superAdmin(auth); return users.findAll().stream().filter(this::isAdmin).map(this::administrator).toList(); }
+    @PostMapping("/permanent-deletion/request")
+    AccountPermanentDeletionService.ConfirmationResponse requestPermanentDeletionCode(
+        JwtAuthenticationToken auth, @RequestBody List<AccountPermanentDeletionService.DeletionTarget> targets
+    ) {
+        superAdmin(auth);
+        return permanentDeletion.request(subject(auth), targets);
+    }
 
-    @PatchMapping("/administrators/{id}/role") @Transactional AdministratorResponse changeAdministratorRole(JwtAuthenticationToken auth,@PathVariable UUID id,@RequestBody ChangeRoleRequest request) {
-        superAdmin(auth); if(!"ROLE_ADMIN".equals(request.role())&& !"ROLE_SUPER_ADMIN".equals(request.role())) throw new ApiException(HttpStatus.BAD_REQUEST,"ROLE_INVALID","Choose Admin or Super Admin.");
-        if(id.equals(subject(auth))&&"ROLE_ADMIN".equals(request.role())) throw new ApiException(HttpStatus.BAD_REQUEST,"SELF_DEMOTION","You cannot remove your own Super Admin access.");
-        UserEntity target=user(id); RoleEntity role=roles.findByName(request.role()).orElseThrow(()->new ApiException(HttpStatus.NOT_FOUND,"ROLE_NOT_FOUND","Role was not found."));
-        target.replaceRoles(Set.of(role)); users.save(target);
-        audit.auditAdministratorAction(subject(auth),"ADMINISTRATOR_ROLE_CHANGED","ADMINISTRATOR",id,"Set "+target.getAccountHolderName()+" to "+("ROLE_SUPER_ADMIN".equals(request.role())?"Super Admin":"Admin")+".");
-        return administrator(target);
+    @PostMapping("/permanent-deletion/confirm")
+    AccountPermanentDeletionService.PermanentDeletionResponse confirmPermanentDeletion(
+        JwtAuthenticationToken auth, @RequestBody AccountPermanentDeletionService.ConfirmDeletionRequest request
+    ) {
+        superAdmin(auth);
+        return permanentDeletion.confirm(subject(auth), request);
     }
 
     private AccountResponse account(UserEntity user,long childCount) { return new AccountResponse(user.getPublicId(),"REGISTERED",user.getAccountHolderName(),user.getEmail(),user.getPhoneE164(),user.getStatus().name(),childCount,user.getCreatedAt(),user.getLastLoginAt()); }
-    private AdministratorResponse administrator(UserEntity user) { return new AdministratorResponse(user.getPublicId(),user.getAccountHolderName(),user.getEmail(),isSuperAdmin(user)?"SUPER_ADMIN":"ADMIN",user.getStatus().name(),user.getLastLoginAt()); }
     private UserEntity user(UUID id) { return users.findByPublicId(id).orElseThrow(()->new ApiException(HttpStatus.NOT_FOUND,"USER_NOT_FOUND","Account was not found.")); }
     private boolean isAdmin(UserEntity user) { return user.getRoles().stream().anyMatch(r->"ROLE_ADMIN".equals(r.getName())||"ROLE_SUPER_ADMIN".equals(r.getName())); }
-    private boolean isSuperAdmin(UserEntity user) { return user.getRoles().stream().anyMatch(r->"ROLE_SUPER_ADMIN".equals(r.getName())); }
+    private boolean isAdministratorRecord(UserEntity user) { return isAdmin(user) || administratorMemberships.existsByUserId(user.getId()); }
     private UUID subject(JwtAuthenticationToken auth) { return UUID.fromString(auth.getToken().getSubject()); }
     private void admin(JwtAuthenticationToken auth) { List<String> values=auth.getToken().getClaimAsStringList("roles"); if(values==null||values.stream().noneMatch(v->"ROLE_ADMIN".equals(v)||"ROLE_SUPER_ADMIN".equals(v))) throw forbidden("Administrator access is required."); }
-    private void superAdmin(JwtAuthenticationToken auth) { List<String> values=auth.getToken().getClaimAsStringList("roles"); if(values==null||values.stream().noneMatch("ROLE_SUPER_ADMIN"::equals)) throw forbidden("Super Admin access is required."); }
+    private void superAdmin(JwtAuthenticationToken auth) { List<String> values=auth.getToken().getClaimAsStringList("roles"); if(values==null||values.stream().noneMatch("ROLE_SUPER_ADMIN"::equals)) throw forbidden("A Super Admin account is required for permanent account deletion."); }
     private ApiException forbidden(String message) { return new ApiException(HttpStatus.FORBIDDEN,"SUPER_ADMIN_REQUIRED",message); }
 
     record OverviewResponse(long totalAccounts,long administrators,long activeAccounts,long childProfiles) {}
     record AccountResponse(UUID id,String accountType,String name,String email,String phone,String status,long children,java.time.Instant createdAt,java.time.Instant lastLoginAt) {}
-    record AdministratorResponse(UUID id,String name,String email,String role,String status,java.time.Instant lastLoginAt) {}
     record UpdateAccountRequest(String accountHolderName,String email,String phoneE164,AccountStatus status) {}
     record UpdateGuestRequest(String parentName,String email,String phoneE164) {}
     record DeleteAccountRequest(String reason) {}
-    record ChangeRoleRequest(String role) {}
 }

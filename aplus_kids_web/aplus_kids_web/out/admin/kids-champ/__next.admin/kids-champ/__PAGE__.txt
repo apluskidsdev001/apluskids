@@ -1,0 +1,6 @@
+1:"$Sreact.fragment"
+2:"$Sreact.suspense"
+3:I[97876,["/_next/static/chunks/0g~~fqnpyxkhs.js","/_next/static/chunks/0d3shmwh5_nmn.js","/_next/static/chunks/17er0exw-a30q.js","/_next/static/chunks/17czhsm.njm9e.js","/_next/static/chunks/0dfjyhsw2gwbj.js","/_next/static/chunks/12sc_t5s8rozr.js","/_next/static/chunks/13zki0m-9-psd.js"],"default"]
+4:I[97367,["/_next/static/chunks/0g~~fqnpyxkhs.js","/_next/static/chunks/0d3shmwh5_nmn.js","/_next/static/chunks/17er0exw-a30q.js"],"OutletBoundary"]
+0:{"rsc":["$","$1","c",{"children":[["$","$2",null,{"fallback":["$","div",null,{"className":"grid min-h-screen place-items-center bg-[#F3F6FA] text-sm font-medium text-[#68758A]","children":"Loading Kids Champ operations..."}],"children":["$","$L3",null,{}]}],[["$","script","script-0",{"src":"/_next/static/chunks/0dfjyhsw2gwbj.js","async":true}],["$","script","script-1",{"src":"/_next/static/chunks/12sc_t5s8rozr.js","async":true}],["$","script","script-2",{"src":"/_next/static/chunks/13zki0m-9-psd.js","async":true}]],["$","$L4",null,{"children":["$","$2",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"hF7zlfYAcPDl9wL7Cc6Y8"}
+5:null

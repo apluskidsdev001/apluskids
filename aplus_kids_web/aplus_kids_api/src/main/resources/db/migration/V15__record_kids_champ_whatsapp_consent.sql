@@ -1,0 +1,1 @@
+ALTER TABLE kids_champ_submissions ADD COLUMN whatsapp_consent_at TIMESTAMPTZ;

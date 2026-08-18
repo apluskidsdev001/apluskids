@@ -47,7 +47,15 @@ public class SecurityConfiguration {
     @Bean
     CorsConfigurationSource corsConfigurationSource(@Value("${aplus.frontend-origin}") String frontendOrigin) {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOrigins(List.of(frontendOrigin));
+        // Next.js may select a different local port when the default development
+        // port is occupied. Keep the configured production origin while allowing
+        // local browser development without a CORS failure.
+        config.setAllowedOriginPatterns(List.of(
+            frontendOrigin,
+            "http://localhost:*",
+            "http://127.0.0.1:*",
+            "http://192.168.10.101:*"
+        ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-CSRF-TOKEN", "X-Request-ID"));
         config.setExposedHeaders(List.of("X-Request-ID"));
@@ -76,11 +84,21 @@ public class SecurityConfiguration {
                     "/api/v1/auth/refresh",
                     "/api/v1/auth/logout",
                     "/api/v1/auth/forgot-password",
-                    "/api/v1/auth/reset-password"
+                    "/api/v1/auth/reset-password",
+                    "/api/v1/admin-invitations/accept",
+                    "/api/v1/admin-invitations/validate",
+                    "/api/v1/admin-invitations/resend"
                 ).permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/kids-champ/submissions").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/special-events").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/special-events/*/cover").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/advertisements/slots/*").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/advertisements/*/assets/*").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/advertisements/*/redirect").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/advertisements/*/impression").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/kids-champ/track/*").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/kids-champ/events").permitAll()
+                .requestMatchers("/api/v1/health", "/api/v1/health/**").permitAll()
                 .requestMatchers("/api/v1/webhooks/whatsapp").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .anyRequest().authenticated()

@@ -1,0 +1,15 @@
+lk\apluskids\platform\adminmanagement\AdministratorManagementRulesTests.class
+lk\apluskids\platform\kidschamp\KidsChampWhatsAppIntegrationTests.class
+lk\apluskids\platform\common\DatabaseHealthControllerTests.class
+lk\apluskids\platform\notification\AdminInvitationEmailListenerTests.class
+lk\apluskids\platform\advertisement\AdvertisementManagementTests.class
+lk\apluskids\platform\kidschamp\KidsChampZipQueueIntegrationTests.class
+lk\apluskids\platform\kidschamp\KidsChampZipLifecycleIntegrationTests.class
+lk\apluskids\platform\kidschamp\KidsChampZipRulesTests.class
+lk\apluskids\platform\adminmanagement\AdministratorManagementRulesTests$Fixture.class
+lk\apluskids\platform\kidschamp\KidsChampBulkWorkflowTests.class
+lk\apluskids\platform\AplusKidsApiApplicationTests.class
+lk\apluskids\platform\kidschamp\KidsChampDemoDataVerificationTests.class
+lk\apluskids\platform\kidschamp\KidsChampParticipantPerformanceTests.class
+lk\apluskids\platform\kidschamp\KidsChampParticipantManagementTests.class
+lk\apluskids\platform\security\SecurityConfigurationCorsTests.class

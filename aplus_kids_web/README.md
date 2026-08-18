@@ -1,27 +1,20 @@
 # A Plus Kids Platform
 
-Installation and local-operation guide for the A Plus Kids website, API, PostgreSQL database, and Kids Champ administration system.
+This repository contains the complete A Plus Kids platform:
 
-## Project folders
-
-The frontend and backend must be kept next to each other:
-
-```text
-apluskids/
-  aplus_kids_web/   Next.js frontend
-  aplus_kids_api/   Spring Boot backend
-```
+- `aplus_kids_web` — Next.js frontend
+- `aplus_kids_api` — Spring Boot API, database migrations, authentication, profiles, and Kids Champ administration
 
 ## Requirements
 
-Install these applications before starting:
+Install the following software:
 
 - Node.js 20 or newer
 - Java JDK 21
 - PostgreSQL
-- Git (optional, but recommended)
+- Git (recommended)
 
-Confirm the installations in PowerShell:
+Check the installations in PowerShell:
 
 ```powershell
 node --version
@@ -30,23 +23,41 @@ java --version
 psql --version
 ```
 
-## 1. Create the PostgreSQL database
+## 1. Download the project
 
-The default database name is `aplus_kids`. PostgreSQL must already be installed and running.
+```powershell
+git clone https://github.com/apluskidsdev001/apluskids.git
+cd apluskids
+```
 
-Using PostgreSQL command line:
+## 2. Create the PostgreSQL database
+
+The default database is named `aplus_kids`. PostgreSQL must be installed and running before starting the backend.
+
+Create it from PowerShell:
 
 ```powershell
 psql -U postgres -c "CREATE DATABASE aplus_kids;"
 ```
 
-Alternatively, open pgAdmin, right-click **Databases**, select **Create > Database**, and enter `aplus_kids`.
+You can also create it with pgAdmin:
 
-Only the empty database needs to be created manually. The backend uses Flyway to create and update all tables when it starts.
+1. Open pgAdmin and connect to the PostgreSQL server.
+2. Right-click **Databases**.
+3. Select **Create > Database**.
+4. Enter `aplus_kids` and save.
 
-## 2. Configure the backend
+Create only the empty database. Flyway automatically creates and updates the tables when the backend starts.
 
-Copy the example configuration values or create `aplus_kids_api/application-local.yml`. Do not commit this file or share its passwords and tokens.
+## 3. Configure the backend
+
+Create this local file:
+
+```text
+aplus_kids_api/application-local.yml
+```
+
+Add the following configuration and replace the placeholder values:
 
 ```yaml
 spring:
@@ -64,32 +75,34 @@ aplus:
     jwt-secret: "REPLACE_WITH_A_LONG_RANDOM_SECRET_OF_AT_LEAST_32_BYTES"
 ```
 
-Email and WhatsApp settings are optional during the initial database startup. Configure them before testing verification emails or WhatsApp delivery. Use `aplus_kids_api/.env.example` as the reference and never store real secrets in Git.
+`application-local.yml` is ignored by Git. Never commit database passwords, email passwords, JWT secrets, or WhatsApp tokens.
 
-## 3. Start the backend
+Optional email and WhatsApp variables are documented in:
 
-Open PowerShell in the backend folder:
+```text
+aplus_kids_api/.env.example
+```
+
+## 4. Run the backend
+
+Open PowerShell in the repository root:
 
 ```powershell
-cd path\to\apluskids\aplus_kids_api
+cd aplus_kids_api
 .\mvnw.cmd spring-boot:run
 ```
 
-The API should start at:
+The backend runs at:
 
 ```text
 http://localhost:8081
 ```
 
-Flyway will run the database migrations automatically. If port `8081` is already occupied, stop the other backend process before starting another instance:
+On the first successful start, Flyway runs every migration in `src/main/resources/db/migration` and prepares the database schema.
 
-```powershell
-Get-NetTCPConnection -LocalPort 8081 -State Listen
-```
+## 5. Run the frontend
 
-## 4. Install and start the frontend
-
-Open a second PowerShell window:
+Open another PowerShell window:
 
 ```powershell
 cd path\to\apluskids\aplus_kids_web
@@ -97,26 +110,27 @@ npm install
 npm run dev
 ```
 
-Open:
+Open the website:
 
 ```text
 http://localhost:3000
 ```
 
-The frontend uses `http://localhost:8081` as its default API. When the API is hosted elsewhere, set its public address before building or starting the frontend:
+The frontend connects to `http://localhost:8081` by default. To use a backend at another address, set the URL before starting or building:
 
 ```powershell
 $env:NEXT_PUBLIC_API_URL="https://api.example.com"
 npm run dev
 ```
 
-## 5. Create the first administrator
+## 6. Create the first administrator
 
-Database migrations create the roles, but an empty database does not contain an administrator account.
+An empty installation contains the system roles but does not contain an administrator account.
 
-1. Register a normal account through the website.
+1. Register an account through the website.
 2. Complete email verification.
-3. Open pgAdmin or `psql` and run the following statement after replacing the email:
+3. Connect to `aplus_kids` using pgAdmin or `psql`.
+4. Replace the example email and run:
 
 ```sql
 INSERT INTO user_roles (user_id, role_id)
@@ -128,52 +142,47 @@ WHERE LOWER(u.email) = LOWER('administrator@example.com')
 ON CONFLICT DO NOTHING;
 ```
 
-Log out and log in again. The account will then open the administrator dashboard. That super-admin can create or manage additional administrators from the admin area.
+Log out and log in again. The account will open the admin dashboard and can manage additional administrators.
 
-Passwords must contain at least 8 characters.
+Passwords require at least 8 characters.
 
-## Existing installation: move all data to another PC
+## Move an existing installation to another PC
 
-Creating a new empty database does not copy users, submissions, ZIP records, or configuration. To move the existing installation, transfer both the PostgreSQL database and stored files.
+Creating a new database does not transfer existing accounts, submissions, ZIP records, or settings.
 
-Create a database backup on the old PC:
+On the old PC, create a PostgreSQL backup:
 
 ```powershell
 pg_dump -U postgres -Fc -d aplus_kids -f aplus_kids.backup
 ```
 
-On the new PC, create the database and restore it:
+Copy the backup to the new PC, create the database, and restore it:
 
 ```powershell
 psql -U postgres -c "CREATE DATABASE aplus_kids;"
 pg_restore -U postgres -d aplus_kids --no-owner aplus_kids.backup
 ```
 
-Also copy this backend directory to the same relative location on the new PC:
+Also copy this directory from the old backend installation:
 
 ```text
 aplus_kids_api/data/kids-champ/
 ```
 
-This directory contains uploaded artwork and generated ZIP files; those files are not stored inside PostgreSQL.
+It contains uploaded artwork and generated ZIP files, which are not stored in PostgreSQL.
 
 ## Multiple computers
 
-For normal multi-computer use, run one backend, one PostgreSQL database, and one shared file-storage location on a server. Other computers should open the website and connect to that central backend. Installing an independent database on every PC produces separate users and submissions that will not synchronize automatically.
+The recommended arrangement is one central backend, one PostgreSQL database, and one shared file-storage location. Other computers connect to the central website/API. Creating an independent database on every PC produces separate data that does not synchronize automatically.
 
-For another computer on the same trusted network:
+Do not expose PostgreSQL port `5432` directly to the public internet.
 
-- Allow the backend and frontend ports through the server firewall.
-- Set `NEXT_PUBLIC_API_URL` to the server API address.
-- Set `FRONTEND_ORIGIN` to the exact website origin.
-- Configure PostgreSQL network access only if the backend is running on a different machine from PostgreSQL.
-- Never expose PostgreSQL port `5432` directly to the public internet.
-
-## Build checks
+## Build and test
 
 Frontend:
 
 ```powershell
+cd aplus_kids_web
 npm run lint
 npm run build
 ```
@@ -181,15 +190,25 @@ npm run build
 Backend:
 
 ```powershell
+cd aplus_kids_api
 .\mvnw.cmd test
 .\mvnw.cmd package
 ```
 
-## Important security notes
+## Common startup problem
 
-- Never commit `application-local.yml`, access tokens, database passwords, email app passwords, or JWT secrets.
-- Use different secrets for development and production.
-- Rotate any credential accidentally pasted into chat, logs, screenshots, or source code.
-- Keep PostgreSQL and uploaded child artwork private.
-- Back up the database and `data/kids-champ` directory regularly.
-- Use HTTPS for any installation accessed outside the local computer.
+If the backend says port `8081` is already in use, locate the existing process:
+
+```powershell
+Get-NetTCPConnection -LocalPort 8081 -State Listen
+```
+
+Stop the older backend instance or configure a different server port. Do not run two backend instances on the same port.
+
+## Security and backups
+
+- Keep `application-local.yml` and `application-whatsapp.yml` private.
+- Never commit `.env` files or real access tokens.
+- Back up both PostgreSQL and `aplus_kids_api/data/kids-champ`.
+- Use HTTPS outside the local computer.
+- Rotate credentials that appear in messages, screenshots, logs, or Git history.

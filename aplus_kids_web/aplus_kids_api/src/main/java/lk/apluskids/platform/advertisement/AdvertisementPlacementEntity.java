@@ -1,0 +1,14 @@
+package lk.apluskids.platform.advertisement;
+
+import jakarta.persistence.*;
+
+@Entity
+@Table(name="advertisement_placements")
+class AdvertisementPlacementEntity {
+    @Id @GeneratedValue(strategy=GenerationType.IDENTITY) private Long id;
+    @ManyToOne(fetch=FetchType.LAZY,optional=false) @JoinColumn(name="advertisement_id",nullable=false) private AdvertisementEntity advertisement;
+    @Column(name="slot_key",nullable=false,length=80) private String slotKey;
+    AdvertisementPlacementEntity(){}
+    AdvertisementPlacementEntity(AdvertisementEntity advertisement,String slotKey){this.advertisement=advertisement;this.slotKey=slotKey;}
+    String slotKey(){return slotKey;}
+}

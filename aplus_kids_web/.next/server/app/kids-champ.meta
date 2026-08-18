@@ -1,0 +1,15 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/kids-champ/layout,_N_T_/kids-champ/page,_N_T_/kids-champ"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/kids-champ/__PAGE__",
+    "/kids-champ",
+    "/_index",
+    "/_head"
+  ]
+}

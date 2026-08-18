@@ -28,6 +28,9 @@ public class KidsChampAdminController {
     @PostMapping("/guests/delete-duplicate") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteDuplicateGuest(JwtAuthenticationToken a,@RequestBody DeleteDuplicateGuestRequest r){admin(a);service.deleteDuplicateGuest(subject(a),r.keepId(),r.duplicateId());}
     @PostMapping("/guests/ignore-match") @ResponseStatus(HttpStatus.NO_CONTENT) void ignoreGuestMatch(JwtAuthenticationToken a,@RequestBody IgnoreGuestMatchRequest r){admin(a);service.ignoreGuestMatch(subject(a),r.firstId(),r.secondId());}
     @GetMapping("/participants") List<KidsChampAdminService.ParticipantResponse> participants(JwtAuthenticationToken a){admin(a);return service.participants();}
+    @PatchMapping("/participants/{id}") KidsChampAdminService.ParticipantResponse updateParticipant(JwtAuthenticationToken a,@PathVariable UUID id,@RequestBody ParticipantUpdateRequest r){admin(a);return service.updateParticipant(subject(a),id,r.name(),r.dateOfBirth(),r.hometown(),r.phone());}
+    /** Merge history has no persisted records in this installation yet. Return an empty collection, not a missing route. */
+    @GetMapping("/participant-merges") List<Map<String,Object>> participantMerges(JwtAuthenticationToken a){admin(a);return List.of();}
     @GetMapping("/overview") KidsChampAdminService.OverviewResponse overview(JwtAuthenticationToken a){admin(a);return service.overview();}
     @GetMapping("/growth") List<KidsChampAdminService.GrowthResponse> growth(JwtAuthenticationToken a){admin(a);return service.growth();}
     @GetMapping("/activity") List<KidsChampAdminService.ActivityResponse> activity(JwtAuthenticationToken a){admin(a);return service.activity();}
@@ -39,8 +42,9 @@ public class KidsChampAdminController {
     @PostMapping("/calendar/tasks/{id}/reschedule") KidsChampAdminService.CalendarTaskResponse rescheduleTask(JwtAuthenticationToken a,@PathVariable UUID id,@RequestBody TaskRescheduleRequest r){admin(a);return service.rescheduleTask(subject(a),id,r.date());}
     @DeleteMapping("/calendar/tasks/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteTask(JwtAuthenticationToken a,@PathVariable UUID id){admin(a);service.deleteTask(subject(a),id);}
     @GetMapping("/campaigns") List<KidsChampAdminService.CampaignResponse> campaigns(JwtAuthenticationToken a){admin(a);return service.campaigns();}
-    @PostMapping("/campaigns") @ResponseStatus(HttpStatus.CREATED) KidsChampAdminService.CampaignResponse createCampaign(JwtAuthenticationToken a,@RequestBody CampaignRequest r){admin(a);return service.createCampaign(subject(a),r.channel(),r.messageTemplate(),r.participantIds(),r.templateName(),r.languageCode(),r.templateParameters());}
+    @PostMapping("/campaigns") @ResponseStatus(HttpStatus.CREATED) KidsChampAdminService.CampaignResponse createCampaign(JwtAuthenticationToken a,@RequestBody CampaignRequest r){admin(a);return service.createCampaign(subject(a),r.channel(),r.messageTemplate(),r.participantIds(),r.templateName(),r.languageCode(),r.templateParameters(),r.name(),r.source());}
     @GetMapping("/campaigns/{id}/recipients") List<KidsChampAdminService.MessageRecipientResponse> campaignRecipients(JwtAuthenticationToken a,@PathVariable UUID id){admin(a);return service.campaignRecipients(id);}
+    @GetMapping("/campaign-recipients/{id}/events") List<KidsChampAdminService.DeliveryEventResponse> recipientEvents(JwtAuthenticationToken a,@PathVariable Long id){admin(a);return service.recipientEvents(id);}
     @PostMapping("/campaign-recipients/retry") @ResponseStatus(HttpStatus.NO_CONTENT) void retryRecipients(JwtAuthenticationToken a,@RequestBody RecipientActionRequest r){admin(a);service.retryRecipients(subject(a),r.recipientIds());}
     @PostMapping("/campaign-recipients/ignore") @ResponseStatus(HttpStatus.NO_CONTENT) void ignoreRecipients(JwtAuthenticationToken a,@RequestBody RecipientActionRequest r){admin(a);service.ignoreRecipients(subject(a),r.recipientIds());}
     @PostMapping("/campaign-recipients/delete") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteRecipients(JwtAuthenticationToken a,@RequestBody RecipientActionRequest r){admin(a);service.deleteRecipients(subject(a),r.recipientIds());}
@@ -48,6 +52,11 @@ public class KidsChampAdminController {
     @PutMapping("/whatsapp/config") KidsChampWhatsAppAdminService.ConfigResponse saveWhatsappConfig(JwtAuthenticationToken a,@RequestBody KidsChampWhatsAppAdminService.ConfigRequest r){superAdmin(a);var saved=whatsapp.save(r);service.auditAdministratorAction(subject(a),"WHATSAPP_CREDENTIALS_UPDATED","WHATSAPP_CONFIG",UUID.nameUUIDFromBytes("kids-champ-whatsapp".getBytes()),"WhatsApp Cloud API credentials were updated.");return saved;}
     @PostMapping("/whatsapp/connection-test") KidsChampWhatsAppAdminService.ConnectionTestResponse testWhatsappConnection(JwtAuthenticationToken a){superAdmin(a);var result=whatsapp.connectionTest();service.auditAdministratorAction(subject(a),"WHATSAPP_CONNECTION_TESTED","WHATSAPP_CONFIG",UUID.nameUUIDFromBytes("kids-champ-whatsapp".getBytes()),result.message());return result;}
     @PostMapping("/whatsapp/test") KidsChampWhatsAppAdminService.TestResponse testWhatsapp(JwtAuthenticationToken a,@RequestBody WhatsAppTestRequest r){superAdmin(a);var result=whatsapp.test(r.phone());service.auditAdministratorAction(subject(a),"WHATSAPP_TEST_MESSAGE_SENT","WHATSAPP_CONFIG",UUID.nameUUIDFromBytes("kids-champ-whatsapp".getBytes()),result.message());return result;}
+    @GetMapping("/whatsapp/templates") List<KidsChampWhatsAppAdminService.TemplateResponse> whatsappTemplates(JwtAuthenticationToken a){admin(a);return whatsapp.templates();}
+    @PostMapping("/whatsapp/templates/sync") List<KidsChampWhatsAppAdminService.TemplateResponse> syncWhatsappTemplates(JwtAuthenticationToken a){superAdmin(a);var result=whatsapp.syncTemplates();service.auditAdministratorAction(subject(a),"WHATSAPP_TEMPLATES_SYNCED","WHATSAPP_TEMPLATE",UUID.nameUUIDFromBytes("kids-champ-whatsapp-templates".getBytes()),result.size()+" templates synchronized from Meta");return result;}
+    @PatchMapping("/whatsapp/templates/{id}") KidsChampWhatsAppAdminService.TemplateResponse disableWhatsappTemplate(JwtAuthenticationToken a,@PathVariable UUID id,@RequestBody TemplateStatusRequest r){superAdmin(a);return whatsapp.disableTemplate(id,r.disabled());}
+    @GetMapping("/whatsapp/preferences/{participantId}") KidsChampAdminService.WhatsAppPreferenceResponse whatsappPreference(JwtAuthenticationToken a,@PathVariable UUID participantId){admin(a);return service.whatsappPreference(participantId);}
+    @PatchMapping("/whatsapp/preferences/{participantId}") KidsChampAdminService.WhatsAppPreferenceResponse updateWhatsappPreference(JwtAuthenticationToken a,@PathVariable UUID participantId,@RequestBody WhatsAppPreferenceRequest r){admin(a);return service.updateWhatsAppPreference(subject(a),participantId,r.status(),r.reason());}
     @GetMapping("/admin-history") List<KidsChampAdminService.ActivityResponse> adminHistory(JwtAuthenticationToken a){superAdmin(a);return service.activity();}
     @PatchMapping("/submissions/{id}/review") KidsChampAdminSubmissionResponse review(JwtAuthenticationToken a,@PathVariable UUID id,@RequestBody ReviewRequest r){admin(a);return service.review(subject(a),id,r.status(),r.reason());}
     @PostMapping("/submissions/approve") KidsChampAdminService.ApprovalResponse approve(JwtAuthenticationToken a,@RequestBody ApproveSubmissionsRequest r){admin(a);return service.approve(subject(a),r.submissionIds());}
@@ -59,10 +68,12 @@ public class KidsChampAdminController {
             .body(new FileSystemResource(value.path()));
     }
     @DeleteMapping("/submissions/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteSubmission(JwtAuthenticationToken a,@PathVariable UUID id){admin(a);service.deleteSubmission(subject(a),id);}
+    @DeleteMapping("/submissions/permanent-all") KidsChampAdminService.PurgeResponse permanentlyDeleteAllSubmissions(JwtAuthenticationToken a){superAdmin(a);return service.permanentlyDeleteAllSubmissions(subject(a));}
     @DeleteMapping("/submissions/{id}/photo") @ResponseStatus(HttpStatus.NO_CONTENT) void deletePhoto(JwtAuthenticationToken a,@PathVariable UUID id){admin(a);service.deletePhoto(subject(a),id);}
     @PatchMapping("/submissions/{id}/preview") KidsChampAdminSubmissionResponse preview(JwtAuthenticationToken a,@PathVariable UUID id,@RequestBody PreviewRequest r){admin(a);return service.preview(subject(a),id,r.previewed());}
     @PostMapping("/batches") @ResponseStatus(HttpStatus.CREATED) KidsChampAdminService.BatchResponse batch(JwtAuthenticationToken a,@RequestBody BatchRequest r){admin(a);return service.createBatch(subject(a),r.limit(),r.includeRemainder());}
     @PostMapping("/batches/selected") @ResponseStatus(HttpStatus.CREATED) KidsChampAdminService.BatchResponse selectedBatch(JwtAuthenticationToken a,@RequestBody SelectedBatchRequest r){admin(a);return service.createSelectedBatch(subject(a),r.submissionIds(),r.reason());}
+    @PostMapping("/batches/process-automatic") @ResponseStatus(HttpStatus.NO_CONTENT) void processAutomaticBatches(JwtAuthenticationToken a){admin(a);service.processAutomaticZips(subject(a));}
     @GetMapping("/batches") List<KidsChampAdminService.BatchResponse> batches(JwtAuthenticationToken a){admin(a);return service.batches();}
     @GetMapping("/batches/progress") KidsChampAdminService.ZipProgressResponse zipProgress(JwtAuthenticationToken a){admin(a);return service.zipProgress();}
     @GetMapping("/batches/{id}/download") ResponseEntity<Resource> download(JwtAuthenticationToken a,@PathVariable UUID id) throws IOException{
@@ -75,6 +86,7 @@ public class KidsChampAdminController {
     @PostMapping("/batches/{id}/telecast-complete") KidsChampAdminService.BatchResponse completeTelecast(JwtAuthenticationToken a,@PathVariable UUID id){admin(a);return service.completeTelecast(subject(a),id);}
     @PatchMapping("/batches/{id}/edited") KidsChampAdminService.BatchResponse edited(JwtAuthenticationToken a,@PathVariable UUID id,@RequestBody EditedRequest r){admin(a);return service.setEdited(subject(a),id,r.edited());}
     @DeleteMapping("/batches/{id}") @ResponseStatus(HttpStatus.NO_CONTENT) void deleteBatch(JwtAuthenticationToken a,@PathVariable UUID id){admin(a);service.deleteBatch(subject(a),id);}
+    @DeleteMapping("/batches/bin") @ResponseStatus(HttpStatus.NO_CONTENT) void clearBatchBin(JwtAuthenticationToken a,@RequestBody BatchIdsRequest r){admin(a);service.clearBatchBin(subject(a),r.batchIds());}
     private UUID subject(JwtAuthenticationToken a){return UUID.fromString(a.getToken().getSubject());}
     private void admin(JwtAuthenticationToken a){
         List<String> roles=a.getToken().getClaimAsStringList("roles");
@@ -89,16 +101,20 @@ public class KidsChampAdminController {
     record ReviewRequest(ReviewStatus status,String reason){} record BatchRequest(int limit,boolean includeRemainder){}
     record UpdateRequest(String category,String internalNote,UUID reviewerId,Boolean selectedForTv){}
     record SelectedBatchRequest(List<UUID> submissionIds,String reason){}
+    record BatchIdsRequest(List<UUID> batchIds){}
     record ApproveSubmissionsRequest(List<UUID> submissionIds){}
     record ScheduleRequest(LocalDate telecastDate,LocalDate alternateTelecastDate){}
     record EditedRequest(boolean edited){}
     record TaskRequest(LocalDate date,String title,String details){} record TaskStatusRequest(boolean completed){} record TaskRescheduleRequest(LocalDate date){}
     record PreviewRequest(boolean previewed){}
+    record ParticipantUpdateRequest(String name,LocalDate dateOfBirth,String hometown,String phone){}
     record MergeGuestsRequest(UUID targetId,UUID sourceId){}
     record MergeRegisteredGuestRequest(UUID childId,UUID guestId){}
     record DeleteDuplicateGuestRequest(UUID keepId,UUID duplicateId){}
     record IgnoreGuestMatchRequest(UUID firstId,UUID secondId){}
-    record CampaignRequest(String channel,String messageTemplate,List<UUID> participantIds,String templateName,String languageCode,List<String> templateParameters){}
+    record CampaignRequest(String channel,String messageTemplate,List<UUID> participantIds,String templateName,String languageCode,List<String> templateParameters,String name,String source){}
     record RecipientActionRequest(List<Long> recipientIds){}
     record WhatsAppTestRequest(String phone){}
+    record WhatsAppPreferenceRequest(String status,String reason){}
+    record TemplateStatusRequest(boolean disabled){}
 }

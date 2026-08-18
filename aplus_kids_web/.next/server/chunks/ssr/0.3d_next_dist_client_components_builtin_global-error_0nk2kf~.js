@@ -1,0 +1,3 @@
+module.exports=[45957,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(32169);a.n(d("[project]/aplus_kids_web/node_modules/next/dist/client/components/builtin/global-error.js <module evaluation>"))},23867,(a,b,c)=>{let{createClientModuleProxy:d}=a.r(32169);a.n(d("[project]/aplus_kids_web/node_modules/next/dist/client/components/builtin/global-error.js"))},74222,a=>{"use strict";a.i(45957);var b=a.i(23867);a.n(b)},4188,a=>{a.n(a.i(74222))}];
+
+//# sourceMappingURL=0.3d_next_dist_client_components_builtin_global-error_0nk2kf~.js.map

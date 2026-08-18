@@ -1,0 +1,10 @@
+var R=require("../../chunks/ssr/[turbopack]_runtime.js")("server/app/_global-error/page.js")
+R.c("server/chunks/ssr/[root-of-the-server]__0uyb-qk._.js")
+R.c("server/chunks/ssr/0.3d_next_dist_0jk.z92._.js")
+R.c("server/chunks/ssr/0.3d_next_dist_esm_build_templates_app-page_0dfhlrt.js")
+R.c("server/chunks/ssr/[root-of-the-server]__0reifd~._.js")
+R.c("server/chunks/ssr/[root-of-the-server]__0b_w7fs._.js")
+R.c("server/chunks/ssr/0.3d_next_dist_client_components_builtin_global-error_0nk2kf~.js")
+R.c("server/chunks/ssr/aplus_kids_web__next-internal_server_app__global-error_page_actions_11ys~jl.js")
+R.m(21777)
+module.exports=R.m(21777).exports

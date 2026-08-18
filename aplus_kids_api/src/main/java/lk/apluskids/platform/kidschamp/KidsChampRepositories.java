@@ -14,6 +14,15 @@ interface KidsChampGuestContactRepository extends JpaRepository<KidsChampGuestCo
     List<KidsChampGuestContactEntity> findAllByOrderByLastSubmittedAtDesc();
     Optional<KidsChampGuestContactEntity> findByPublicIdAndClaimedAtIsNull(UUID id);
     Optional<KidsChampGuestContactEntity> findByPublicId(UUID id);
+    List<KidsChampGuestContactEntity> findAllByPublicIdIn(Collection<UUID> ids);
+}
+
+interface KidsChampGuestParticipantRepository extends JpaRepository<KidsChampGuestParticipantEntity, Long> {
+    Optional<KidsChampGuestParticipantEntity> findByPublicId(UUID publicId);
+    Optional<KidsChampGuestParticipantEntity> findByGuestContactAndNormalizedChildNameAndDateOfBirth(
+        KidsChampGuestContactEntity guestContact, String normalizedChildName, java.time.LocalDate dateOfBirth
+    );
+    List<KidsChampGuestParticipantEntity> findAllByGuestContactPublicIdIn(Collection<UUID> guestIds);
 }
 
 interface KidsChampSubmissionRepository extends JpaRepository<KidsChampSubmissionEntity, Long>, JpaSpecificationExecutor<KidsChampSubmissionEntity> {
@@ -23,12 +32,18 @@ interface KidsChampSubmissionRepository extends JpaRepository<KidsChampSubmissio
     List<KidsChampSubmissionEntity> findAllByDeletedAtIsNullOrderBySubmittedAtDesc();
     Page<KidsChampSubmissionEntity> findByDeletedAtIsNull(Pageable pageable);
     boolean existsByTrackingCodeIgnoreCase(String trackingCode);
-    List<KidsChampSubmissionEntity> findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullOrderBySubmittedAtAsc(
+    List<KidsChampSubmissionEntity> findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullOrderBySubmittedAtAscIdAsc(
         ReviewStatus status, Pageable pageable
     );
-    List<KidsChampSubmissionEntity> findAllByBatchPublicIdOrderBySubmittedAtAsc(UUID batchId);
+    List<KidsChampSubmissionEntity> findAllByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullAndStoredFilenameIsNotNullOrderBySubmittedAtAscIdAsc(
+        ReviewStatus status, Pageable pageable
+    );
+    long countByReviewStatusAndBatchIsNullAndPhotoDeletedAtIsNullAndStoredFilenameIsNotNull(ReviewStatus status);
+    List<KidsChampSubmissionEntity> findAllByBatchPublicIdOrderBySubmittedAtAscIdAsc(UUID batchId);
     List<KidsChampSubmissionEntity> findAllByGuestContactPublicIdAndDeletedAtIsNullOrderBySubmittedAtDesc(UUID guestId);
     List<KidsChampSubmissionEntity> findAllByGuestContactPublicIdOrderBySubmittedAtDesc(UUID guestId);
+    List<KidsChampSubmissionEntity> findAllByUserPublicIdIn(Collection<UUID> userIds);
+    List<KidsChampSubmissionEntity> findAllByGuestContactPublicIdIn(Collection<UUID> guestIds);
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     List<KidsChampSubmissionEntity> findAllByPublicIdInAndDeletedAtIsNull(Collection<UUID> ids);
     Optional<KidsChampSubmissionEntity> findFirstByChildProfilePublicIdAndDeletedAtIsNullOrderBySubmittedAtDesc(UUID childId);
@@ -36,13 +51,14 @@ interface KidsChampSubmissionRepository extends JpaRepository<KidsChampSubmissio
 
 interface KidsChampBatchRepository extends JpaRepository<KidsChampBatchEntity, Long> {
     Optional<KidsChampBatchEntity> findByPublicId(UUID id);
-    List<KidsChampBatchEntity> findAllByOrderByCreatedAtDesc();
+    List<KidsChampBatchEntity> findAllByOrderByCreatedAtDescIdDesc();
     List<KidsChampBatchEntity> findAllByDeleteAfterBeforeAndDeletedAtIsNull(Instant now);
     boolean existsByBatchCode(String code);
 }
 
 interface KidsChampAuditRepository extends JpaRepository<KidsChampAuditEntity, Long> {
     List<KidsChampAuditEntity> findTop500ByOrderByCreatedAtDesc();
+    void deleteAllByEntityPublicIdIn(Collection<UUID> entityIds);
 }
 
 interface KidsChampSettingsRepository extends JpaRepository<KidsChampSettingsEntity, Short> {
@@ -56,8 +72,17 @@ interface KidsChampCalendarTaskRepository extends JpaRepository<KidsChampCalenda
     List<KidsChampCalendarTaskEntity> findAllByDeletedAtIsNullOrderByTaskDateAscCreatedAtAsc();
 }
 interface KidsChampMessageCampaignRepository extends JpaRepository<KidsChampMessageCampaignEntity,Long>{List<KidsChampMessageCampaignEntity> findAllByOrderByCreatedAtDesc();}
-interface KidsChampMessageRecipientRepository extends JpaRepository<KidsChampMessageRecipientEntity,Long>{@Lock(LockModeType.PESSIMISTIC_WRITE) List<KidsChampMessageRecipientEntity> findTop20ByStatusOrderByIdAsc(String status);List<KidsChampMessageRecipientEntity> findAllByCampaignPublicIdOrderByIdAsc(UUID campaignId);Optional<KidsChampMessageRecipientEntity> findByProviderMessageId(String providerMessageId);}
+interface KidsChampMessageRecipientRepository extends JpaRepository<KidsChampMessageRecipientEntity,Long>{
+    @Lock(LockModeType.PESSIMISTIC_WRITE) List<KidsChampMessageRecipientEntity> findTop20ByStatusAndNextAttemptAtLessThanEqualOrderByIdAsc(String status,java.time.Instant now);
+    List<KidsChampMessageRecipientEntity> findAllByStatusAndLastAttemptAtBefore(String status,java.time.Instant cutoff);
+    List<KidsChampMessageRecipientEntity> findAllByCampaignPublicIdOrderByIdAsc(UUID campaignId);
+    Optional<KidsChampMessageRecipientEntity> findByProviderMessageId(String providerMessageId);
+    void deleteAllByParticipantReferenceIn(Collection<UUID> participantIds);
+}
 interface KidsChampWhatsAppConfigRepository extends JpaRepository<KidsChampWhatsAppConfigEntity,Short>{}
 interface KidsChampIgnoredGuestMatchRepository extends JpaRepository<KidsChampIgnoredGuestMatchEntity,Long>{
     boolean existsByFirstGuestIdAndSecondGuestId(UUID firstGuestId,UUID secondGuestId);
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query("delete from KidsChampIgnoredGuestMatchEntity value where value.firstGuestId in :guestIds or value.secondGuestId in :guestIds")
+    void deleteAllByGuestIdIn(@org.springframework.data.repository.query.Param("guestIds") Collection<UUID> guestIds);
 }

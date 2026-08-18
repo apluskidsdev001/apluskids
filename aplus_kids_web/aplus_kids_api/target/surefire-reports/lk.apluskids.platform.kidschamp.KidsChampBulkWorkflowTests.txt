@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: lk.apluskids.platform.kidschamp.KidsChampBulkWorkflowTests
+-------------------------------------------------------------------------------
+Tests run: 7, Failures: 0, Errors: 0, Skipped: 2, Time elapsed: 1.963 s -- in lk.apluskids.platform.kidschamp.KidsChampBulkWorkflowTests

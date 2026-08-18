@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: lk.apluskids.platform.advertisement.AdvertisementServiceTests
+-------------------------------------------------------------------------------
+Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 14.03 s -- in lk.apluskids.platform.advertisement.AdvertisementServiceTests

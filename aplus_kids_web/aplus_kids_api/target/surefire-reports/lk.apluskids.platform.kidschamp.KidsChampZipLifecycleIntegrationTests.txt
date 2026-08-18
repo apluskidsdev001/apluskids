@@ -1,0 +1,4 @@
+-------------------------------------------------------------------------------
+Test set: lk.apluskids.platform.kidschamp.KidsChampZipLifecycleIntegrationTests
+-------------------------------------------------------------------------------
+Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 9.880 s -- in lk.apluskids.platform.kidschamp.KidsChampZipLifecycleIntegrationTests

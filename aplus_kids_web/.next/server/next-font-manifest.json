@@ -1,0 +1,119 @@
+{
+  "app": {
+    "[project]/aplus_kids_web/src/app/_not-found/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf"
+    ],
+    "[project]/aplus_kids_web/src/app/admin/account-management/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf",
+      "static/media/ce62453a442c7f35-s.p.0333ktddfbsxy.woff2"
+    ],
+    "[project]/aplus_kids_web/src/app/admin/footer/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf",
+      "static/media/ce62453a442c7f35-s.p.0333ktddfbsxy.woff2"
+    ],
+    "[project]/aplus_kids_web/src/app/admin/home/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf",
+      "static/media/ce62453a442c7f35-s.p.0333ktddfbsxy.woff2"
+    ],
+    "[project]/aplus_kids_web/src/app/admin/kids-champ/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf",
+      "static/media/ce62453a442c7f35-s.p.0333ktddfbsxy.woff2"
+    ],
+    "[project]/aplus_kids_web/src/app/admin/kids-zone/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf",
+      "static/media/ce62453a442c7f35-s.p.0333ktddfbsxy.woff2"
+    ],
+    "[project]/aplus_kids_web/src/app/admin/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf",
+      "static/media/ce62453a442c7f35-s.p.0333ktddfbsxy.woff2"
+    ],
+    "[project]/aplus_kids_web/src/app/admin/watch/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf",
+      "static/media/ce62453a442c7f35-s.p.0333ktddfbsxy.woff2"
+    ],
+    "[project]/aplus_kids_web/src/app/birthdays/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf"
+    ],
+    "[project]/aplus_kids_web/src/app/info/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf"
+    ],
+    "[project]/aplus_kids_web/src/app/kids-champ/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf"
+    ],
+    "[project]/aplus_kids_web/src/app/kids-zone/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf"
+    ],
+    "[project]/aplus_kids_web/src/app/login/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf"
+    ],
+    "[project]/aplus_kids_web/src/app/market/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf"
+    ],
+    "[project]/aplus_kids_web/src/app/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf"
+    ],
+    "[project]/aplus_kids_web/src/app/profile/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf"
+    ],
+    "[project]/aplus_kids_web/src/app/register/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf"
+    ],
+    "[project]/aplus_kids_web/src/app/reset-password/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf"
+    ],
+    "[project]/aplus_kids_web/src/app/search/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf"
+    ],
+    "[project]/aplus_kids_web/src/app/verify-email/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf"
+    ],
+    "[project]/aplus_kids_web/src/app/watch/page": [
+      "static/media/Fredoka_Regular-s.p.0c88ud.94szcx.ttf",
+      "static/media/Fredoka_Medium-s.p.0g7iis7.sfq-3.ttf",
+      "static/media/Fredoka_Bold-s.p.05f37r._2evz8.ttf"
+    ]
+  },
+  "appUsingSizeAdjust": true,
+  "pages": {},
+  "pagesUsingSizeAdjust": false
+}

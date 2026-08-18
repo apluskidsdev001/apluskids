@@ -1,0 +1,224 @@
+"use client";
+
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import Image from "next/image";
+import { countries, getCountryCode } from "@/utils/countries";
+import { apiFetch } from "@/utils/auth";
+
+type Child = { publicId: string; fullName: string; dateOfBirth: string };
+type Profile = { accountHolderName: string; email: string; phone: string; children: Child[] };
+type Submission = {
+  id: string; trackingCode: string; childName: string; workTitle?: string;
+  reviewStatus: "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "REJECTED";
+  rejectionReason?: string; telecastStatus: string; telecastDate?: string;
+  alternateTelecastDate?: string; submittedAt: string; photoAvailable: boolean;
+};
+type Language = "en" | "si" | "ta";
+type UploadPolicy = { maxFileSizeMb: number; allowedFileTypes: string };
+
+const words = {
+  en: { title: "Kids Champ", intro: "Share one creation made by your child. Our team will review it for A+ Kids TV.", submit: "Send creation", track: "Track a submission", code: "Tracking code", lookup: "Check status", consent: "I am the parent or legal guardian and allow A+ Kids to review and broadcast this creation." },
+  si: { title: "Kids Champ", intro: "ඔබේ දරුවා නිර්මාණය කළ එක් නිර්මාණයක් අප වෙත එවන්න. A+ Kids TV සඳහා අපගේ කණ්ඩායම එය පරීක්ෂා කරනු ඇත.", submit: "නිර්මාණය යවන්න", track: "යොමු කළ නිර්මාණය බලන්න", code: "Tracking code", lookup: "තත්ත්වය බලන්න", consent: "මම දෙමාපියෙකු හෝ නීත්‍යානුකූල භාරකරුවෙකු වන අතර මෙම නිර්මාණය පරීක්ෂා කිරීමට සහ විකාශය කිරීමට A+ Kids වෙත අවසර දෙමි." },
+  ta: { title: "Kids Champ", intro: "உங்கள் குழந்தை உருவாக்கிய ஒரு படைப்பை அனுப்புங்கள். A+ Kids TV-க்காக எங்கள் குழு அதை மதிப்பாய்வு செய்யும்.", submit: "படைப்பை அனுப்பவும்", track: "சமர்ப்பிப்பைக் கண்காணிக்கவும்", code: "Tracking code", lookup: "நிலையைப் பார்க்கவும்", consent: "நான் பெற்றோர் அல்லது சட்டப்பூர்வ பாதுகாவலர்; இந்தப் படைப்பை மதிப்பாய்வு செய்து ஒளிபரப்ப A+ Kids-க்கு அனுமதி அளிக்கிறேன்." },
+};
+
+const field = "h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 outline-none transition focus:border-[#3182f6] focus:ring-4 focus:ring-[#3182f6]/10";
+const statusNames: Record<string, string> = {
+  SUBMITTED: "Submitted", UNDER_REVIEW: "Under review", APPROVED: "Approved", REJECTED: "Not approved",
+  NOT_SELECTED: "Awaiting telecast selection", SELECTED: "Selected for telecast", SCHEDULED: "Telecast scheduled",
+  TELECASTED: "Telecasted", CANCELLED: "Telecast cancelled",
+};
+
+function StatusCard({ item }: { item: Submission }) {
+  return <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><p className="font-semibold text-[#142b53]">{item.childName}</p><p className="mt-1 text-xs text-slate-500">{item.trackingCode}</p></div>
+      <span className="rounded-full bg-[#e9f4ff] px-3 py-1 text-xs font-semibold text-[#1976d2]">{statusNames[item.reviewStatus]}</span>
+    </div>
+    <p className="mt-4 text-sm text-slate-600">Telecast: {statusNames[item.telecastStatus] || item.telecastStatus}</p>
+    {item.telecastDate && <p className="mt-1 text-sm font-medium text-slate-700">Date: {item.telecastDate}</p>}
+    {item.alternateTelecastDate && <p className="mt-1 text-sm text-slate-600">Alternative date: {item.alternateTelecastDate}</p>}
+    {item.rejectionReason && <p className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">Reason: {item.rejectionReason}</p>}
+  </article>;
+}
+
+export default function KidsChamp() {
+  const [language, setLanguage] = useState<Language>("en");
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [childId, setChildId] = useState("");
+  const [detailsMode, setDetailsMode] = useState<"profile" | "manual">("manual");
+  const [country, setCountry] = useState("Sri Lanka");
+  const [result, setResult] = useState<Submission | null>(null);
+  const [tracking, setTracking] = useState("");
+  const [trackResult, setTrackResult] = useState<Submission | null>(null);
+  const [error, setError] = useState("");
+  const [trackingError, setTrackingError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [liveVersion, setLiveVersion] = useState(0);
+  const [uploadPolicy, setUploadPolicy] = useState<UploadPolicy>({ maxFileSizeMb: 8, allowedFileTypes: "JPG, JPEG, PNG" });
+  const copy = words[language];
+
+  useEffect(() => {
+    let active = true;
+    apiFetch("/api/v1/kids-champ/upload-policy").then(async response => {
+      if (!response.ok) return;
+      const policy = await response.json() as Partial<UploadPolicy>;
+      const maximum = Number(policy.maxFileSizeMb);
+      if (active && Number.isInteger(maximum) && maximum >= 1 && maximum <= 50) {
+        setUploadPolicy({ maxFileSizeMb: maximum, allowedFileTypes: policy.allowedFileTypes || "JPG, JPEG, PNG" });
+      }
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    apiFetch("/api/v1/profile").then(async response => {
+      if (!response.ok) return;
+      const data = await response.json() as Profile;
+      setProfile(data); setChildId(data.children[0]?.publicId || "");
+      setDetailsMode(data.children.length ? "profile" : "manual");
+    }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let retryTimer: number | undefined;
+    let retryDelay = 1_000;
+    const connect = async () => {
+      if (controller.signal.aborted) return;
+      try {
+        const response = await apiFetch("/api/v1/kids-champ/events", { signal: controller.signal });
+        if (response.ok && response.body) {
+          const reader=response.body.getReader();const decoder=new TextDecoder();let buffer="";
+          try {
+            while(!controller.signal.aborted){const {value,done}=await reader.read();if(done)break;retryDelay=1_000;buffer=`${buffer}${decoder.decode(value,{stream:true})}`.replaceAll("\r\n","\n");const events=buffer.split("\n\n");buffer=events.pop()??"";if(events.some(event=>/(^|\n)event:\s*update(?:\n|$)/.test(event)))setLiveVersion(value=>value+1);}
+          } finally { reader.releaseLock(); }
+        }
+      } catch { /* Live refresh reconnects quietly; form actions show their own errors. */ }
+      if(controller.signal.aborted)return;
+      const delay=retryDelay;retryDelay=Math.min(retryDelay*2,15_000);
+      retryTimer=window.setTimeout(()=>void connect(),delay);
+    };
+    void connect();
+    return ()=>{controller.abort();if(retryTimer!==undefined)window.clearTimeout(retryTimer);};
+  }, []);
+
+  useEffect(() => {
+    if (!liveVersion) return;
+    if (tracking.trim()) apiFetch(`/api/v1/kids-champ/track/${encodeURIComponent(tracking.trim())}`).then(async response=>{if(response.ok)setTrackResult(await response.json());}).catch(()=>undefined);
+  }, [liveVersion, profile, tracking]);
+
+  const countryCode = useMemo(() => getCountryCode(country), [country]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setError(""); setResult(null); setBusy(true);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const photo = form.get("photo") as File | null;
+    const usingProfile = Boolean(profile) && detailsMode === "profile";
+    if (!usingProfile && !countryCode) {
+      setError("Please choose a valid country from the suggestions."); setBusy(false); return;
+    }
+    if (!photo || photo.size === 0) {
+      setError("Please choose one photo."); setBusy(false); return;
+    }
+    if (photo.size > uploadPolicy.maxFileSizeMb * 1024 * 1024) {
+      setError(`The photo must be ${uploadPolicy.maxFileSizeMb} MB or smaller.`); setBusy(false); return;
+    }
+    if (!(["image/jpeg", "image/png"] as string[]).includes(photo.type)) {
+      setError("Please use a JPEG or PNG photo."); setBusy(false); return;
+    }
+    if (usingProfile) {
+      form.set("childId", childId);
+      form.set("manualDetails", "false");
+    } else {
+      form.delete("childId");
+      form.set("countryCode", countryCode);
+      form.set("manualDetails", "true");
+    }
+    try {
+      const response = await apiFetch("/api/v1/kids-champ/submissions", { method: "POST", body: form });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.message || "The submission could not be sent.");
+      setResult(body as Submission);
+      formElement.reset(); setCountry("Sri Lanka");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "The submission could not be sent."); }
+    finally { setBusy(false); }
+  }
+
+  async function lookup(event: FormEvent) {
+    event.preventDefault(); setTrackingError(""); setTrackResult(null); setBusy(true);
+    try {
+      const response = await apiFetch(`/api/v1/kids-champ/track/${encodeURIComponent(tracking.trim())}`);
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.message || "Tracking code not found.");
+      setTrackResult(body as Submission);
+    } catch (reason) { setTrackingError(reason instanceof Error ? reason.message : "Tracking code not found."); }
+    finally { setBusy(false); }
+  }
+
+  return <main className="kidschamp-chat kidschamp-readable min-h-screen bg-[#f7fcff] px-3 pb-8 pt-28 text-slate-800 sm:px-6 sm:pt-32">
+    <section className="mx-auto flex h-[calc(100vh-9rem)] min-h-[620px] max-w-7xl flex-col overflow-hidden rounded-[28px] border border-white/80 bg-white/75 shadow-[0_28px_80px_rgba(73,164,223,.22)] backdrop-blur-xl">
+      <header className="z-20 flex items-center justify-between border-b border-white/80 bg-white/85 px-4 py-3 backdrop-blur-xl sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <button type="button" onClick={() => history.back()} className="grid size-10 place-items-center rounded-full bg-[#e8f8ff] text-xl text-[#10275d] transition hover:-translate-x-0.5 hover:bg-white" aria-label="Go back">‹</button>
+          <div className="grid size-11 place-items-center overflow-hidden rounded-full bg-white shadow-sm"><Image src="/icons/shortcuts/KidsChamp.png" alt="" width={40} height={40} className="size-10 object-contain"/></div>
+          <div className="min-w-0"><h1 className="truncate text-base font-bold text-[#10275d] sm:text-lg">A Plus Kids Kids Champ</h1><p className="text-xs font-medium text-[#4c8eb7]">online · photo submission</p></div>
+        </div>
+        <a href="tel:0768212266" className="grid size-11 place-items-center rounded-full bg-[#e8f8ff] transition hover:-translate-y-0.5 hover:bg-white" aria-label="Call A Plus Kids"><span className="text-xl">☎</span></a>
+      </header>
+
+      <div className="relative flex-1 overflow-y-auto bg-[#d8f3ff] p-4 sm:p-6" style={{backgroundImage:"linear-gradient(rgba(216,243,255,.42),rgba(216,243,255,.42)),url('/images/kidschamp/kcback.png')",backgroundSize:"760px auto",backgroundRepeat:"repeat"}}>
+        <div className="mx-auto flex max-w-5xl flex-col gap-3">
+          <div className="w-full max-w-4xl rounded-[4px_22px_22px_22px] border border-white/80 bg-white/90 p-3 shadow-sm backdrop-blur">
+            <div className="flex rounded-xl bg-[#eef9ff] p-1">{(["en","si","ta"] as Language[]).map(item => <button key={item} type="button" onClick={() => setLanguage(item)} className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${language === item ? "bg-[#31aee4] text-white shadow-sm" : "text-[#5f7b99] hover:bg-white"}`}>{item === "en" ? "English" : item === "si" ? "සිංහල" : "தமிழ்"}</button>)}</div>
+            <p className="mt-2 text-xs font-medium leading-5 text-[#10275d]">{copy.intro}</p>
+          </div>
+
+          <form onSubmit={submit} className="w-full max-w-4xl rounded-[4px_24px_24px_24px] border border-white/80 bg-white/92 p-4 shadow-sm backdrop-blur">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1"><h2 className="text-base font-bold text-[#10275d]">{copy.submit}</h2><p className="text-xs text-[#527392]">One clear photo and the child&apos;s details.</p></div>
+          {profile ? <div className="mt-3 grid grid-cols-2 gap-2 rounded-xl bg-slate-100 p-1">
+            <button type="button" onClick={() => setDetailsMode("profile")} disabled={!profile.children.length} className={`rounded-lg px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${detailsMode === "profile" ? "bg-white text-[#1976d2] shadow-sm" : "text-slate-600"}`}>Use my child profile</button>
+            <button type="button" onClick={() => setDetailsMode("manual")} className={`rounded-lg px-3 py-2 text-xs font-semibold transition ${detailsMode === "manual" ? "bg-white text-[#1976d2] shadow-sm" : "text-slate-600"}`}>Enter details manually</button>
+          </div> : null}
+          {profile && detailsMode === "profile" && profile.children.length ? <label className="mt-3 block text-xs font-medium">Child profile<select name="childId" value={childId} onChange={e => setChildId(e.target.value)} className={`${field} mt-1`} required>{profile.children.map(child => <option key={child.publicId} value={child.publicId}>{child.fullName}</option>)}</select></label> : null}
+          {profile && !profile.children.length ? <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">No child profile is available. Enter the details manually, or <a href="/profile" className="font-semibold underline">add a child profile</a>.</div> : null}
+          {!profile || detailsMode === "manual" ? <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <label className="text-xs font-medium">Child&apos;s full name<input name="childName" className={`${field} mt-1`} required maxLength={120}/></label>
+              <label className="text-xs font-medium">Date of birth<input name="dateOfBirth" type="date" className={`${field} mt-1`} required max={new Date().toISOString().slice(0,10)}/></label>
+              <label className="text-xs font-medium">Parent / guardian name<input name="parentName" className={`${field} mt-1`} required maxLength={120}/></label>
+              <label className="text-xs font-medium">Mobile number<input name="phone" type="tel" inputMode="tel" className={`${field} mt-1`} placeholder="077 123 4567" required/><span className="mt-1 block text-[10px] font-normal text-slate-500">Local or international format</span></label>
+              <label className="text-xs font-medium">Email (optional)<input name="email" type="email" className={`${field} mt-1`} maxLength={254}/></label>
+              <label className="text-xs font-medium">Country<input value={country} onChange={e => setCountry(e.target.value)} list="kc-countries" className={`${field} mt-1`} required/><datalist id="kc-countries">{countries.map(item => <option key={item}>{item}</option>)}</datalist></label>
+              <label className="text-xs font-medium">Province<input name="province" className={`${field} mt-1`} required maxLength={120}/></label>
+              <label className="text-xs font-medium">Hometown<input name="hometown" className={`${field} mt-1`} required maxLength={120}/></label>
+            </div> : null}
+          <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="text-xs font-medium">Artwork category<select name="category" className={`${field} mt-1`} required><option>Drawing</option><option>Painting</option><option>Handcraft</option></select></label>
+            <label className="text-xs font-medium">Creation title (optional)<input name="workTitle" className={`${field} mt-1`} maxLength={160}/></label>
+            <label className="text-xs font-medium">One photo<input name="photo" type="file" accept="image/jpeg,image/png" className={`${field} mt-1 file:mr-2 file:border-0 file:bg-transparent file:text-xs file:font-semibold file:text-[#1976d2]`} required/><span className="mt-1 block text-[10px] font-normal text-slate-500">{uploadPolicy.allowedFileTypes} · maximum {uploadPolicy.maxFileSizeMb} MB</span></label>
+          </div>
+          <label className="mt-3 block text-xs font-medium">About this creation (optional)<textarea name="workDescription" maxLength={1000} className="mt-1 min-h-16 w-full rounded-xl border border-slate-200 p-3 text-sm outline-none focus:border-[#3182f6] focus:ring-4 focus:ring-[#3182f6]/10"/></label>
+          <div className="mt-3 grid gap-2 lg:grid-cols-2"><label className="flex gap-2 rounded-xl bg-[#f3f9ff] p-3 text-xs leading-5"><input name="consent" value="true" type="checkbox" required className="mt-0.5 size-4 accent-[#238df4]"/><span>{copy.consent}</span></label>
+          <label className="flex gap-2 rounded-xl bg-[#f3fff7] p-3 text-xs leading-5"><input name="whatsappConsent" value="true" type="checkbox" className="mt-0.5 size-4 accent-emerald-600"/><span>I agree to receive Kids Champ status and telecast updates through WhatsApp. This is optional.</span></label></div>
+          {error && <p role="alert" className="mt-3 rounded-xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+          <button disabled={busy || (Boolean(profile) && detailsMode === "profile" && !childId)} className="mt-3 h-10 w-full rounded-xl bg-[#31aee4] text-sm font-bold text-white shadow-md shadow-sky-100 transition hover:bg-[#229bd2] active:scale-[.99] disabled:cursor-not-allowed disabled:opacity-60">{busy ? "Sending…" : copy.submit}</button>
+        </form>
+
+          {result && <div className="ml-auto w-fit max-w-[92%] rounded-[22px_4px_22px_22px] border border-[#bcefd2] bg-[#dcf8c6] p-5 shadow-sm sm:max-w-[72%]"><p className="font-bold text-emerald-900">✓ Successfully submitted!</p><p className="mt-2 text-sm text-emerald-800">Keep this private tracking code:</p><p className="mt-2 select-all text-xl font-bold tracking-wide text-[#10275d]">{result.trackingCode}</p><span className="mt-2 block text-right text-[10px] text-emerald-700">sent ✓✓</span></div>}
+
+          <form onSubmit={lookup} className="w-fit max-w-[92%] rounded-[4px_22px_22px_22px] border border-white/80 bg-white/92 p-5 shadow-sm sm:min-w-[380px]">
+            <h2 className="text-lg font-bold text-[#142b53]">{copy.track}</h2>
+            <label className="mt-4 block text-sm font-medium">{copy.code}<input value={tracking} onChange={e => setTracking(e.target.value.toUpperCase())} className={`${field} mt-2 uppercase`} placeholder="KC-2026-XXXXXXXXXX" required/></label>
+            <button disabled={busy} className="mt-4 h-11 w-full rounded-xl bg-[#142b53] font-semibold text-white transition hover:bg-[#1d4076] active:scale-[.99] disabled:opacity-60">{copy.lookup}</button>
+            {trackingError && <p className="mt-3 text-sm text-red-600">{trackingError}</p>}
+          </form>
+          {trackResult && <div className="ml-auto w-full max-w-xl"><StatusCard item={trackResult}/></div>}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 border-t border-white/80 bg-white/88 px-4 py-3 backdrop-blur-xl sm:px-6"><button type="button" onClick={() => document.querySelector<HTMLInputElement>('input[name="photo"]')?.click()} className="grid size-12 shrink-0 place-items-center rounded-full bg-[#e8f8ff] text-3xl font-light text-[#31aee4] transition hover:bg-[#d6f3ff]" aria-label="Choose photo">+</button><div className="h-12 flex-1 rounded-full bg-[#f1f9fe] px-5 py-3 text-sm text-[#9ab3c7]">Choose a photo above and complete the message…</div><span className="grid size-12 place-items-center rounded-full bg-[#31aee4] text-xl text-white">➤</span></div>
+    </section>
+    <style jsx global>{`.kidschamp-chat,.kidschamp-chat *{letter-spacing:0}.kidschamp-readable,.kidschamp-readable :where(button,input,select,textarea){font-family:"Roboto",Arial,Helvetica,sans-serif}.kidschamp-readable{font-size:15px;line-height:1.5}.kidschamp-readable .text-xs{font-size:.875rem;line-height:1.3rem}.kidschamp-readable .text-\\[10px\\]{font-size:.75rem;line-height:1.1rem}.kidschamp-chat button,.kidschamp-chat a,.kidschamp-chat input[type=file],.kidschamp-chat select{cursor:pointer}`}</style>
+  </main>;
+}

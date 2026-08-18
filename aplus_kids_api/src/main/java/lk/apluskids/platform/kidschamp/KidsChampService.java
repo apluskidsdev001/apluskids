@@ -16,20 +16,21 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class KidsChampService {
-    private static final Pattern PHONE = Pattern.compile("^\\+[1-9]\\d{7,14}$");
+    private static final Pattern PHONE_CHARACTERS = Pattern.compile("^[0-9+()\\-\\s]+$");
     private static final String CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
     private final SecureRandom random = new SecureRandom();
     private final KidsChampSubmissionRepository submissions;
     private final KidsChampGuestContactRepository guests;
+    private final KidsChampGuestParticipantRepository guestParticipants;
     private final ChildProfileRepository children;
     private final UserRepository users;
     private final KidsChampStorage storage;
     private final KidsChampAuditRepository audits;
     private final KidsChampLiveUpdates liveUpdates;
 
-    public KidsChampService(KidsChampSubmissionRepository submissions, KidsChampGuestContactRepository guests,
+    public KidsChampService(KidsChampSubmissionRepository submissions, KidsChampGuestContactRepository guests, KidsChampGuestParticipantRepository guestParticipants,
                             ChildProfileRepository children, UserRepository users, KidsChampStorage storage,KidsChampAuditRepository audits,KidsChampLiveUpdates liveUpdates) {
-        this.submissions=submissions; this.guests=guests; this.children=children; this.users=users; this.storage=storage;this.audits=audits;this.liveUpdates=liveUpdates;
+        this.submissions=submissions; this.guests=guests; this.guestParticipants=guestParticipants; this.children=children; this.users=users; this.storage=storage;this.audits=audits;this.liveUpdates=liveUpdates;
     }
 
     @Transactional
@@ -45,8 +46,7 @@ public class KidsChampService {
             require(childName, "child name"); require(parentName, "parent name"); require(country, "country");
             require(province, "province"); require(hometown, "hometown");
             if (dob == null) throw bad("DOB_REQUIRED", "Please enter the child's date of birth.");
-            String candidatePhone = phone == null ? "" : phone.replaceAll("[\\s()-]", "");
-            if (!PHONE.matcher(candidatePhone).matches()) throw bad("PHONE_INVALID", "Enter a valid international mobile number.");
+            normalizeGuestPhone(phone);
         } else if (childId == null) {
             throw bad("CHILD_REQUIRED", "Please select a child profile.");
         }
@@ -68,14 +68,18 @@ public class KidsChampService {
                 require(childName, "child name"); require(parentName, "parent name"); require(country, "country");
                 require(province, "province"); require(hometown, "hometown");
                 if (dob == null) throw bad("DOB_REQUIRED", "Please enter the child's date of birth.");
-                String normalizedPhone = phone == null ? "" : phone.replaceAll("[\\s()-]", "");
-                if (!PHONE.matcher(normalizedPhone).matches()) throw bad("PHONE_INVALID", "Enter a valid international mobile number.");
+                String normalizedPhone = normalizeGuestPhone(phone);
                 String normalizedEmail = email == null || email.isBlank() ? null : email.trim().toLowerCase(Locale.ROOT);
                 var guest = guests.findByPhoneE164(normalizedPhone).orElseGet(KidsChampGuestContactEntity::new);
                 guest.setPhoneE164(normalizedPhone); guest.setEmail(normalizedEmail); guest.setParentName(parentName.trim());
                 guest.setCountryCode(country.trim().toUpperCase(Locale.ROOT)); guest.setProvince(province.trim());
                 guest.setHometown(hometown.trim()); guest.recordSubmission(); guests.save(guest);
+                var guestParticipant=guestParticipants.findByGuestContactAndNormalizedChildNameAndDateOfBirth(guest,KidsChampGuestParticipantEntity.normalizeName(childName),dob)
+                    .orElseGet(KidsChampGuestParticipantEntity::new);
+                guestParticipant.setGuestContact(guest);guestParticipant.setChildName(childName.trim());guestParticipant.setDateOfBirth(dob);
+                guestParticipant.setProvince(province.trim());guestParticipant.setHometown(hometown.trim());guestParticipants.save(guestParticipant);
                 item.setGuestContact(guest); item.setChildName(childName.trim()); resolvedDob=dob;
+                item.setGuestParticipant(guestParticipant);
                 item.setParentName(parentName.trim()); item.setEmail(normalizedEmail); item.setPhoneE164(normalizedPhone);
                 item.setCountryCode(country.trim().toUpperCase(Locale.ROOT)); item.setProvince(province.trim());
                 item.setHometown(hometown.trim());
@@ -134,6 +138,13 @@ public class KidsChampService {
         boolean phone=user.getPhoneVerifiedAt()!=null&&user.getPhoneE164().equals(guest.getPhoneE164());return email||phone;
     }
     private String maskPhone(String phone){return phone.length()<6?"***":phone.substring(0,3)+"***"+phone.substring(phone.length()-3);}
+    private String normalizeGuestPhone(String value){
+        String input=value==null?"":value.trim();
+        if(!PHONE_CHARACTERS.matcher(input).matches()||input.indexOf('+')>0)throw bad("PHONE_INVALID","Enter a phone number using 7 to 19 digits. Local or international format is accepted.");
+        String digits=input.replaceAll("\\D","");
+        if(digits.length()<7||digits.length()>19)throw bad("PHONE_INVALID","Enter a phone number using 7 to 19 digits. Local or international format is accepted.");
+        return input.startsWith("+")?"+"+digits:digits;
+    }
 
     private String newTrackingCode() {
         for (int attempt=0; attempt<10; attempt++) {

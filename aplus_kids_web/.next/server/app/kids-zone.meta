@@ -1,0 +1,15 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/kids-zone/layout,_N_T_/kids-zone/page,_N_T_/kids-zone"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/kids-zone/__PAGE__",
+    "/kids-zone",
+    "/_index",
+    "/_head"
+  ]
+}

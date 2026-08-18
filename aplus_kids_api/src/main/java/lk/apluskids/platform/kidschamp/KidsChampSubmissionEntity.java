@@ -15,6 +15,7 @@ public class KidsChampSubmissionEntity {
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "user_id") private UserEntity user;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "child_profile_id") private ChildProfileEntity childProfile;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "guest_contact_id") private KidsChampGuestContactEntity guestContact;
+    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "guest_participant_id") private KidsChampGuestParticipantEntity guestParticipant;
     @Column(name = "child_name", nullable = false, length = 120) private String childName;
     @Column(name = "date_of_birth", nullable = false) private LocalDate dateOfBirth;
     @Column(name = "age_at_submission", nullable = false) private int ageAtSubmission;
@@ -61,6 +62,7 @@ public class KidsChampSubmissionEntity {
     public UserEntity getUser() { return user; }
     public ChildProfileEntity getChildProfile() { return childProfile; }
     public KidsChampGuestContactEntity getGuestContact() { return guestContact; }
+    public KidsChampGuestParticipantEntity getGuestParticipant() { return guestParticipant; }
     public String getChildName() { return childName; }
     public LocalDate getDateOfBirth() { return dateOfBirth; }
     public int getAgeAtSubmission() { return ageAtSubmission; }
@@ -93,6 +95,7 @@ public class KidsChampSubmissionEntity {
     public void setUser(UserEntity v) { user=v; }
     public void setChildProfile(ChildProfileEntity v) { childProfile=v; }
     public void setGuestContact(KidsChampGuestContactEntity v) { guestContact=v; }
+    public void setGuestParticipant(KidsChampGuestParticipantEntity v) { guestParticipant=v; }
     public void setChildName(String v) { childName=v; }
     public void setDateOfBirth(LocalDate v) { dateOfBirth=v; }
     public void setAgeAtSubmission(int v) { ageAtSubmission=v; }
@@ -124,5 +127,5 @@ public class KidsChampSubmissionEntity {
     public void markPhotoDeleted() { storedFilename=null; photoDeletedAt=Instant.now(); fileStatus="MISSING"; }
     public void setPreviewed(boolean previewed) { previewedAt=previewed ? Instant.now() : null; }
     public void softDelete(UserEntity actor) { deletedAt=Instant.now(); deletedBy=actor; }
-    public void claim(UserEntity account, ChildProfileEntity child) { user=account; childProfile=child; guestContact=null; }
+    public void claim(UserEntity account, ChildProfileEntity child) { user=account; childProfile=child; guestContact=null; guestParticipant=null; }
 }

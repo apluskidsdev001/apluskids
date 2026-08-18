@@ -1,0 +1,28 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/aplus_kids
+    username: postgres
+    password: "1234"
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: apluswebofficial@gmail.com
+    password: "muze dgze xhjz kcii"
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+server:
+  port: 8081
+
+aplus:
+  frontend-origin: ${FRONTEND_ORIGIN:http://localhost:3000}
+  kids-champ:
+    demo-seed: true
+  auth:
+    jwt-secret: "local-development-only-secret-change-before-production-2026"
+  mail:
+    from: apluswebofficial@gmail.com

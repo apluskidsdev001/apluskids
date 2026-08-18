@@ -3,6 +3,7 @@ package lk.apluskids.platform.kidschamp;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.util.zip.ZipFile;
+import java.util.Comparator;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
@@ -140,6 +141,7 @@ class KidsChampBulkWorkflowTests {
 
         var first = admin.createBatch(actor.getPublicId(), 100, false);
         assertEquals(100, first.photoCount());
+        assertNotNull(first.deleteAfter(), "New ZIP retention must start when the archive is generated.");
         ApiException remainder = assertThrows(ApiException.class,
             () -> admin.createBatch(actor.getPublicId(), 100, false));
         assertEquals("REMAINDER_CONFIRMATION_REQUIRED", remainder.getCode());
@@ -161,7 +163,8 @@ class KidsChampBulkWorkflowTests {
 
         var refreshed = admin.batches().stream().filter(batch -> batch.id().equals(first.id())).findFirst().orElseThrow();
         assertNotNull(refreshed.deleteAfter());
-        assertEquals(10, refreshed.daysRemaining());
+        assertEquals(first.deleteAfter(), refreshed.deleteAfter(), "Downloading must not restart ZIP retention.");
+        assertEquals(admin.settings().zipExpiryDays(), refreshed.daysRemaining());
     }
 
     @Test
@@ -183,9 +186,15 @@ class KidsChampBulkWorkflowTests {
         try (ZipFile zip = new ZipFile(download.path().toFile())) {
             assertEquals(3, zip.size());
             assertNotNull(zip.getEntry("submissions.csv"));
-            samples.forEach(sample -> assertTrue(zip.stream().anyMatch(entry ->
-                entry.getName().contains(sample.getTrackingCode()) &&
-                entry.getName().contains("Age-" + sample.getAgeAtSubmission()))));
+            var orderedSamples = samples.stream().sorted(Comparator.comparing(KidsChampSubmissionEntity::getSubmittedAt)).toList();
+            for(int index=0;index<orderedSamples.size();index++){
+                var sample=orderedSamples.get(index);
+                var entry=zip.getEntry(KidsChampAdminService.zipPhotoName(index+1,sample.getChildName(),sample.getHometown()));
+                assertNotNull(entry);
+                try(var image=zip.getInputStream(entry)){
+                    assertArrayEquals(new byte[]{(byte)0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a},image.readNBytes(8));
+                }
+            }
         } finally {
             storage.deletePath(download.path().toString());
         }
